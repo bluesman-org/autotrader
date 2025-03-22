@@ -20,6 +20,7 @@ import java.util.Base64;
 @RequiredArgsConstructor
 public class BitvavoAuthenticationService {
 
+    // TODO Write unit tests
     private static final Logger log = LoggerFactory.getLogger(BitvavoAuthenticationService.class);
     private static final String HMAC_SHA_256 = "HmacSHA256";
 
@@ -38,11 +39,9 @@ public class BitvavoAuthenticationService {
 
         // Check if API key and secret are set
         if (bitvavoConfig.getApiKey() == null || bitvavoConfig.getApiKey().isEmpty()) {
-            log.error("Bitvavo API key is not set");
             throw new IllegalStateException("Bitvavo API key is not set. Please set the BITVAVO_API_KEY environment variable.");
         }
         if (bitvavoConfig.getApiSecret() == null || bitvavoConfig.getApiSecret().isEmpty()) {
-            log.error("Bitvavo API secret is not set");
             throw new IllegalStateException("Bitvavo API secret is not set. Please set the BITVAVO_API_SECRET environment variable.");
         }
 
@@ -77,7 +76,8 @@ public class BitvavoAuthenticationService {
                 log.debug("Including body in signature message");
             }
 
-            log.debug("Initializing HMAC-SHA256 algorithm");
+            log.debug("Message for signature: {}", message);
+            log.debug("Initializing {} algorithm", HMAC_SHA_256);
             Mac hmacSha256 = Mac.getInstance(HMAC_SHA_256);
             SecretKeySpec secretKeySpec = new SecretKeySpec(
                     bitvavoConfig.getApiSecret().getBytes(StandardCharsets.UTF_8),
@@ -90,7 +90,6 @@ public class BitvavoAuthenticationService {
             return new String(Hex.encodeHex(hashBytes));
 
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-            log.error("Error creating signature for Bitvavo API", e);
             throw new RuntimeException("Error creating signature for Bitvavo API", e);
         }
     }

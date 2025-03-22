@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -74,7 +73,7 @@ class BitvavoControllerTest {
                 .price(new BigDecimal("20000"))
                 .timeInForce("GTC")
                 .postOnly(false)
-                .selfTradePrevention(false)
+                .selfTradePrevention("decrementAndCancel")
                 .responseRequired(true)
                 .build();
 
@@ -96,7 +95,7 @@ class BitvavoControllerTest {
         expectedResponse.setVisible(true);
         expectedResponse.setTimeInForce("GTC");
         expectedResponse.setPostOnly(false);
-        expectedResponse.setSelfTradePrevention(false);
+        expectedResponse.setSelfTradePrevention("decrementAndCancel");
 
         // Add fills to test the Fills class
         Fills fill = new Fills();
@@ -133,12 +132,12 @@ class BitvavoControllerTest {
         assertEquals(true, result.getVisible());
         assertEquals("GTC", result.getTimeInForce());
         assertEquals(false, result.getPostOnly());
-        assertEquals(false, result.getSelfTradePrevention());
+        assertEquals("decrementAndCancel", result.getSelfTradePrevention());
         assertEquals(false, result.getDisableMarketProtection()); // Test the custom getter
 
         // Test fills
         assertEquals(1, result.getFills().size());
-        Fills resultFill = result.getFills().get(0);
+        Fills resultFill = result.getFills().getFirst();
         assertEquals(new UUID(0, 1), resultFill.getId());
         assertEquals(now, resultFill.getTimestamp());
         assertEquals(new BigDecimal("0.0"), resultFill.getAmount());

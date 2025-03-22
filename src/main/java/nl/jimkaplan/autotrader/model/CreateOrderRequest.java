@@ -17,7 +17,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
 public class CreateOrderRequest {
     /**
      * The market to create the order for.
@@ -40,7 +40,7 @@ public class CreateOrderRequest {
     /**
      * Your (UUID) of the order.
      */
-    private UUID orderId;
+    private UUID clientOrderId;
 
     /**
      * The amount of the base currency to buy or sell.
@@ -97,7 +97,7 @@ public class CreateOrderRequest {
      * Possible values: [cancelBoth, cancelNewest, cancelOldest, decrementAndCancel]
      * Default value: decrementAndCancel
      */
-    private Boolean selfTradePrevention;
+    private String selfTradePrevention;
 
     /**
      * Indicates whether the response returns all parameters (true) or only the HTTP status code (false).

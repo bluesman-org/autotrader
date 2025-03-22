@@ -175,7 +175,7 @@ public class CreateOrderResponse {
      * The value you set to prevent self-trading for conflicting orders of any type
      * Possible values: [decrementAndCancel, cancelOldest, cancelNewest, cancelBoth]
      */
-    private Boolean selfTradePrevention;
+    private String selfTradePrevention;
 
     /**
      * Returns true when the orderId is visible in the order book for a market.
