@@ -7,6 +7,7 @@ import nl.jimkaplan.autotrader.model.Fills;
 import nl.jimkaplan.autotrader.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.model.GetAccountFeesResponse;
 import nl.jimkaplan.autotrader.model.GetAssetDataResponse;
+import nl.jimkaplan.autotrader.model.GetPriceResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -428,5 +429,28 @@ class BitvavoControllerTest {
         assertEquals(new BigDecimal("0.74832374"), result.getFirst().getInOrder());
 
         verify(bitvavoApiClient).get(eq("/balance?symbol=" + symbol), eq(Object.class));
+    }
+
+    @Test
+    void testGetPrice_withMarket_returnsPriceList() {
+        String market = "BTC-EUR";
+        List<Map<String, Object>> apiResponse = List.of(
+                Map.of(
+                        "market", market,
+                        "price", "20000"
+                )
+        );
+
+        when(bitvavoApiClient.get(eq("/ticker/price?market=" + market), eq(Object.class)))
+                .thenReturn(apiResponse);
+
+        List<GetPriceResponse> result = bitvavoController.getPrice(market);
+
+        assertEquals(1, result.size());
+        GetPriceResponse priceResponse = result.getFirst();
+        assertEquals(market, priceResponse.getMarket());
+        assertEquals(new BigDecimal("20000"), priceResponse.getPrice());
+
+        verify(bitvavoApiClient).get(eq("/ticker/price?market=" + market), eq(Object.class));
     }
 }

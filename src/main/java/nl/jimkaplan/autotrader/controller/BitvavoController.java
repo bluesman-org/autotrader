@@ -8,6 +8,7 @@ import nl.jimkaplan.autotrader.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.model.GetAccountFeesResponse;
 import nl.jimkaplan.autotrader.model.GetAssetDataResponse;
+import nl.jimkaplan.autotrader.model.GetPriceResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -97,11 +98,34 @@ public class BitvavoController {
         return getData(symbol, "/balance", GetAccountBalanceResponse.class);
     }
 
+    /**
+     * Returns the latest trades on Bitvavo for all markets or a single market.
+     *
+     * @param market The market for which you want to retrieve the latest trades.
+     *               Example: BTC-EUR
+     * @return The latest trades
+     */
+    @GetMapping("/ticker/price")
+    public List<GetPriceResponse> getPrice(@RequestParam(name = "market", required = false) String market) {
+        return getData(market, "/ticker/price", GetPriceResponse.class);
+    }
+
     private <T> List<T> getData(final String symbol, final String endpointBase, final Class<T> responseType) {
-        String symbolLog = (symbol == null || symbol.isEmpty()) ? "all" : symbol;
+        boolean isSymbolPresent = symbol != null && !symbol.isEmpty();
+
+        String symbolLog = isSymbolPresent ? symbol : "all";
         log.debug("Received request to get data for symbol: {}", symbolLog);
 
-        String endpoint = (symbol == null || symbol.isEmpty()) ? endpointBase : endpointBase + "?symbol=" + symbol;
+        String endpoint = endpointBase;
+        if (isSymbolPresent) {
+            // Check if responseType is GetPriceResponse, then use the market parameter
+            if (responseType == GetPriceResponse.class) {
+                endpoint += "?market=" + symbol;
+            } else {
+                endpoint += "?symbol=" + symbol;
+            }
+        }
+
         Object response = bitvavoApiClient.get(endpoint, Object.class);
         ObjectMapper mapper = new ObjectMapper();
         List<T> data;
