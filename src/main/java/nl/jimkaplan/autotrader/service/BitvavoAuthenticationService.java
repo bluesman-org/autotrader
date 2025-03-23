@@ -14,13 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.Base64;
 
 @Service
 @RequiredArgsConstructor
 public class BitvavoAuthenticationService {
 
-    // TODO Write unit tests
     private static final Logger log = LoggerFactory.getLogger(BitvavoAuthenticationService.class);
     private static final String HMAC_SHA_256 = "HmacSHA256";
 
@@ -78,19 +76,68 @@ public class BitvavoAuthenticationService {
 
             log.debug("Message for signature: {}", message);
             log.debug("Initializing {} algorithm", HMAC_SHA_256);
-            Mac hmacSha256 = Mac.getInstance(HMAC_SHA_256);
-            SecretKeySpec secretKeySpec = new SecretKeySpec(
-                    bitvavoConfig.getApiSecret().getBytes(StandardCharsets.UTF_8),
-                    HMAC_SHA_256
-            );
-            hmacSha256.init(secretKeySpec);
-            byte[] hashBytes = hmacSha256.doFinal(message.getBytes(StandardCharsets.UTF_8));
+
+            Mac hmacSha256 = getMacInstance();
+            SecretKeySpec secretKeySpec = createSecretKeySpec(bitvavoConfig.getApiSecret());
+            initMac(hmacSha256, secretKeySpec);
+
+            byte[] hashBytes = doFinal(hmacSha256, message);
 
             // Convert hash bytes to hexadecimal string
             return new String(Hex.encodeHex(hashBytes));
 
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            // Exception handling for crypto operations
             throw new RuntimeException("Error creating signature for Bitvavo API", e);
         }
+    }
+
+    /**
+     * Gets an instance of Mac for the HMAC-SHA256 algorithm.
+     * Extracted for testability.
+     *
+     * @return Mac instance
+     * @throws NoSuchAlgorithmException if the algorithm is not available
+     */
+    protected Mac getMacInstance() throws NoSuchAlgorithmException {
+        return Mac.getInstance(HMAC_SHA_256);
+    }
+
+    /**
+     * Creates a SecretKeySpec from the given secret.
+     * Extracted for testability.
+     *
+     * @param secret The secret key
+     * @return SecretKeySpec instance
+     */
+    protected SecretKeySpec createSecretKeySpec(String secret) {
+        return new SecretKeySpec(
+                secret.getBytes(StandardCharsets.UTF_8),
+                HMAC_SHA_256
+        );
+    }
+
+    /**
+     * Initializes the Mac with the given key.
+     * Extracted for testability.
+     *
+     * @param mac The Mac instance
+     * @param key The SecretKeySpec
+     * @throws InvalidKeyException if the key is invalid
+     */
+    protected void initMac(Mac mac, SecretKeySpec key) throws InvalidKeyException {
+        mac.init(key);
+    }
+
+    /**
+     * Computes the final hash.
+     * Extracted for testability.
+     *
+     * @param mac     The Mac instance
+     * @param message The message to hash
+     * @return The hash bytes
+     */
+    protected byte[] doFinal(Mac mac, String message) {
+        return mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
     }
 }

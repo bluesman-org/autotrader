@@ -28,8 +28,6 @@ public class BitvavoApiClient {
     private final BitvavoConfig bitvavoConfig;
     private final BitvavoAuthenticationService authenticationService;
 
-    // TODO: Cover exception handling with tests
-
     /**
      * Sends a GET request to the Bitvavo API.
      *
