@@ -4,6 +4,7 @@ import nl.jimkaplan.autotrader.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.model.Fills;
+import nl.jimkaplan.autotrader.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.model.GetAccountFeesResponse;
 import nl.jimkaplan.autotrader.model.GetAssetDataResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -369,5 +370,63 @@ class BitvavoControllerTest {
         assertEquals(List.of("BTC"), result.getFirst().getNetworks());
 
         verify(bitvavoApiClient).get(eq("/assets?symbol=" + symbol), eq(Object.class));
+    }
+
+    @Test
+    void testGetBalance_withNoSymbol_returnsAllBalances() {
+        // Arrange
+        List<Map<String, Object>> apiResponse = List.of(
+                Map.of(
+                        "symbol", "BTC",
+                        "available", "1.57593193",
+                        "inOrder", "0.74832374"
+                ),
+                Map.of(
+                        "symbol", "ETH",
+                        "available", "5.32781045",
+                        "inOrder", "2.10394872"
+                )
+        );
+
+        when(bitvavoApiClient.get(eq("/balance"), eq(Object.class))).thenReturn(apiResponse);
+
+        // Act
+        List<GetAccountBalanceResponse> result = bitvavoController.getBalance(null);
+
+        // Assert
+        assertEquals(2, result.size());
+        assertEquals("BTC", result.getFirst().getSymbol());
+        assertEquals(new BigDecimal("1.57593193"), result.getFirst().getAvailable());
+        assertEquals(new BigDecimal("0.74832374"), result.getFirst().getInOrder());
+
+        assertEquals("ETH", result.get(1).getSymbol());
+        assertEquals(new BigDecimal("5.32781045"), result.get(1).getAvailable());
+        assertEquals(new BigDecimal("2.10394872"), result.get(1).getInOrder());
+
+        verify(bitvavoApiClient).get(eq("/balance"), eq(Object.class));
+    }
+
+    @Test
+    void testGetBalance_withValidSymbol_returnsSingleBalance() {
+        // Arrange
+        String symbol = "BTC";
+        Map<String, Object> apiResponse = Map.of(
+                "symbol", "BTC",
+                "available", "1.57593193",
+                "inOrder", "0.74832374"
+        );
+
+        when(bitvavoApiClient.get(eq("/balance?symbol=" + symbol), eq(Object.class))).thenReturn(apiResponse);
+
+        // Act
+        List<GetAccountBalanceResponse> result = bitvavoController.getBalance(symbol);
+
+        // Assert
+        assertEquals(1, result.size());
+        assertEquals("BTC", result.getFirst().getSymbol());
+        assertEquals(new BigDecimal("1.57593193"), result.getFirst().getAvailable());
+        assertEquals(new BigDecimal("0.74832374"), result.getFirst().getInOrder());
+
+        verify(bitvavoApiClient).get(eq("/balance?symbol=" + symbol), eq(Object.class));
     }
 }

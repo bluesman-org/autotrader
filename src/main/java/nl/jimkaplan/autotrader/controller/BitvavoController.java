@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import nl.jimkaplan.autotrader.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.model.CreateOrderResponse;
+import nl.jimkaplan.autotrader.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.model.GetAccountFeesResponse;
 import nl.jimkaplan.autotrader.model.GetAssetDataResponse;
 import org.slf4j.Logger;
@@ -81,22 +82,38 @@ public class BitvavoController {
      */
     @GetMapping("/assets")
     public List<GetAssetDataResponse> getAssetData(@RequestParam(name = "symbol", required = false) String symbol) {
-        String symbolLog = (symbol == null || symbol.isEmpty()) ? "all" : symbol;
-        log.debug("Received request to get asset data for symbol: {}", symbolLog);
+        return getData(symbol, "/assets", GetAssetDataResponse.class);
+    }
 
-        String endpoint = (symbol == null || symbol.isEmpty()) ? "/assets" : "/assets?symbol=" + symbol;
+    /**
+     * Get balance data from Bitvavo API.
+     *
+     * @param symbol The symbol of the asset to retrieve. Example: BTC, EUR (case-sensitive).
+     *               Leave empty to retrieve the balance of all assets above zero.
+     * @return Balance data
+     */
+    @GetMapping("/balance")
+    public List<GetAccountBalanceResponse> getBalance(@RequestParam(name = "symbol", required = false) String symbol) {
+        return getData(symbol, "/balance", GetAccountBalanceResponse.class);
+    }
+
+    private <T> List<T> getData(final String symbol, final String endpointBase, final Class<T> responseType) {
+        String symbolLog = (symbol == null || symbol.isEmpty()) ? "all" : symbol;
+        log.debug("Received request to get data for symbol: {}", symbolLog);
+
+        String endpoint = (symbol == null || symbol.isEmpty()) ? endpointBase : endpointBase + "?symbol=" + symbol;
         Object response = bitvavoApiClient.get(endpoint, Object.class);
         ObjectMapper mapper = new ObjectMapper();
-        List<GetAssetDataResponse> assetData;
+        List<T> data;
 
         if (response instanceof List) {
-            assetData = ((List<?>) response).stream()
-                    .map(item -> mapper.convertValue(item, GetAssetDataResponse.class))
+            data = ((List<?>) response).stream()
+                    .map(item -> mapper.convertValue(item, responseType))
                     .collect(Collectors.toList());
         } else {
-            assetData = Collections.singletonList(mapper.convertValue(response, GetAssetDataResponse.class));
+            data = Collections.singletonList(mapper.convertValue(response, responseType));
         }
-        log.debug("Successfully retrieved asset data for {} asset(s)", assetData.size());
-        return assetData;
+        log.debug("Successfully retrieved data for {} item(s)", data.size());
+        return data;
     }
 }
