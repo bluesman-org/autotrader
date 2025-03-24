@@ -1,15 +1,19 @@
 package nl.jimkaplan.autotrader.service;
 
-import nl.jimkaplan.autotrader.client.BitvavoApiClient;
-import nl.jimkaplan.autotrader.model.CreateOrderRequest;
-import nl.jimkaplan.autotrader.model.CreateOrderResponse;
-import nl.jimkaplan.autotrader.model.GetAccountBalanceResponse;
-import nl.jimkaplan.autotrader.model.GetPriceResponse;
-import nl.jimkaplan.autotrader.model.TradingViewAlertRequest;
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
-import nl.jimkaplan.autotrader.model.document.Position;
-import nl.jimkaplan.autotrader.model.document.TradingViewAlert;
-import nl.jimkaplan.autotrader.model.document.TradingViewOrder;
+import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
+import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
+import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
+import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
+import nl.jimkaplan.autotrader.bitvavo.model.GetPriceResponse;
+import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
+import nl.jimkaplan.autotrader.tradingview.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.tradingview.model.document.Position;
+import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewAlert;
+import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewOrder;
+import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.tradingview.service.PositionService;
+import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
+import nl.jimkaplan.autotrader.tradingview.service.TradingViewOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -82,7 +86,6 @@ class TradingServiceTest {
     private final UUID TEST_ORDER_ID = UUID.randomUUID();
     private final double TEST_EUR_BALANCE = 100.0;
     private final double TEST_BTC_BALANCE = 0.01;
-    private final double TEST_BTC_PRICE = 30000.0;
 
     @BeforeEach
     void setUp() {
@@ -126,6 +129,7 @@ class TradingServiceTest {
 
         // Set up price response
         btcPriceResponse = new GetPriceResponse();
+        double TEST_BTC_PRICE = 30000.0;
         btcPriceResponse.setPrice(BigDecimal.valueOf(TEST_BTC_PRICE));
 
         // Set up order response

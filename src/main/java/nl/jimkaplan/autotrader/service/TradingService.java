@@ -2,16 +2,20 @@ package nl.jimkaplan.autotrader.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import nl.jimkaplan.autotrader.client.BitvavoApiClient;
-import nl.jimkaplan.autotrader.model.CreateOrderRequest;
-import nl.jimkaplan.autotrader.model.CreateOrderResponse;
-import nl.jimkaplan.autotrader.model.GetAccountBalanceResponse;
-import nl.jimkaplan.autotrader.model.GetPriceResponse;
-import nl.jimkaplan.autotrader.model.TradingViewAlertRequest;
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
-import nl.jimkaplan.autotrader.model.document.Position;
-import nl.jimkaplan.autotrader.model.document.TradingViewAlert;
-import nl.jimkaplan.autotrader.model.document.TradingViewOrder;
+import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
+import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
+import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
+import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
+import nl.jimkaplan.autotrader.bitvavo.model.GetPriceResponse;
+import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
+import nl.jimkaplan.autotrader.tradingview.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.tradingview.model.document.Position;
+import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewAlert;
+import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewOrder;
+import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.tradingview.service.PositionService;
+import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
+import nl.jimkaplan.autotrader.tradingview.service.TradingViewOrderService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -155,6 +159,7 @@ public class TradingService {
      * @param botConfig The bot configuration
      * @param alert     The saved alert
      */
+    // TODO: parameter alert is not used
     private void processBuySignal(TradingViewAlertRequest request, BotConfiguration botConfig, TradingViewAlert alert) {
         log.info("Processing buy signal for bot: {}, ticker: {}", botConfig.getBotId(), request.getTicker());
 
@@ -209,6 +214,7 @@ public class TradingService {
      * @param botConfig The bot configuration
      * @param alert     The saved alert
      */
+    //TODO parameter alert is not used
     private void processSellSignal(TradingViewAlertRequest request, BotConfiguration botConfig, TradingViewAlert alert) {
         log.info("Processing sell signal for bot: {}, ticker: {}", botConfig.getBotId(), request.getTicker());
 
@@ -273,6 +279,7 @@ public class TradingService {
      * @param botConfig The bot configuration
      * @return The EUR balance
      */
+    //TODO: parameter botConfig is not used
     private double getEurBalance(BotConfiguration botConfig) {
         GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse.class);
         return balanceResponse.getAvailable().doubleValue();
@@ -285,6 +292,7 @@ public class TradingService {
      * @param asset     The asset symbol (e.g., "BTC")
      * @return The asset balance
      */
+    //TODO parameter botConfig is not used
     private double getAssetBalance(BotConfiguration botConfig, String asset) {
         GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get("/balance?symbol=" + asset, GetAccountBalanceResponse.class);
         return balanceResponse.getAvailable().doubleValue();
