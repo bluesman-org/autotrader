@@ -229,6 +229,7 @@ public class BotConfigurationService {
             byte[] hash = digest.digest(apiKey.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(hash);
         } catch (NoSuchAlgorithmException e) {
+            //TODO cover this case with unit tests
             throw new RuntimeException("Hashing failed", e);
         }
     }

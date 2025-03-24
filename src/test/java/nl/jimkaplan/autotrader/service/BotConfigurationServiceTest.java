@@ -7,8 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.Method;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -364,5 +369,28 @@ class BotConfigurationServiceTest {
         verify(botConfigurationRepository).findAll();
         verify(encryptionService, times(2)).decrypt(ENCRYPTED_API_KEY);
         verify(encryptionService, times(2)).decrypt(ENCRYPTED_API_SECRET);
+    }
+
+    @Test
+    void hashApiKey_shouldThrowRuntimeException_whenNoSuchAlgorithmException() {
+        try (MockedStatic<MessageDigest> mockedStatic = Mockito.mockStatic(MessageDigest.class)) {
+            mockedStatic.when(() -> MessageDigest.getInstance("SHA-256"))
+                    .thenThrow(new NoSuchAlgorithmException("Test exception"));
+
+            try {
+                // Use reflection to invoke the private hashApiKey method
+                Method hashMethod = BotConfigurationService.class.getDeclaredMethod("hashApiKey", String.class);
+                hashMethod.setAccessible(true);
+                hashMethod.invoke(botConfigurationService, "dummyKey");
+                fail("Expected RuntimeException was not thrown");
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                // The actual exception is wrapped in InvocationTargetException when using reflection
+                Throwable cause = e.getCause();
+                assertTrue(cause instanceof RuntimeException, "Cause should be RuntimeException but was: " + cause.getClass().getName());
+                assertTrue(cause.getMessage().contains("Hashing failed"), "Exception message should contain 'Hashing failed' but was: " + cause.getMessage());
+            }
+        } catch (Exception e) {
+            fail("Test encountered unexpected exception: " + e.getMessage());
+        }
     }
 }
