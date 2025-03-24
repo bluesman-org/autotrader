@@ -18,6 +18,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -386,7 +387,7 @@ class BotConfigurationServiceTest {
             } catch (java.lang.reflect.InvocationTargetException e) {
                 // The actual exception is wrapped in InvocationTargetException when using reflection
                 Throwable cause = e.getCause();
-                assertTrue(cause instanceof RuntimeException, "Cause should be RuntimeException but was: " + cause.getClass().getName());
+                assertInstanceOf(RuntimeException.class, cause, "Cause should be RuntimeException but was: " + cause.getClass().getName());
                 assertTrue(cause.getMessage().contains("Hashing failed"), "Exception message should contain 'Hashing failed' but was: " + cause.getMessage());
             }
         } catch (Exception e) {
