@@ -1,9 +1,18 @@
 spring:
   application:
     name: autotrader
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/autotrader}
+      database: autotrader
+      auto-index-creation: true
 
 bitvavo:
   apiKey: ${BITVAVO_API_KEY}
   apiSecret: ${BITVAVO_API_SECRET}
   apiUrl: https://api.bitvavo.com/v2
   window: 10000   # Default window in milliseconds (10 seconds)
+
+# Encryption settings for sensitive data
+encryption:
+  master-key: ${ENCRYPTION_MASTER_KEY:dGhpcyBpcyBhIHNlY3JldCBrZXkgZm9yIHRlc3Rpbmcgb25seQ==}  # Base64 encoded key, should be set via environment variable in production
