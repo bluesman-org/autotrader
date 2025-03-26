@@ -1,8 +1,8 @@
 package nl.jimkaplan.autotrader.tradingview.controller;
 
+import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.service.TradingService;
 import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
-import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

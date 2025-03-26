@@ -2,9 +2,9 @@ package nl.jimkaplan.autotrader.tradingview.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.service.TradingService;
 import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
-import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,6 +42,7 @@ public class TradingViewWebhookController {
                 request.getBotId(), request.getTicker(), request.getAction());
 
         // Validate API key
+
         if (!botConfigurationService.validateWebhookApiKey(request.getBotId(), apiKey)) {
             log.warn("Invalid API key for bot: {}", request.getBotId());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid API key");

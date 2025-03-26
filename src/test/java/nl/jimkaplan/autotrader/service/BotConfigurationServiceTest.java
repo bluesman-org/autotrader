@@ -1,4 +1,4 @@
-package nl.jimkaplan.autotrader.tradingview.service;
+package nl.jimkaplan.autotrader.service;
 
 import nl.jimkaplan.autotrader.model.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.BotConfigurationRepository;

@@ -12,8 +12,6 @@ import nl.jimkaplan.autotrader.model.Order;
 import nl.jimkaplan.autotrader.model.document.Position;
 import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
 import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewAlert;
-import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
-import nl.jimkaplan.autotrader.tradingview.service.PositionService;
 import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
 import org.springframework.stereotype.Service;
 
@@ -52,11 +50,11 @@ public class TradingService {
         // Validate request
         validateRequest(request);
 
-        // Log the alert
-        TradingViewAlert alert = saveAlert(request);
-
         // Get bot configuration
         BotConfiguration botConfig = getBotConfiguration(request.getBotId());
+
+        // Log the alert
+        TradingViewAlert alert = saveAlert(request);
 
         // Verify ticker matches bot's configured trading pair
         if (!request.getTicker().equals(botConfig.getTradingPair())) {

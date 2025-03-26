@@ -1,8 +1,7 @@
-package nl.jimkaplan.autotrader.tradingview.service;
+package nl.jimkaplan.autotrader.service;
 
 import nl.jimkaplan.autotrader.model.Order;
 import nl.jimkaplan.autotrader.repository.OrderRepository;
-import nl.jimkaplan.autotrader.service.OrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

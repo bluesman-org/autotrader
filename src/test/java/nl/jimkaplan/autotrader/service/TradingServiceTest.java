@@ -10,8 +10,6 @@ import nl.jimkaplan.autotrader.model.Order;
 import nl.jimkaplan.autotrader.model.document.Position;
 import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
 import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewAlert;
-import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
-import nl.jimkaplan.autotrader.tradingview.service.PositionService;
 import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -223,14 +221,12 @@ class TradingServiceTest {
     @Test
     void processAlert_withBotConfigNotFound_throwsException() {
         // Arrange
-        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.empty());
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> tradingService.processAlert(validBuyRequest));
         assertEquals("Bot configuration not found: " + TEST_BOT_ID, exception.getMessage());
-        verify(tradingViewAlertService).saveAlert(any());
     }
 
     @Test

@@ -1,4 +1,4 @@
-package nl.jimkaplan.autotrader.tradingview.service;
+package nl.jimkaplan.autotrader.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
