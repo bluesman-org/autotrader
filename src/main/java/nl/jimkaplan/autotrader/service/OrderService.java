@@ -1,9 +1,9 @@
-package nl.jimkaplan.autotrader.tradingview.service;
+package nl.jimkaplan.autotrader.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import nl.jimkaplan.autotrader.repository.TradingViewOrderRepository;
-import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewOrder;
+import nl.jimkaplan.autotrader.model.Order;
+import nl.jimkaplan.autotrader.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -11,26 +11,26 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Service for managing TradingView orders.
- * Handles CRUD operations for TradingView orders.
+ * Service for managing orders.
+ * Handles CRUD operations for orders.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class TradingViewOrderService {
+public class OrderService {
 
-    private final TradingViewOrderRepository tradingViewOrderRepository;
+    private final OrderRepository orderRepository;
 
     /**
-     * Save a TradingView order.
+     * Save an order.
      *
      * @param order The order to save
      * @return The saved order
      */
-    public TradingViewOrder saveOrder(TradingViewOrder order) {
-        log.info("Saving TradingView order for bot: {}, ticker: {}, status: {}",
+    public Order saveOrder(Order order) {
+        log.info("Saving order for bot: {}, ticker: {}, status: {}",
                 order.getBotId(), order.getTicker(), order.getStatus());
-        return tradingViewOrderRepository.save(order);
+        return orderRepository.save(order);
     }
 
     /**
@@ -39,8 +39,8 @@ public class TradingViewOrderService {
      * @param botId The bot ID
      * @return List of orders for the specified bot
      */
-    public List<TradingViewOrder> getOrdersByBotId(String botId) {
-        return tradingViewOrderRepository.findByBotId(botId);
+    public List<Order> getOrdersByBotId(String botId) {
+        return orderRepository.findByBotId(botId);
     }
 
     /**
@@ -50,8 +50,8 @@ public class TradingViewOrderService {
      * @param ticker The ticker symbol
      * @return List of orders for the specified bot and ticker
      */
-    public List<TradingViewOrder> getOrdersByBotIdAndTicker(String botId, String ticker) {
-        return tradingViewOrderRepository.findByBotIdAndTicker(botId, ticker);
+    public List<Order> getOrdersByBotIdAndTicker(String botId, String ticker) {
+        return orderRepository.findByBotIdAndTicker(botId, ticker);
     }
 
     /**
@@ -61,8 +61,8 @@ public class TradingViewOrderService {
      * @param status The order status
      * @return List of orders for the specified bot and status
      */
-    public List<TradingViewOrder> getOrdersByBotIdAndStatus(String botId, String status) {
-        return tradingViewOrderRepository.findByBotIdAndStatus(botId, status);
+    public List<Order> getOrdersByBotIdAndStatus(String botId, String status) {
+        return orderRepository.findByBotIdAndStatus(botId, status);
     }
 
     /**
@@ -73,8 +73,8 @@ public class TradingViewOrderService {
      * @param endTime   The end time
      * @return List of orders for the specified bot and time range
      */
-    public List<TradingViewOrder> getOrdersByBotIdAndTimeRange(String botId, Instant startTime, Instant endTime) {
-        return tradingViewOrderRepository.findByBotIdAndTimestampBetween(botId, startTime, endTime);
+    public List<Order> getOrdersByBotIdAndTimeRange(String botId, Instant startTime, Instant endTime) {
+        return orderRepository.findByBotIdAndTimestampBetween(botId, startTime, endTime);
     }
 
     /**
@@ -83,8 +83,8 @@ public class TradingViewOrderService {
      * @param id The order ID
      * @return Optional containing the order if found
      */
-    public Optional<TradingViewOrder> getOrderById(String id) {
-        return tradingViewOrderRepository.findById(id);
+    public Optional<Order> getOrderById(String id) {
+        return orderRepository.findById(id);
     }
 
     /**
@@ -93,8 +93,8 @@ public class TradingViewOrderService {
      * @param orderId The Bitvavo order ID
      * @return Optional containing the order if found
      */
-    public Optional<TradingViewOrder> getOrderByOrderId(String orderId) {
-        return tradingViewOrderRepository.findByOrderId(orderId);
+    public Optional<Order> getOrderByOrderId(String orderId) {
+        return orderRepository.findByOrderId(orderId);
     }
 
     /**
@@ -105,11 +105,11 @@ public class TradingViewOrderService {
      * @param errorMessage The error message (if any)
      * @return Optional containing the updated order if found
      */
-    public Optional<TradingViewOrder> updateOrderStatus(String id, String status, String errorMessage) {
-        return tradingViewOrderRepository.findById(id).map(order -> {
+    public Optional<Order> updateOrderStatus(String id, String status, String errorMessage) {
+        return orderRepository.findById(id).map(order -> {
             order.setStatus(status);
             order.setErrorMessage(errorMessage);
-            return tradingViewOrderRepository.save(order);
+            return orderRepository.save(order);
         });
     }
 
@@ -119,6 +119,6 @@ public class TradingViewOrderService {
      * @param id The order ID
      */
     public void deleteOrder(String id) {
-        tradingViewOrderRepository.deleteById(id);
+        orderRepository.deleteById(id);
     }
 }

@@ -26,37 +26,60 @@ autotrader/
 ├── src/
 │   ├── main/
 │   │   ├── java/nl/jimkaplan/autotrader/
-│   │   │   ├── client/         # API clients
-│   │   │   ├── config/         # Configuration classes
-│   │   │   ├── controller/     # REST controllers
-│   │   │   ├── exception/      # Exception handling
-│   │   │   ├── interceptor/    # HTTP interceptors
-│   │   │   ├── model/          # Data models/DTOs
-│   │   │   ├── service/        # Business logic services
 │   │   │   ├── AutotraderApplication.java  # Main application class
-│   │   │   └── ServletInitializer.java     # For WAR deployment
+│   │   │   ├── ServletInitializer.java     # For WAR deployment
+│   │   │   ├── bitvavo/                    # Bitvavo integration
+│   │   │   │   ├── client/                 # Bitvavo API clients
+│   │   │   │   ├── config/                 # Bitvavo configuration
+│   │   │   │   ├── controller/             # Bitvavo REST controllers
+│   │   │   │   ├── model/                  # Bitvavo data models
+│   │   │   │   └── service/                # Bitvavo services
+│   │   │   ├── common/                     # Common utilities
+│   │   │   │   ├── config/                 # Common configuration
+│   │   │   │   └── interceptor/            # HTTP interceptors
+│   │   │   ├── config/                     # Application configuration
+│   │   │   ├── exception/                  # Exception handling
+│   │   │   ├── model/                      # Common data models
+│   │   │   ├── repository/                 # Data repositories
+│   │   │   ├── service/                    # Business logic services
+│   │   │   └── tradingview/                # TradingView integration
+│   │   │       ├── controller/             # TradingView REST controllers
+│   │   │       ├── model/                  # TradingView data models
+│   │   │       └── service/                # TradingView services
 │   │   └── resources/
-│   │       ├── application.yml  # Application configuration
-│   │       ├── logback-spring.xml  # Logging configuration
-│   │       ├── static/         # Static resources
-│   │       └── templates/      # View templates
+│   │       ├── application.yml             # Application configuration
+│   │       └── logback-spring.xml          # Logging configuration
 │   └── test/
-│       └── java/nl/jimkaplan/autotrader/  # Test classes mirroring main structure
-├── .mvn/                       # Maven wrapper files
-├── logs/                       # Application logs
-├── target/                     # Compiled output
-├── mvnw                        # Maven wrapper script (Unix)
-├── mvnw.cmd                    # Maven wrapper script (Windows)
-├── pom.xml                     # Maven project configuration
-└── README.md                   # Project documentation
+│       └── java/nl/jimkaplan/autotrader/   # Test classes mirroring main structure
+├── .mvn/                                   # Maven wrapper files
+├── logs/                                   # Application logs
+├── target/                                 # Compiled output
+├── mvnw                                    # Maven wrapper script (Unix)
+├── mvnw.cmd                                # Maven wrapper script (Windows)
+├── pom.xml                                 # Maven project configuration
+└── README.md                               # Project documentation
 ```
 
 ## Running the Application
 
 1. Set up the required environment variables:
    ```bash
+   export MONGODB_AUTOTRADER_URI=your-mongodb-uri
+   export MONGODB_AUTOTRADER_USER=your-mongodb-user
+   export MONGODB_AUTOTRADER_PASSWORD=your-mongodb-password
    export BITVAVO_API_KEY=your-api-key
    export BITVAVO_API_SECRET=your-api-secret
+   export ENCRYPTION_MASTER_KEY=your-base64-encoded-encryption-key
+   ```
+
+   Alternatively, you can create a `.env` file in the project root with these variables:
+   ```
+   MONGODB_AUTOTRADER_URI=your-mongodb-uri
+   MONGODB_AUTOTRADER_USER=your-mongodb-user
+   MONGODB_AUTOTRADER_PASSWORD=your-mongodb-password
+   BITVAVO_API_KEY=your-api-key
+   BITVAVO_API_SECRET=your-api-secret
+   ENCRYPTION_MASTER_KEY=your-base64-encoded-encryption-key
    ```
 
 2. Run the application using Maven wrapper:
@@ -68,17 +91,24 @@ autotrader/
 
 ## Testing
 
-1. Run all tests:
+1. Test Environment Setup:
+   The project uses a separate test environment configuration:
+    - `src/test/resources/.env.test` - Contains test values for environment variables
+    - `src/test/resources/application-test.yml` - Test-specific application configuration
+
+   The test environment is automatically activated when running tests with the `test` profile.
+
+2. Run all tests:
    ```bash
    ./mvnw test
    ```
 
-2. Run a specific test class:
+3. Run a specific test class:
    ```bash
    ./mvnw test -Dtest=BitvavoAuthenticationServiceTest
    ```
 
-3. Run a specific test method:
+4. Run a specific test method:
    ```bash
    ./mvnw test -Dtest=BitvavoAuthenticationServiceTest#createAuthHeaders_withValidConfig_returnsHeaders
    ```

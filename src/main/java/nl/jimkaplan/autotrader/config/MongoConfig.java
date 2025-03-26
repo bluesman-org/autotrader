@@ -15,7 +15,7 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 @EnableMongoRepositories(basePackages = "nl.jimkaplan.autotrader.repository")
 public class MongoConfig extends AbstractMongoClientConfiguration {
 
-    @Value("${spring.data.mongodb.uri}")
+    @Value("${spring.data.mongodb.uri:mongodb+srv://localhost:27017/autotrader}")
     private String mongoUri;
 
     @Value("${spring.data.mongodb.database:autotrader}")

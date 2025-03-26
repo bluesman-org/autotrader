@@ -1,7 +1,7 @@
 package nl.jimkaplan.autotrader.tradingview.service;
 
+import nl.jimkaplan.autotrader.model.document.Position;
 import nl.jimkaplan.autotrader.repository.PositionRepository;
-import nl.jimkaplan.autotrader.tradingview.model.document.Position;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

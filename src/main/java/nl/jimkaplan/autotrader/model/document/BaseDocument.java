@@ -1,4 +1,4 @@
-package nl.jimkaplan.autotrader.tradingview.model.document;
+package nl.jimkaplan.autotrader.model.document;
 
 import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;

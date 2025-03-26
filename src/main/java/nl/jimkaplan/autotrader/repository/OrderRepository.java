@@ -1,6 +1,6 @@
 package nl.jimkaplan.autotrader.repository;
 
-import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewOrder;
+import nl.jimkaplan.autotrader.model.Order;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -9,11 +9,11 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Repository interface for TradingViewOrder documents.
- * Provides methods for CRUD operations on TradingViewOrder documents.
+ * Repository interface for Order documents.
+ * Provides methods for CRUD operations on Order documents.
  */
 @Repository
-public interface TradingViewOrderRepository extends MongoRepository<TradingViewOrder, String> {
+public interface OrderRepository extends MongoRepository<Order, String> {
 
     /**
      * Find orders by bot ID.
@@ -21,7 +21,7 @@ public interface TradingViewOrderRepository extends MongoRepository<TradingViewO
      * @param botId The bot ID
      * @return List of orders for the specified bot
      */
-    List<TradingViewOrder> findByBotId(String botId);
+    List<Order> findByBotId(String botId);
 
     /**
      * Find orders by bot ID and ticker.
@@ -30,7 +30,7 @@ public interface TradingViewOrderRepository extends MongoRepository<TradingViewO
      * @param ticker The ticker symbol
      * @return List of orders for the specified bot and ticker
      */
-    List<TradingViewOrder> findByBotIdAndTicker(String botId, String ticker);
+    List<Order> findByBotIdAndTicker(String botId, String ticker);
 
     /**
      * Find orders by bot ID and status.
@@ -39,7 +39,7 @@ public interface TradingViewOrderRepository extends MongoRepository<TradingViewO
      * @param status The order status
      * @return List of orders for the specified bot and status
      */
-    List<TradingViewOrder> findByBotIdAndStatus(String botId, String status);
+    List<Order> findByBotIdAndStatus(String botId, String status);
 
     /**
      * Find orders by bot ID and timestamp range.
@@ -49,7 +49,7 @@ public interface TradingViewOrderRepository extends MongoRepository<TradingViewO
      * @param endTime   The end time
      * @return List of orders for the specified bot and timestamp range
      */
-    List<TradingViewOrder> findByBotIdAndTimestampBetween(String botId, Instant startTime, Instant endTime);
+    List<Order> findByBotIdAndTimestampBetween(String botId, Instant startTime, Instant endTime);
 
     /**
      * Find order by order ID.
@@ -57,5 +57,5 @@ public interface TradingViewOrderRepository extends MongoRepository<TradingViewO
      * @param orderId The order ID
      * @return Optional containing the order if found
      */
-    Optional<TradingViewOrder> findByOrderId(String orderId);
+    Optional<Order> findByOrderId(String orderId);
 }

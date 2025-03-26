@@ -5,15 +5,14 @@ import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetPriceResponse;
+import nl.jimkaplan.autotrader.model.BotConfiguration;
+import nl.jimkaplan.autotrader.model.Order;
+import nl.jimkaplan.autotrader.model.document.Position;
 import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
-import nl.jimkaplan.autotrader.tradingview.model.document.BotConfiguration;
-import nl.jimkaplan.autotrader.tradingview.model.document.Position;
 import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewAlert;
-import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewOrder;
 import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.tradingview.service.PositionService;
 import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
-import nl.jimkaplan.autotrader.tradingview.service.TradingViewOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,7 +49,7 @@ class TradingServiceTest {
     private TradingViewAlertService tradingViewAlertService;
 
     @Mock
-    private TradingViewOrderService tradingViewOrderService;
+    private OrderService orderService;
 
     @Mock
     private PositionService positionService;
@@ -62,7 +61,7 @@ class TradingServiceTest {
     private ArgumentCaptor<TradingViewAlert> alertCaptor;
 
     @Captor
-    private ArgumentCaptor<TradingViewOrder> orderCaptor;
+    private ArgumentCaptor<Order> orderCaptor;
 
     @Captor
     private ArgumentCaptor<Position> positionCaptor;
@@ -321,7 +320,7 @@ class TradingServiceTest {
         assertEquals("market", capturedRequest.getOrderType());
         assertEquals(BigDecimal.valueOf(TEST_EUR_BALANCE), capturedRequest.getAmountQuote());
 
-        verify(tradingViewOrderService).saveOrder(orderCaptor.capture());
+        verify(orderService).saveOrder(orderCaptor.capture());
         assertEquals(TEST_BOT_ID, orderCaptor.getValue().getBotId());
         assertEquals(TEST_ORDER_ID.toString(), orderCaptor.getValue().getOrderId());
         assertEquals(TEST_TICKER, orderCaptor.getValue().getTicker());
@@ -352,7 +351,7 @@ class TradingServiceTest {
         verify(bitvavoApiClient).get("/balance?symbol=EUR", GetAccountBalanceResponse.class);
         verify(bitvavoApiClient, never()).post(anyString(), any(), any());
 
-        verify(tradingViewOrderService).saveOrder(orderCaptor.capture());
+        verify(orderService).saveOrder(orderCaptor.capture());
         assertEquals(TEST_BOT_ID, orderCaptor.getValue().getBotId());
         assertEquals(TEST_TICKER, orderCaptor.getValue().getTicker());
         assertEquals("FAILED", orderCaptor.getValue().getStatus());
@@ -378,7 +377,7 @@ class TradingServiceTest {
         verify(tradingViewAlertService).saveAlert(any());
         verify(bitvavoApiClient).get("/balance?symbol=EUR", GetAccountBalanceResponse.class);
 
-        verify(tradingViewOrderService).saveOrder(orderCaptor.capture());
+        verify(orderService).saveOrder(orderCaptor.capture());
         assertEquals(TEST_BOT_ID, orderCaptor.getValue().getBotId());
         assertEquals(TEST_TICKER, orderCaptor.getValue().getTicker());
         assertEquals("FAILED", orderCaptor.getValue().getStatus());
@@ -414,7 +413,7 @@ class TradingServiceTest {
         assertEquals("market", capturedRequest.getOrderType());
         assertEquals(BigDecimal.valueOf(TEST_BTC_BALANCE), capturedRequest.getAmount());
 
-        verify(tradingViewOrderService).saveOrder(orderCaptor.capture());
+        verify(orderService).saveOrder(orderCaptor.capture());
         assertEquals(TEST_BOT_ID, orderCaptor.getValue().getBotId());
         assertEquals(TEST_ORDER_ID.toString(), orderCaptor.getValue().getOrderId());
         assertEquals(TEST_TICKER, orderCaptor.getValue().getTicker());
@@ -451,7 +450,7 @@ class TradingServiceTest {
         verify(bitvavoApiClient).get("/ticker/price?market=BTCEUR", GetPriceResponse.class);
         verify(bitvavoApiClient, never()).post(anyString(), any(), any());
 
-        verify(tradingViewOrderService).saveOrder(orderCaptor.capture());
+        verify(orderService).saveOrder(orderCaptor.capture());
         assertEquals(TEST_BOT_ID, orderCaptor.getValue().getBotId());
         assertEquals(TEST_TICKER, orderCaptor.getValue().getTicker());
         assertEquals("FAILED", orderCaptor.getValue().getStatus());
@@ -479,7 +478,7 @@ class TradingServiceTest {
         verify(bitvavoApiClient).get("/balance?symbol=BTC", GetAccountBalanceResponse.class);
         verify(bitvavoApiClient).get("/ticker/price?market=BTCEUR", GetPriceResponse.class);
 
-        verify(tradingViewOrderService).saveOrder(orderCaptor.capture());
+        verify(orderService).saveOrder(orderCaptor.capture());
         assertEquals(TEST_BOT_ID, orderCaptor.getValue().getBotId());
         assertEquals(TEST_TICKER, orderCaptor.getValue().getTicker());
         assertEquals("FAILED", orderCaptor.getValue().getStatus());
@@ -506,7 +505,7 @@ class TradingServiceTest {
         verify(bitvavoApiClient).get("/ticker/price?market=BTCEUR", GetPriceResponse.class);
         verify(bitvavoApiClient).post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class));
 
-        verify(tradingViewOrderService).saveOrder(any());
+        verify(orderService).saveOrder(any());
         verify(positionService).getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN");
         // Verify that no position is saved when trying to close a non-existent position
         verify(positionService, never()).savePosition(any());

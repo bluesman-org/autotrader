@@ -1,7 +1,7 @@
 package nl.jimkaplan.autotrader.tradingview.service;
 
+import nl.jimkaplan.autotrader.model.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.BotConfigurationRepository;
-import nl.jimkaplan.autotrader.tradingview.model.document.BotConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.lang.reflect.Method;
 import java.security.MessageDigest;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@ActiveProfiles("test")
 class BotConfigurationServiceTest {
 
     @Mock

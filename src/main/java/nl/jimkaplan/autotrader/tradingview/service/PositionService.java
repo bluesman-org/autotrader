@@ -2,8 +2,8 @@ package nl.jimkaplan.autotrader.tradingview.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.model.document.Position;
 import nl.jimkaplan.autotrader.repository.PositionRepository;
-import nl.jimkaplan.autotrader.tradingview.model.document.Position;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

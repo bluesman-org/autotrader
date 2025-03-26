@@ -93,7 +93,7 @@ Stores all incoming alerts from TradingView.
 }
 ```
 
-##### `tradingview_orders` Collection
+##### `orders` Collection
 
 Stores orders placed on Bitvavo in response to TradingView alerts.
 
@@ -159,7 +159,7 @@ Tracks open positions for each bot.
 7. Check EUR balance using Bitvavo API
 8. If balance < 5 EUR, log error and return
 9. If balance ≥ 5 EUR, create market buy order
-10. Log order result in `tradingview_orders` collection
+10. Log order result in `orders` collection
 11. Update position status in `positions` collection
 
 ### Sell Signal Processing
@@ -178,7 +178,7 @@ Tracks open positions for each bot.
 10. Calculate asset worth in EUR
 11. If worth < 5 EUR, log error and return
 12. If worth ≥ 5 EUR, create market sell order
-13. Log order result in `tradingview_orders` collection
+13. Log order result in `orders` collection
 14. Update position status in `positions` collection
 
 ## Error Handling

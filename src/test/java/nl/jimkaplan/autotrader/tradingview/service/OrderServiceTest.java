@@ -1,13 +1,15 @@
 package nl.jimkaplan.autotrader.tradingview.service;
 
-import nl.jimkaplan.autotrader.repository.TradingViewOrderRepository;
-import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewOrder;
+import nl.jimkaplan.autotrader.model.Order;
+import nl.jimkaplan.autotrader.repository.OrderRepository;
+import nl.jimkaplan.autotrader.service.OrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 import java.util.Collections;
@@ -21,15 +23,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class TradingViewOrderServiceTest {
+@ActiveProfiles("test")
+class OrderServiceTest {
 
     @Mock
-    private TradingViewOrderRepository tradingViewOrderRepository;
+    private OrderRepository orderRepository;
 
     @InjectMocks
-    private TradingViewOrderService tradingViewOrderService;
+    private OrderService orderService;
 
-    private TradingViewOrder testOrder;
+    private Order testOrder;
     private final String TEST_BOT_ID = "test-bot-id";
     private final String TEST_TICKER = "BTCEUR";
     private final String TEST_STATUS = "COMPLETED";
@@ -39,7 +42,7 @@ class TradingViewOrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        testOrder = TradingViewOrder.builder()
+        testOrder = Order.builder()
                 .botId(TEST_BOT_ID)
                 .ticker(TEST_TICKER)
                 .status(TEST_STATUS)
@@ -52,10 +55,10 @@ class TradingViewOrderServiceTest {
     @Test
     void saveOrder_shouldSaveAndReturnOrder() {
         // Arrange
-        when(tradingViewOrderRepository.save(any(TradingViewOrder.class))).thenReturn(testOrder);
+        when(orderRepository.save(any(Order.class))).thenReturn(testOrder);
 
         // Act
-        TradingViewOrder savedOrder = tradingViewOrderService.saveOrder(testOrder);
+        Order savedOrder = orderService.saveOrder(testOrder);
 
         // Assert
         assertEquals(TEST_ORDER_ID, savedOrder.getId());
@@ -64,130 +67,130 @@ class TradingViewOrderServiceTest {
         assertEquals(TEST_STATUS, savedOrder.getStatus());
         assertEquals(TEST_BITVAVO_ORDER_ID, savedOrder.getOrderId());
         assertEquals(TEST_TIMESTAMP, savedOrder.getTimestamp());
-        verify(tradingViewOrderRepository).save(testOrder);
+        verify(orderRepository).save(testOrder);
     }
 
     @Test
     void getOrdersByBotId_shouldReturnOrdersForBot() {
         // Arrange
-        List<TradingViewOrder> orders = Collections.singletonList(testOrder);
-        when(tradingViewOrderRepository.findByBotId(TEST_BOT_ID)).thenReturn(orders);
+        List<Order> orders = Collections.singletonList(testOrder);
+        when(orderRepository.findByBotId(TEST_BOT_ID)).thenReturn(orders);
 
         // Act
-        List<TradingViewOrder> result = tradingViewOrderService.getOrdersByBotId(TEST_BOT_ID);
+        List<Order> result = orderService.getOrdersByBotId(TEST_BOT_ID);
 
         // Assert
         assertEquals(1, result.size());
         assertEquals(TEST_ORDER_ID, result.getFirst().getId());
         assertEquals(TEST_BOT_ID, result.getFirst().getBotId());
-        verify(tradingViewOrderRepository).findByBotId(TEST_BOT_ID);
+        verify(orderRepository).findByBotId(TEST_BOT_ID);
     }
 
     @Test
     void getOrdersByBotIdAndTicker_shouldReturnOrdersForBotAndTicker() {
         // Arrange
-        List<TradingViewOrder> orders = Collections.singletonList(testOrder);
-        when(tradingViewOrderRepository.findByBotIdAndTicker(TEST_BOT_ID, TEST_TICKER)).thenReturn(orders);
+        List<Order> orders = Collections.singletonList(testOrder);
+        when(orderRepository.findByBotIdAndTicker(TEST_BOT_ID, TEST_TICKER)).thenReturn(orders);
 
         // Act
-        List<TradingViewOrder> result = tradingViewOrderService.getOrdersByBotIdAndTicker(TEST_BOT_ID, TEST_TICKER);
+        List<Order> result = orderService.getOrdersByBotIdAndTicker(TEST_BOT_ID, TEST_TICKER);
 
         // Assert
         assertEquals(1, result.size());
         assertEquals(TEST_ORDER_ID, result.getFirst().getId());
         assertEquals(TEST_BOT_ID, result.getFirst().getBotId());
         assertEquals(TEST_TICKER, result.getFirst().getTicker());
-        verify(tradingViewOrderRepository).findByBotIdAndTicker(TEST_BOT_ID, TEST_TICKER);
+        verify(orderRepository).findByBotIdAndTicker(TEST_BOT_ID, TEST_TICKER);
     }
 
     @Test
     void getOrdersByBotIdAndStatus_shouldReturnOrdersForBotAndStatus() {
         // Arrange
-        List<TradingViewOrder> orders = Collections.singletonList(testOrder);
-        when(tradingViewOrderRepository.findByBotIdAndStatus(TEST_BOT_ID, TEST_STATUS)).thenReturn(orders);
+        List<Order> orders = Collections.singletonList(testOrder);
+        when(orderRepository.findByBotIdAndStatus(TEST_BOT_ID, TEST_STATUS)).thenReturn(orders);
 
         // Act
-        List<TradingViewOrder> result = tradingViewOrderService.getOrdersByBotIdAndStatus(TEST_BOT_ID, TEST_STATUS);
+        List<Order> result = orderService.getOrdersByBotIdAndStatus(TEST_BOT_ID, TEST_STATUS);
 
         // Assert
         assertEquals(1, result.size());
         assertEquals(TEST_ORDER_ID, result.getFirst().getId());
         assertEquals(TEST_BOT_ID, result.getFirst().getBotId());
         assertEquals(TEST_STATUS, result.getFirst().getStatus());
-        verify(tradingViewOrderRepository).findByBotIdAndStatus(TEST_BOT_ID, TEST_STATUS);
+        verify(orderRepository).findByBotIdAndStatus(TEST_BOT_ID, TEST_STATUS);
     }
 
     @Test
     void getOrdersByBotIdAndTimeRange_shouldReturnOrdersForBotAndTimeRange() {
         // Arrange
-        List<TradingViewOrder> orders = Collections.singletonList(testOrder);
+        List<Order> orders = Collections.singletonList(testOrder);
         Instant startTime = Instant.parse("2023-01-01T00:00:00Z");
         Instant endTime = Instant.parse("2023-01-02T00:00:00Z");
-        when(tradingViewOrderRepository.findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime)).thenReturn(orders);
+        when(orderRepository.findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime)).thenReturn(orders);
 
         // Act
-        List<TradingViewOrder> result = tradingViewOrderService.getOrdersByBotIdAndTimeRange(TEST_BOT_ID, startTime, endTime);
+        List<Order> result = orderService.getOrdersByBotIdAndTimeRange(TEST_BOT_ID, startTime, endTime);
 
         // Assert
         assertEquals(1, result.size());
         assertEquals(TEST_ORDER_ID, result.getFirst().getId());
         assertEquals(TEST_BOT_ID, result.getFirst().getBotId());
         assertEquals(TEST_TIMESTAMP, result.getFirst().getTimestamp());
-        verify(tradingViewOrderRepository).findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime);
+        verify(orderRepository).findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime);
     }
 
     @Test
     void getOrderById_shouldReturnOrderWhenFound() {
         // Arrange
-        when(tradingViewOrderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.of(testOrder));
+        when(orderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.of(testOrder));
 
         // Act
-        Optional<TradingViewOrder> result = tradingViewOrderService.getOrderById(TEST_ORDER_ID);
+        Optional<Order> result = orderService.getOrderById(TEST_ORDER_ID);
 
         // Assert
         assertTrue(result.isPresent());
         assertEquals(TEST_ORDER_ID, result.get().getId());
-        verify(tradingViewOrderRepository).findById(TEST_ORDER_ID);
+        verify(orderRepository).findById(TEST_ORDER_ID);
     }
 
     @Test
     void getOrderById_shouldReturnEmptyOptionalWhenNotFound() {
         // Arrange
-        when(tradingViewOrderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.empty());
+        when(orderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.empty());
 
         // Act
-        Optional<TradingViewOrder> result = tradingViewOrderService.getOrderById(TEST_ORDER_ID);
+        Optional<Order> result = orderService.getOrderById(TEST_ORDER_ID);
 
         // Assert
         assertTrue(result.isEmpty());
-        verify(tradingViewOrderRepository).findById(TEST_ORDER_ID);
+        verify(orderRepository).findById(TEST_ORDER_ID);
     }
 
     @Test
     void getOrderByOrderId_shouldReturnOrderWhenFound() {
         // Arrange
-        when(tradingViewOrderRepository.findByOrderId(TEST_BITVAVO_ORDER_ID)).thenReturn(Optional.of(testOrder));
+        when(orderRepository.findByOrderId(TEST_BITVAVO_ORDER_ID)).thenReturn(Optional.of(testOrder));
 
         // Act
-        Optional<TradingViewOrder> result = tradingViewOrderService.getOrderByOrderId(TEST_BITVAVO_ORDER_ID);
+        Optional<Order> result = orderService.getOrderByOrderId(TEST_BITVAVO_ORDER_ID);
 
         // Assert
         assertTrue(result.isPresent());
         assertEquals(TEST_BITVAVO_ORDER_ID, result.get().getOrderId());
-        verify(tradingViewOrderRepository).findByOrderId(TEST_BITVAVO_ORDER_ID);
+        verify(orderRepository).findByOrderId(TEST_BITVAVO_ORDER_ID);
     }
 
     @Test
     void getOrderByOrderId_shouldReturnEmptyOptionalWhenNotFound() {
         // Arrange
-        when(tradingViewOrderRepository.findByOrderId(TEST_BITVAVO_ORDER_ID)).thenReturn(Optional.empty());
+        when(orderRepository.findByOrderId(TEST_BITVAVO_ORDER_ID)).thenReturn(Optional.empty());
 
         // Act
-        Optional<TradingViewOrder> result = tradingViewOrderService.getOrderByOrderId(TEST_BITVAVO_ORDER_ID);
+        Optional<Order> result = orderService.getOrderByOrderId(TEST_BITVAVO_ORDER_ID);
 
         // Assert
         assertTrue(result.isEmpty());
-        verify(tradingViewOrderRepository).findByOrderId(TEST_BITVAVO_ORDER_ID);
+        verify(orderRepository).findByOrderId(TEST_BITVAVO_ORDER_ID);
     }
 
     @Test
@@ -195,7 +198,7 @@ class TradingViewOrderServiceTest {
         // Arrange
         String newStatus = "FAILED";
         String errorMessage = "Test error message";
-        TradingViewOrder updatedOrder = TradingViewOrder.builder()
+        Order updatedOrder = Order.builder()
                 .botId(TEST_BOT_ID)
                 .ticker(TEST_TICKER)
                 .status(newStatus)
@@ -204,19 +207,19 @@ class TradingViewOrderServiceTest {
                 .errorMessage(errorMessage)
                 .build();
         updatedOrder.setId(TEST_ORDER_ID);
-        
-        when(tradingViewOrderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.of(testOrder));
-        when(tradingViewOrderRepository.save(any(TradingViewOrder.class))).thenReturn(updatedOrder);
+
+        when(orderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.of(testOrder));
+        when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
 
         // Act
-        Optional<TradingViewOrder> result = tradingViewOrderService.updateOrderStatus(TEST_ORDER_ID, newStatus, errorMessage);
+        Optional<Order> result = orderService.updateOrderStatus(TEST_ORDER_ID, newStatus, errorMessage);
 
         // Assert
         assertTrue(result.isPresent());
         assertEquals(newStatus, result.get().getStatus());
         assertEquals(errorMessage, result.get().getErrorMessage());
-        verify(tradingViewOrderRepository).findById(TEST_ORDER_ID);
-        verify(tradingViewOrderRepository).save(any(TradingViewOrder.class));
+        verify(orderRepository).findById(TEST_ORDER_ID);
+        verify(orderRepository).save(any(Order.class));
     }
 
     @Test
@@ -224,22 +227,22 @@ class TradingViewOrderServiceTest {
         // Arrange
         String newStatus = "FAILED";
         String errorMessage = "Test error message";
-        when(tradingViewOrderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.empty());
+        when(orderRepository.findById(TEST_ORDER_ID)).thenReturn(Optional.empty());
 
         // Act
-        Optional<TradingViewOrder> result = tradingViewOrderService.updateOrderStatus(TEST_ORDER_ID, newStatus, errorMessage);
+        Optional<Order> result = orderService.updateOrderStatus(TEST_ORDER_ID, newStatus, errorMessage);
 
         // Assert
         assertTrue(result.isEmpty());
-        verify(tradingViewOrderRepository).findById(TEST_ORDER_ID);
+        verify(orderRepository).findById(TEST_ORDER_ID);
     }
 
     @Test
     void deleteOrder_shouldCallRepositoryDeleteById() {
         // Act
-        tradingViewOrderService.deleteOrder(TEST_ORDER_ID);
+        orderService.deleteOrder(TEST_ORDER_ID);
 
         // Assert
-        verify(tradingViewOrderRepository).deleteById(TEST_ORDER_ID);
+        verify(orderRepository).deleteById(TEST_ORDER_ID);
     }
 }

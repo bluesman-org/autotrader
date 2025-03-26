@@ -7,15 +7,14 @@ import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetPriceResponse;
+import nl.jimkaplan.autotrader.model.BotConfiguration;
+import nl.jimkaplan.autotrader.model.Order;
+import nl.jimkaplan.autotrader.model.document.Position;
 import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
-import nl.jimkaplan.autotrader.tradingview.model.document.BotConfiguration;
-import nl.jimkaplan.autotrader.tradingview.model.document.Position;
 import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewAlert;
-import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewOrder;
 import nl.jimkaplan.autotrader.tradingview.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.tradingview.service.PositionService;
 import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
-import nl.jimkaplan.autotrader.tradingview.service.TradingViewOrderService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -37,7 +36,7 @@ public class TradingService {
     private final BitvavoApiClient bitvavoApiClient;
     private final BotConfigurationService botConfigurationService;
     private final TradingViewAlertService tradingViewAlertService;
-    private final TradingViewOrderService tradingViewOrderService;
+    private final OrderService orderService;
     private final PositionService positionService;
 
     // Minimum EUR amount for trades
@@ -187,7 +186,7 @@ public class TradingService {
             log.info("Buy order placed successfully: {}", orderResponse.getOrderId());
 
             // Save order to database
-            TradingViewOrder order = TradingViewOrder.builder()
+            Order order = Order.builder()
                     .botId(botConfig.getBotId())
                     .orderId(orderResponse.getOrderId().toString())
                     .ticker(request.getTicker())
@@ -195,7 +194,7 @@ public class TradingService {
                     .status("COMPLETED")
                     .build();
 
-            tradingViewOrderService.saveOrder(order);
+            orderService.saveOrder(order);
 
             // Update position
             updatePosition(botConfig.getBotId(), request.getTicker(), "OPEN");
@@ -253,7 +252,7 @@ public class TradingService {
             log.info("Sell order placed successfully: {}", orderResponse.getOrderId());
 
             // Save order to database
-            TradingViewOrder order = TradingViewOrder.builder()
+            Order order = Order.builder()
                     .botId(botConfig.getBotId())
                     .orderId(orderResponse.getOrderId().toString())
                     .ticker(request.getTicker())
@@ -261,7 +260,7 @@ public class TradingService {
                     .status("COMPLETED")
                     .build();
 
-            tradingViewOrderService.saveOrder(order);
+            orderService.saveOrder(order);
 
             // Update position
             updatePosition(botConfig.getBotId(), request.getTicker(), "CLOSED");
@@ -317,7 +316,7 @@ public class TradingService {
      * @param errorMessage The error message
      */
     private void saveFailedOrder(String botId, String ticker, String errorMessage) {
-        TradingViewOrder order = TradingViewOrder.builder()
+        Order order = Order.builder()
                 .botId(botId)
                 .ticker(ticker)
                 .timestamp(Instant.now())
@@ -325,7 +324,7 @@ public class TradingService {
                 .errorMessage(errorMessage)
                 .build();
 
-        tradingViewOrderService.saveOrder(order);
+        orderService.saveOrder(order);
     }
 
     /**

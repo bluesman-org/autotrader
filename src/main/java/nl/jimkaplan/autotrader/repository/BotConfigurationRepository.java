@@ -1,6 +1,6 @@
 package nl.jimkaplan.autotrader.repository;
 
-import nl.jimkaplan.autotrader.tradingview.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.BotConfiguration;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 

@@ -2,8 +2,8 @@ package nl.jimkaplan.autotrader.tradingview.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.model.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.BotConfigurationRepository;
-import nl.jimkaplan.autotrader.tradingview.model.document.BotConfiguration;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
