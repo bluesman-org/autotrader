@@ -135,7 +135,7 @@ public class BotConfigurationService {
      * @param botId The bot ID
      * @return The generated webhook API key
      */
-    public String generateWebhookApiKey(String botId) {
+    public String generateAndSaveWebhookApiKey(String botId) {
         // Generate a secure random key
         String webhookApiKey = generateSecureRandomKey();
 
@@ -175,7 +175,7 @@ public class BotConfigurationService {
      *
      * @return The generated bot ID
      */
-    String generateBotId() {
+    public String generateBotId() {
         String allowedChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         SecureRandom random = new SecureRandom();
         StringBuilder sb = new StringBuilder(6);
@@ -187,6 +187,7 @@ public class BotConfigurationService {
 
         return sb.toString();
     }
+
 
     /**
      * Decrypt sensitive data in a bot configuration.

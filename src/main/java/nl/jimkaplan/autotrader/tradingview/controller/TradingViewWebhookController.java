@@ -1,5 +1,12 @@
 package nl.jimkaplan.autotrader.tradingview.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
@@ -21,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/webhook")
 @RequiredArgsConstructor
+@Tag(name = "TradingView Webhook", description = "API for receiving and processing TradingView alerts")
 public class TradingViewWebhookController {
 
     private final BotConfigurationService botConfigurationService;
@@ -33,9 +41,46 @@ public class TradingViewWebhookController {
      * @param request The alert request from TradingView
      * @return ResponseEntity with appropriate status code
      */
+    @Operation(
+            summary = "Process TradingView alert",
+            description = "Receives and processes alerts from TradingView to execute trading actions"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Alert processed successfully"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request parameters",
+                    content = @Content(
+                            mediaType = "text/plain",
+                            schema = @Schema(type = "string")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Invalid API key",
+                    content = @Content(
+                            mediaType = "text/plain",
+                            schema = @Schema(type = "string")
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Server error processing the alert",
+                    content = @Content(
+                            mediaType = "text/plain",
+                            schema = @Schema(type = "string")
+                    )
+            )
+    })
     @PostMapping("/tradingview")
     public ResponseEntity<?> handleWebhook(
+            @Parameter(description = "API key for authentication", required = true)
             @RequestHeader("X-API-KEY") String apiKey,
+
+            @Parameter(description = "Alert details from TradingView", required = true)
             @RequestBody TradingViewAlertRequest request
     ) {
         log.info("Received TradingView alert for bot: {}, ticker: {}, action: {}",

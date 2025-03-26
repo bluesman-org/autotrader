@@ -156,7 +156,7 @@ class BotConfigurationServiceTest {
     }
 
     @Test
-    void generateWebhookApiKey_shouldGenerateAndStoreHashedKey() {
+    void generateWebhookApiKey_shouldGenerateAndSaveAndStoreHashedKey() {
         // Arrange
         BotConfiguration storedConfig = BotConfiguration.builder()
                 .botId(TEST_BOT_ID)
@@ -170,7 +170,7 @@ class BotConfigurationServiceTest {
         when(botConfigurationRepository.save(any(BotConfiguration.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // Act
-        String webhookApiKey = botConfigurationService.generateWebhookApiKey(TEST_BOT_ID);
+        String webhookApiKey = botConfigurationService.generateAndSaveWebhookApiKey(TEST_BOT_ID);
 
         // Assert
         assertNotNull(webhookApiKey);
