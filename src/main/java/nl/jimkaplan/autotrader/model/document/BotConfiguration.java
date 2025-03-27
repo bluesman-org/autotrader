@@ -1,11 +1,10 @@
-package nl.jimkaplan.autotrader.model;
+package nl.jimkaplan.autotrader.model.document;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import nl.jimkaplan.autotrader.model.document.BaseDocument;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;

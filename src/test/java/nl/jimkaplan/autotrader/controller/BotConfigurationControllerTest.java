@@ -1,6 +1,6 @@
 package nl.jimkaplan.autotrader.controller;
 
-import nl.jimkaplan.autotrader.model.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.model.dto.BotConfigurationRequest;
 import nl.jimkaplan.autotrader.model.dto.BotConfigurationResponse;
 import nl.jimkaplan.autotrader.model.dto.BotCreatedResponse;

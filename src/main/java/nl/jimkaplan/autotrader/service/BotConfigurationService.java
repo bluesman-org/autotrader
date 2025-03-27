@@ -2,7 +2,7 @@ package nl.jimkaplan.autotrader.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import nl.jimkaplan.autotrader.model.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.BotConfigurationRepository;
 import org.springframework.stereotype.Service;
 

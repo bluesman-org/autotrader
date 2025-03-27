@@ -7,8 +7,8 @@ import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetPriceResponse;
-import nl.jimkaplan.autotrader.model.BotConfiguration;
 import nl.jimkaplan.autotrader.model.Order;
+import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.model.document.Position;
 import nl.jimkaplan.autotrader.tradingview.model.TradingViewAlertRequest;
 import nl.jimkaplan.autotrader.tradingview.model.document.TradingViewAlert;
@@ -16,6 +16,7 @@ import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.text.MessageFormat;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -31,11 +32,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TradingService {
 
-    private final BitvavoApiClient bitvavoApiClient;
     private final BotConfigurationService botConfigurationService;
     private final TradingViewAlertService tradingViewAlertService;
     private final OrderService orderService;
     private final PositionService positionService;
+    private final BitvavoApiClient bitvavoApiClient;
 
     // Minimum EUR amount for trades
     private static final double MIN_EUR_AMOUNT = 5.0;
@@ -54,28 +55,37 @@ public class TradingService {
         BotConfiguration botConfig = getBotConfiguration(request.getBotId());
 
         // Log the alert
-        TradingViewAlert alert = saveAlert(request);
+        saveAlert(request);
 
         // Verify ticker matches bot's configured trading pair
         if (!request.getTicker().equals(botConfig.getTradingPair())) {
-            throw new IllegalArgumentException("Ticker mismatch: " + request.getTicker() +
-                    " does not match bot's configured trading pair: " + botConfig.getTradingPair());
+            throw new IllegalArgumentException(
+                    MessageFormat.format(
+                            "Ticker mismatch: {0} does not match configured trading pair: {1}",
+                            request.getTicker(), botConfig.getTradingPair())
+            );
         }
 
         // Verify ticker is EUR-based
         if (!isEurBasedTicker(request.getTicker())) {
-            throw new IllegalArgumentException("Unsupported ticker: " + request.getTicker() +
-                    ". Only EUR-based trading pairs are supported in v1.");
+            throw new IllegalArgumentException(
+                    MessageFormat.format(
+                            "Unsupported ticker: {0}. Only EUR-based trading pairs are supported in v1.",
+                            request.getTicker())
+            );
         }
 
         // Process the alert based on action
         if ("buy".equalsIgnoreCase(request.getAction())) {
-            processBuySignal(request, botConfig, alert);
+            processBuySignal(request, botConfig);
         } else if ("sell".equalsIgnoreCase(request.getAction())) {
-            processSellSignal(request, botConfig, alert);
+            processSellSignal(request, botConfig);
         } else {
-            throw new IllegalArgumentException("Invalid action: " + request.getAction() +
-                    ". Supported actions are 'buy' and 'sell'.");
+            throw new IllegalArgumentException(
+                    MessageFormat.format(
+                            "Invalid action: {0}. Supported actions are ''buy'' and ''sell''.",
+                            request.getAction())
+            );
         }
     }
 
@@ -114,9 +124,8 @@ public class TradingService {
      * Save the TradingView alert to the database.
      *
      * @param request The alert request
-     * @return The saved alert
      */
-    private TradingViewAlert saveAlert(TradingViewAlertRequest request) {
+    private void saveAlert(TradingViewAlertRequest request) {
         TradingViewAlert alert = TradingViewAlert.builder()
                 .botId(request.getBotId())
                 .ticker(request.getTicker())
@@ -124,7 +133,7 @@ public class TradingService {
                 .timestamp(Instant.parse(request.getTimestamp()))
                 .build();
 
-        return tradingViewAlertService.saveAlert(alert);
+        tradingViewAlertService.saveAlert(alert);
     }
 
     /**
@@ -154,10 +163,8 @@ public class TradingService {
      *
      * @param request   The alert request
      * @param botConfig The bot configuration
-     * @param alert     The saved alert
      */
-    // TODO: parameter alert is not used
-    private void processBuySignal(TradingViewAlertRequest request, BotConfiguration botConfig, TradingViewAlert alert) {
+    private void processBuySignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
         log.info("Processing buy signal for bot: {}, ticker: {}", botConfig.getBotId(), request.getTicker());
 
         try {
@@ -166,7 +173,10 @@ public class TradingService {
             log.info("EUR balance: {}", eurBalance);
 
             if (eurBalance < MIN_EUR_AMOUNT) {
-                String errorMessage = "Insufficient EUR balance: " + eurBalance + " EUR. Minimum required: " + MIN_EUR_AMOUNT + " EUR.";
+                String errorMessage = MessageFormat.format(
+                        "Insufficient EUR balance: {0} EUR. Minimum required: {1} EUR.",
+                        eurBalance,
+                        MIN_EUR_AMOUNT);
                 log.warn(errorMessage);
                 saveFailedOrder(botConfig.getBotId(), request.getTicker(), errorMessage);
                 return;
@@ -180,7 +190,8 @@ public class TradingService {
                     .amountQuote(BigDecimal.valueOf(eurBalance))
                     .build();
 
-            CreateOrderResponse orderResponse = bitvavoApiClient.post("/order", orderRequest, CreateOrderResponse.class);
+            CreateOrderResponse orderResponse = bitvavoApiClient.post(
+                    "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
             log.info("Buy order placed successfully: {}", orderResponse.getOrderId());
 
             // Save order to database
@@ -209,10 +220,8 @@ public class TradingService {
      *
      * @param request   The alert request
      * @param botConfig The bot configuration
-     * @param alert     The saved alert
      */
-    //TODO parameter alert is not used
-    private void processSellSignal(TradingViewAlertRequest request, BotConfiguration botConfig, TradingViewAlert alert) {
+    private void processSellSignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
         log.info("Processing sell signal for bot: {}, ticker: {}", botConfig.getBotId(), request.getTicker());
 
         try {
@@ -224,7 +233,7 @@ public class TradingService {
             log.info("{} balance: {}", asset, assetBalance);
 
             // Get asset price
-            double assetPrice = getAssetPrice(request.getTicker());
+            double assetPrice = getAssetPrice(request.getTicker(), botConfig);
             log.info("{} price: {} EUR", asset, assetPrice);
 
             // Calculate asset worth in EUR
@@ -232,7 +241,9 @@ public class TradingService {
             log.info("{} worth: {} EUR", asset, assetWorth);
 
             if (assetWorth < MIN_EUR_AMOUNT) {
-                String errorMessage = "Insufficient " + asset + " balance worth: " + assetWorth + " EUR. Minimum required: " + MIN_EUR_AMOUNT + " EUR.";
+                String errorMessage = MessageFormat.format(
+                        "Insufficient {0} balance worth: {1} EUR. Minimum required: {2} EUR.",
+                        asset, assetWorth, MIN_EUR_AMOUNT);
                 log.warn(errorMessage);
                 saveFailedOrder(botConfig.getBotId(), request.getTicker(), errorMessage);
                 return;
@@ -246,7 +257,8 @@ public class TradingService {
                     .amount(BigDecimal.valueOf(assetBalance))
                     .build();
 
-            CreateOrderResponse orderResponse = bitvavoApiClient.post("/order", orderRequest, CreateOrderResponse.class);
+            CreateOrderResponse orderResponse = bitvavoApiClient.post(
+                    "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
             log.info("Sell order placed successfully: {}", orderResponse.getOrderId());
 
             // Save order to database
@@ -276,9 +288,9 @@ public class TradingService {
      * @param botConfig The bot configuration
      * @return The EUR balance
      */
-    //TODO: parameter botConfig is not used
     private double getEurBalance(BotConfiguration botConfig) {
-        GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse.class);
+        GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get(
+                "/balance?symbol=EUR", GetAccountBalanceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
         return balanceResponse.getAvailable().doubleValue();
     }
 
@@ -289,9 +301,10 @@ public class TradingService {
      * @param asset     The asset symbol (e.g., "BTC")
      * @return The asset balance
      */
-    //TODO parameter botConfig is not used
+
     private double getAssetBalance(BotConfiguration botConfig, String asset) {
-        GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get("/balance?symbol=" + asset, GetAccountBalanceResponse.class);
+        GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get(
+                "/balance?symbol=" + asset, GetAccountBalanceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
         return balanceResponse.getAvailable().doubleValue();
     }
 
@@ -301,8 +314,9 @@ public class TradingService {
      * @param ticker The ticker (e.g., "BTCEUR")
      * @return The asset price in EUR
      */
-    private double getAssetPrice(String ticker) {
-        GetPriceResponse priceResponse = bitvavoApiClient.get("/ticker/price?market=" + ticker, GetPriceResponse.class);
+    private double getAssetPrice(String ticker, BotConfiguration botConfig) {
+        GetPriceResponse priceResponse = bitvavoApiClient.get(
+                "/ticker/price?market=" + ticker, GetPriceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
         return priceResponse.getPrice().doubleValue();
     }
 
@@ -328,9 +342,9 @@ public class TradingService {
     /**
      * Update the position status for a bot and ticker.
      *
-     * @param botId   The bot ID
-     * @param ticker  The ticker
-     * @param status  The new status
+     * @param botId  The bot ID
+     * @param ticker The ticker
+     * @param status The new status
      */
     private void updatePosition(String botId, String ticker, String status) {
         // Check if position exists

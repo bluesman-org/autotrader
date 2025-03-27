@@ -1,6 +1,6 @@
 package nl.jimkaplan.autotrader.service;
 
-import nl.jimkaplan.autotrader.model.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.BotConfigurationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
