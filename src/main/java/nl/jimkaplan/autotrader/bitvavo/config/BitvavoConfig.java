@@ -9,12 +9,6 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "bitvavo")
 public class BitvavoConfig {
-    @Value("${bitvavo.apiKey}")
-    private String apiKey;
-    @Value("${bitvavo.apiSecret}")
-    private String apiSecret;
     @Value("${bitvavo.apiUrl}")
     private String apiUrl;
-    @Value("${bitvavo.window}")
-    private int window;
 }

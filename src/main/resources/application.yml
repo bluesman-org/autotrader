@@ -10,10 +10,7 @@ spring:
       auto-index-creation: true
 
 bitvavo:
-  apiKey: ${BITVAVO_API_KEY}
-  apiSecret: ${BITVAVO_API_SECRET}
   apiUrl: https://api.bitvavo.com/v2
-  window: 10000   # Default window in milliseconds (10 seconds)
 
 # Encryption settings for sensitive data
 encryption:

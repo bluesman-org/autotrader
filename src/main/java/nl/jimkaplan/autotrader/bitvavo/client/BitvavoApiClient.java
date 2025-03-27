@@ -35,10 +35,10 @@ public class BitvavoApiClient {
      * @param responseType Class of the expected response
      * @return Response from the API
      */
-    public <T> T get(String endpoint, Class<T> responseType) {
+    public <T> T get(String endpoint, Class<T> responseType, String apiKey, String apiSecret) {
         log.debug("Sending GET request to Bitvavo API: {}", endpoint);
 
-        HttpHeaders headers = createHeaders(HttpMethod.GET.name(), endpoint, null);
+        HttpHeaders headers = createHeaders(HttpMethod.GET.name(), endpoint, null, apiKey, apiSecret);
         HttpEntity<?> entity = new HttpEntity<>(headers);
         String url = bitvavoConfig.getApiUrl() + endpoint;
 
@@ -62,7 +62,7 @@ public class BitvavoApiClient {
      * @param responseType Class of the expected response
      * @return Response from the API
      */
-    public <T> T post(String endpoint, Object body, Class<T> responseType) {
+    public <T> T post(String endpoint, Object body, Class<T> responseType, String apiKey, String apiSecret) {
         log.debug("Sending POST request to Bitvavo API: {}", endpoint);
 
         try {
@@ -70,7 +70,7 @@ public class BitvavoApiClient {
             String bodyString = body != null ? objectMapper.writeValueAsString(body) : "";
             log.debug("Request body: {}", bodyString);
 
-            HttpHeaders headers = createHeaders(HttpMethod.POST.name(), endpoint, bodyString);
+            HttpHeaders headers = createHeaders(HttpMethod.POST.name(), endpoint, bodyString, apiKey, apiSecret);
             HttpEntity<?> entity = new HttpEntity<>(body, headers);
             String url = bitvavoConfig.getApiUrl() + endpoint;
 
@@ -97,10 +97,10 @@ public class BitvavoApiClient {
      * @param body     Request body (for POST requests)
      * @return HTTP headers with authentication
      */
-    private HttpHeaders createHeaders(String method, String endpoint, String body) {
+    private HttpHeaders createHeaders(String method, String endpoint, String body, String apiKey, String apiSecret) {
         log.debug("Creating authentication headers for {} request to {}", method, endpoint);
 
-        BitvavoAuthHeaders authHeaders = authenticationService.createAuthHeaders(method, endpoint, body);
+        BitvavoAuthHeaders authHeaders = authenticationService.createAuthHeaders(method, endpoint, body, apiKey, apiSecret);
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Bitvavo-Access-Key", authHeaders.getBitvavoBitvAvoAccessKey());

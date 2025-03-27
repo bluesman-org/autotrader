@@ -1,7 +1,6 @@
 package nl.jimkaplan.autotrader.bitvavo.service;
 
 import lombok.RequiredArgsConstructor;
-import nl.jimkaplan.autotrader.bitvavo.config.BitvavoConfig;
 import nl.jimkaplan.autotrader.bitvavo.model.BitvavoAuthHeaders;
 import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
@@ -21,8 +20,7 @@ public class BitvavoAuthenticationService {
 
     private static final Logger log = LoggerFactory.getLogger(BitvavoAuthenticationService.class);
     private static final String HMAC_SHA_256 = "HmacSHA256";
-
-    private final BitvavoConfig bitvavoConfig;
+    public static final String ACCESS_WINDOW = "10000"; // 10 seconds
 
     /**
      * Creates the authentication headers required for Bitvavo API requests.
@@ -32,27 +30,27 @@ public class BitvavoAuthenticationService {
      * @param body   Request body (for POST/PUT requests)
      * @return Object containing all required authentication headers
      */
-    public BitvavoAuthHeaders createAuthHeaders(String method, String path, String body) {
+    public BitvavoAuthHeaders createAuthHeaders(String method, String path, String body, String apiKey, String apiSecret) {
         log.debug("Creating authentication headers for {} request to {}", method, path);
 
         // Check if API key and secret are set
-        if (bitvavoConfig.getApiKey() == null || bitvavoConfig.getApiKey().isEmpty()) {
+        if (apiKey == null || apiKey.isEmpty()) {
             throw new IllegalStateException("Bitvavo API key is not set. Please set the BITVAVO_API_KEY environment variable.");
         }
-        if (bitvavoConfig.getApiSecret() == null || bitvavoConfig.getApiSecret().isEmpty()) {
+        if (apiSecret == null || apiSecret.isEmpty()) {
             throw new IllegalStateException("Bitvavo API secret is not set. Please set the BITVAVO_API_SECRET environment variable.");
         }
 
         log.debug("API key and secret validation successful");
         long timestamp = Instant.now().toEpochMilli();
-        String signature = createSignature(timestamp, method, path, body);
+        String signature = createSignature(timestamp, method, path, body, apiSecret);
 
         log.debug("Building authentication headers with timestamp: {}", timestamp);
         return BitvavoAuthHeaders.builder()
-                .bitvavoBitvAvoAccessKey(bitvavoConfig.getApiKey())
+                .bitvavoBitvAvoAccessKey(apiKey)
                 .bitvavoBitvAvoAccessSignature(signature)
                 .bitvavoBitvAvoAccessTimestamp(String.valueOf(timestamp))
-                .bitvavoBitvAvoAccessWindow(String.valueOf(bitvavoConfig.getWindow()))
+                .bitvavoBitvAvoAccessWindow(ACCESS_WINDOW)
                 .build();
     }
 
@@ -65,7 +63,7 @@ public class BitvavoAuthenticationService {
      * @param body      Request body (for POST/PUT requests)
      * @return Base64 encoded HMAC-SHA256 signature
      */
-    private String createSignature(long timestamp, String method, String path, String body) {
+    private String createSignature(long timestamp, String method, String path, String body, String apiSecret) {
         log.debug("Creating signature for {} request to {} at timestamp {}", method, path, timestamp);
         try {
             String message = timestamp + method + "/v2" + path;
@@ -78,7 +76,7 @@ public class BitvavoAuthenticationService {
             log.debug("Initializing {} algorithm", HMAC_SHA_256);
 
             Mac hmacSha256 = getMacInstance();
-            SecretKeySpec secretKeySpec = createSecretKeySpec(bitvavoConfig.getApiSecret());
+            SecretKeySpec secretKeySpec = createSecretKeySpec(apiSecret);
             initMac(hmacSha256, secretKeySpec);
 
             byte[] hashBytes = doFinal(hmacSha256, message);
