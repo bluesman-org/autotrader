@@ -18,20 +18,26 @@ public class TradingViewAlertRequest {
      * Alphanumeric identifier for the bot.
      */
     private String botId;
-    
+
     /**
      * Symbol of the traded asset (e.g., "BTCEUR").
      * Must match the bot's configured trading pair.
      */
     private String ticker;
-    
+
     /**
      * Type of order to place (e.g., "buy" or "sell").
      */
     private String action;
-    
+
     /**
      * UTC timestamp in format yyyy-MM-ddTHH:mm:ssZ.
      */
     private String timestamp;
+
+    /**
+     * Flag to indicate if this is a dry run.
+     * If true, all business logic will be executed except sending the order to Bitvavo.
+     */
+    private Boolean dryRun;
 }

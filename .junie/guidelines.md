@@ -130,6 +130,7 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Follow the existing test patterns (Arrange-Act-Assert)
     - Use mocks for external dependencies
     - Test both happy paths and error cases
+    - Aim for having 100% line coverage. If not possible, do not go below 90%
 
 4. **Security**:
     - Never commit API keys or secrets to version control

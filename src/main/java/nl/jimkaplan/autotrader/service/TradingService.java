@@ -165,7 +165,8 @@ public class TradingService {
      * @param botConfig The bot configuration
      */
     private void processBuySignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
-        log.info("Processing buy signal for bot: {}, ticker: {}", botConfig.getBotId(), request.getTicker());
+        log.info("Processing buy signal for bot: {}, ticker: {}, dryRun: {}", 
+                botConfig.getBotId(), request.getTicker(), request.getDryRun());
 
         try {
             // Check EUR balance
@@ -190,14 +191,27 @@ public class TradingService {
                     .amountQuote(BigDecimal.valueOf(eurBalance))
                     .build();
 
-            CreateOrderResponse orderResponse = bitvavoApiClient.post(
-                    "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
-            log.info("Buy order placed successfully: {}", orderResponse.getOrderId());
+            CreateOrderResponse orderResponse;
+            String orderId;
+
+            // Check if this is a dry run
+            if (Boolean.TRUE.equals(request.getDryRun())) {
+                // Skip sending the order to Bitvavo in dry run mode
+                log.info("DRY RUN: Skipping sending buy order to Bitvavo");
+                // Generate a dummy order ID for dry run
+                orderId = "dry-run-" + System.currentTimeMillis();
+            } else {
+                // Send the order to Bitvavo in normal mode
+                orderResponse = bitvavoApiClient.post(
+                        "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
+                orderId = orderResponse.getOrderId().toString();
+                log.info("Buy order placed successfully: {}", orderId);
+            }
 
             // Save order to database
             Order order = Order.builder()
                     .botId(botConfig.getBotId())
-                    .orderId(orderResponse.getOrderId().toString())
+                    .orderId(orderId)
                     .ticker(request.getTicker())
                     .timestamp(Instant.now())
                     .status("COMPLETED")
@@ -222,7 +236,8 @@ public class TradingService {
      * @param botConfig The bot configuration
      */
     private void processSellSignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
-        log.info("Processing sell signal for bot: {}, ticker: {}", botConfig.getBotId(), request.getTicker());
+        log.info("Processing sell signal for bot: {}, ticker: {}, dryRun: {}", 
+                botConfig.getBotId(), request.getTicker(), request.getDryRun());
 
         try {
             // Extract asset from ticker (e.g., "BTC" from "BTCEUR")
@@ -257,14 +272,27 @@ public class TradingService {
                     .amount(BigDecimal.valueOf(assetBalance))
                     .build();
 
-            CreateOrderResponse orderResponse = bitvavoApiClient.post(
-                    "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
-            log.info("Sell order placed successfully: {}", orderResponse.getOrderId());
+            CreateOrderResponse orderResponse;
+            String orderId;
+
+            // Check if this is a dry run
+            if (Boolean.TRUE.equals(request.getDryRun())) {
+                // Skip sending the order to Bitvavo in dry run mode
+                log.info("DRY RUN: Skipping sending sell order to Bitvavo");
+                // Generate a dummy order ID for dry run
+                orderId = "dry-run-" + System.currentTimeMillis();
+            } else {
+                // Send the order to Bitvavo in normal mode
+                orderResponse = bitvavoApiClient.post(
+                        "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
+                orderId = orderResponse.getOrderId().toString();
+                log.info("Sell order placed successfully: {}", orderId);
+            }
 
             // Save order to database
             Order order = Order.builder()
                     .botId(botConfig.getBotId())
-                    .orderId(orderResponse.getOrderId().toString())
+                    .orderId(orderId)
                     .ticker(request.getTicker())
                     .timestamp(Instant.now())
                     .status("COMPLETED")

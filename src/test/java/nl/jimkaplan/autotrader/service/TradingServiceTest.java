@@ -495,4 +495,97 @@ class TradingServiceTest {
         existingPosition.setStatus("CLOSED");
         verify(positionService).savePosition(existingPosition);
     }
+
+    @Test
+    void processAlert_withDryRunBuySignal_skipsOrderSubmission() {
+        // Arrange
+        TradingViewAlertRequest dryRunBuyRequest = new TradingViewAlertRequest();
+        dryRunBuyRequest.setBotId(TEST_BOT_ID);
+        dryRunBuyRequest.setTicker(TEST_TICKER);
+        dryRunBuyRequest.setAction("buy");
+        dryRunBuyRequest.setTimestamp(TEST_TIMESTAMP);
+        dryRunBuyRequest.setDryRun(true);
+
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(eurBalanceResponse);
+        when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
+
+        // Act
+        tradingService.processAlert(dryRunBuyRequest);
+
+        // Assert
+        // Verify alert is saved
+        verify(tradingViewAlertService).saveAlert(alertCaptor.capture());
+        assertEquals(TEST_BOT_ID, alertCaptor.getValue().getBotId());
+        assertEquals(TEST_TICKER, alertCaptor.getValue().getTicker());
+        assertEquals("buy", alertCaptor.getValue().getAction());
+
+        // Verify balance is checked
+        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+
+        // Verify order is NOT sent to Bitvavo
+        verify(bitvavoApiClient, never()).post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+
+        // Verify order is saved to database
+        verify(orderService).saveOrder(orderCaptor.capture());
+        Order capturedOrder = orderCaptor.getValue();
+        assertEquals(TEST_BOT_ID, capturedOrder.getBotId());
+        assertEquals(TEST_TICKER, capturedOrder.getTicker());
+        assertEquals("COMPLETED", capturedOrder.getStatus());
+        assertTrue(capturedOrder.getOrderId().startsWith("dry-run-"));
+
+        // Verify position is updated
+        verify(positionService).getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN");
+        verify(positionService).savePosition(positionCaptor.capture());
+    }
+
+    @Test
+    void processAlert_withDryRunSellSignal_skipsOrderSubmission() {
+        // Arrange
+        TradingViewAlertRequest dryRunSellRequest = new TradingViewAlertRequest();
+        dryRunSellRequest.setBotId(TEST_BOT_ID);
+        dryRunSellRequest.setTicker(TEST_TICKER);
+        dryRunSellRequest.setAction("sell");
+        dryRunSellRequest.setTimestamp(TEST_TIMESTAMP);
+        dryRunSellRequest.setDryRun(true);
+
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcBalanceResponse);
+        when(bitvavoApiClient.get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
+        when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
+
+        // Act
+        tradingService.processAlert(dryRunSellRequest);
+
+        // Assert
+        // Verify alert is saved
+        verify(tradingViewAlertService).saveAlert(alertCaptor.capture());
+        assertEquals(TEST_BOT_ID, alertCaptor.getValue().getBotId());
+        assertEquals(TEST_TICKER, alertCaptor.getValue().getTicker());
+        assertEquals("sell", alertCaptor.getValue().getAction());
+
+        // Verify balances and price are checked
+        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+
+        // Verify order is NOT sent to Bitvavo
+        verify(bitvavoApiClient, never()).post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+
+        // Verify order is saved to database
+        verify(orderService).saveOrder(orderCaptor.capture());
+        Order capturedOrder = orderCaptor.getValue();
+        assertEquals(TEST_BOT_ID, capturedOrder.getBotId());
+        assertEquals(TEST_TICKER, capturedOrder.getTicker());
+        assertEquals("COMPLETED", capturedOrder.getStatus());
+        assertTrue(capturedOrder.getOrderId().startsWith("dry-run-"));
+
+        // Verify position is updated
+        verify(positionService).getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN");
+
+        // For sell signals, we expect the position status to be updated to CLOSED
+        existingPosition.setStatus("CLOSED");
+        verify(positionService).savePosition(existingPosition);
+    }
 }

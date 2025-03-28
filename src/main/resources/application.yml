@@ -1,8 +1,6 @@
 spring:
   application:
     name: autotrader
-  config:
-    import: optional:file:.env[.test]
   data:
     mongodb:
       uri: mongodb+srv://${MONGODB_AUTOTRADER_USER}:${MONGODB_AUTOTRADER_PASSWORD}@${MONGODB_AUTOTRADER_URI}
@@ -10,7 +8,8 @@ spring:
       auto-index-creation: true
 
 bitvavo:
-  apiUrl: https://api.bitvavo.com/v2
+  api:
+    url: ${BITVAVO_API_URL}
 
 # Encryption settings for sensitive data
 encryption:
