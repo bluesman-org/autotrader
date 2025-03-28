@@ -22,10 +22,10 @@ import java.util.concurrent.TimeUnit;
 @EnableMongoRepositories(basePackages = "nl.jimkaplan.autotrader.repository")
 public class MongoConfig extends AbstractMongoClientConfiguration {
 
-    @Value("${spring.data.mongodb.uri:mongodb+srv://localhost:27017/autotrader}")
+    @Value("${spring.data.mongodb.uri}")
     private String mongoUri;
 
-    @Value("${spring.data.mongodb.database:autotrader}")
+    @Value("${spring.data.mongodb.database}")
     private String databaseName;
 
     @NonNull

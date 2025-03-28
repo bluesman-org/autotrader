@@ -25,7 +25,7 @@ public class BitvavoApiClient {
     private final RestTemplate restTemplate;
     private final BitvavoAuthenticationService authenticationService;
 
-    @Value("${bitvavo.apiUrl}")
+    @Value("${bitvavo.api.url}")
     private String apiUrl;
 
     public BitvavoApiClient(RestTemplate restTemplate, BitvavoAuthenticationService authenticationService) {
