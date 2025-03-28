@@ -13,9 +13,10 @@ REST API for interacting with the Bitvavo cryptocurrency exchange.
 - **Spring Boot 3.4.4**: Framework for building web applications
 - **Maven**: Build and dependency management tool
 - **Lombok**: Reduces boilerplate code
+- **MongoDB**: NoSQL database for data storage
 - **JUnit 5**: Testing framework
 - **Mockito**: Mocking framework for testing
-- **Spring RestDocs**: API documentation
+- **OpenAPI/Swagger**: API documentation and testing via springdoc-openapi
 
 ## Project Structure
 
@@ -30,15 +31,12 @@ autotrader/
 │   │   │   ├── ServletInitializer.java     # For WAR deployment
 │   │   │   ├── bitvavo/                    # Bitvavo integration
 │   │   │   │   ├── client/                 # Bitvavo API clients
-│   │   │   │   ├── config/                 # Bitvavo configuration
-│   │   │   │   ├── controller/             # Bitvavo REST controllers
 │   │   │   │   ├── model/                  # Bitvavo data models
 │   │   │   │   └── service/                # Bitvavo services
-│   │   │   ├── common/                     # Common utilities
-│   │   │   │   ├── config/                 # Common configuration
-│   │   │   │   └── interceptor/            # HTTP interceptors
 │   │   │   ├── config/                     # Application configuration
+│   │   │   ├── controller/                 # Common REST controllers
 │   │   │   ├── exception/                  # Exception handling
+│   │   │   ├── interceptor/                # HTTP interceptors
 │   │   │   ├── model/                      # Common data models
 │   │   │   ├── repository/                 # Data repositories
 │   │   │   ├── service/                    # Business logic services
@@ -124,7 +122,7 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
 
 2. **API Development**:
     - Follow RESTful principles
-    - Document APIs using Spring RestDocs
+    - Document APIs using OpenAPI/Swagger annotations
     - Handle exceptions properly using the GlobalExceptionHandler
 
 3. **Testing**:
