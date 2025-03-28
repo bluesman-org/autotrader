@@ -1,4 +1,4 @@
-package nl.jimkaplan.autotrader.common.config;
+package nl.jimkaplan.autotrader.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

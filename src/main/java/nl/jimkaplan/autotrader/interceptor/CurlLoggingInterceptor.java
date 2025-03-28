@@ -1,4 +1,4 @@
-package nl.jimkaplan.autotrader.common.interceptor;
+package nl.jimkaplan.autotrader.interceptor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

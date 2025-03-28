@@ -1,6 +1,6 @@
-package nl.jimkaplan.autotrader.common.config;
+package nl.jimkaplan.autotrader.config;
 
-import nl.jimkaplan.autotrader.common.interceptor.CurlLoggingInterceptor;
+import nl.jimkaplan.autotrader.interceptor.CurlLoggingInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;

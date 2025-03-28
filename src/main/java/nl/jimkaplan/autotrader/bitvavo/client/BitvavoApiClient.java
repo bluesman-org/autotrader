@@ -2,12 +2,11 @@ package nl.jimkaplan.autotrader.bitvavo.client;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
-import nl.jimkaplan.autotrader.bitvavo.config.BitvavoConfig;
 import nl.jimkaplan.autotrader.bitvavo.model.BitvavoAuthHeaders;
 import nl.jimkaplan.autotrader.bitvavo.service.BitvavoAuthenticationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -19,14 +18,20 @@ import org.springframework.web.client.RestTemplate;
  * Client for interacting with the Bitvavo API.
  */
 @Component
-@RequiredArgsConstructor
 public class BitvavoApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(BitvavoApiClient.class);
 
     private final RestTemplate restTemplate;
-    private final BitvavoConfig bitvavoConfig;
     private final BitvavoAuthenticationService authenticationService;
+
+    @Value("${bitvavo.apiUrl}")
+    private String apiUrl;
+
+    public BitvavoApiClient(RestTemplate restTemplate, BitvavoAuthenticationService authenticationService) {
+        this.restTemplate = restTemplate;
+        this.authenticationService = authenticationService;
+    }
 
     /**
      * Sends a GET request to the Bitvavo API.
@@ -40,7 +45,7 @@ public class BitvavoApiClient {
 
         HttpHeaders headers = createHeaders(HttpMethod.GET.name(), endpoint, null, apiKey, apiSecret);
         HttpEntity<?> entity = new HttpEntity<>(headers);
-        String url = bitvavoConfig.getApiUrl() + endpoint;
+        String url = apiUrl + endpoint;
 
         log.debug("Making request to: {}", url);
         ResponseEntity<T> response = restTemplate.exchange(
@@ -72,7 +77,7 @@ public class BitvavoApiClient {
 
             HttpHeaders headers = createHeaders(HttpMethod.POST.name(), endpoint, bodyString, apiKey, apiSecret);
             HttpEntity<?> entity = new HttpEntity<>(body, headers);
-            String url = bitvavoConfig.getApiUrl() + endpoint;
+            String url = apiUrl + endpoint;
 
             log.debug("Making request to: {}", url);
             ResponseEntity<T> response = restTemplate.exchange(
