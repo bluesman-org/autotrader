@@ -25,11 +25,15 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TradingServiceTest {
@@ -146,7 +150,7 @@ class TradingServiceTest {
         // Arrange
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(eurBalanceResponse);
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{eurBalanceResponse});
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(orderResponse);
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
 
@@ -159,7 +163,7 @@ class TradingServiceTest {
         assertEquals(TEST_TICKER, alertCaptor.getValue().getTicker());
         assertEquals("buy", alertCaptor.getValue().getAction());
 
-        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
         verify(bitvavoApiClient).post(eq("/order"), orderRequestCaptor.capture(), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
 
         CreateOrderRequest capturedRequest = orderRequestCaptor.getValue();
@@ -174,8 +178,8 @@ class TradingServiceTest {
         // Arrange
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcBalanceResponse);
-        when(bitvavoApiClient.get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{btcBalanceResponse});
+        when(bitvavoApiClient.get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(orderResponse);
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
 
@@ -188,8 +192,8 @@ class TradingServiceTest {
         assertEquals(TEST_TICKER, alertCaptor.getValue().getTicker());
         assertEquals("sell", alertCaptor.getValue().getAction());
 
-        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
-        verify(bitvavoApiClient).get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
         verify(bitvavoApiClient).post(eq("/order"), orderRequestCaptor.capture(), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
 
         CreateOrderRequest capturedRequest = orderRequestCaptor.getValue();
@@ -350,14 +354,14 @@ class TradingServiceTest {
 
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
-                .thenReturn(lowBalanceResponse);
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(new GetAccountBalanceResponse[]{lowBalanceResponse});
 
         // Act
         tradingService.processAlert(validBuyRequest);
 
         // Assert
-        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
         verify(bitvavoApiClient, never()).post(anyString(), any(CreateOrderRequest.class), any(), anyString(), anyString());
 
         verify(orderService).saveOrder(orderCaptor.capture());
@@ -381,17 +385,17 @@ class TradingServiceTest {
 
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
-                .thenReturn(lowBtcBalanceResponse);
-        when(bitvavoApiClient.get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(new GetAccountBalanceResponse[]{lowBtcBalanceResponse});
+        when(bitvavoApiClient.get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
                 .thenReturn(lowBtcPriceResponse);
 
         // Act
         tradingService.processAlert(validSellRequest);
 
         // Assert
-        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
-        verify(bitvavoApiClient).get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
         verify(bitvavoApiClient, never()).post(anyString(), any(CreateOrderRequest.class), any(), anyString(), anyString());
 
         verify(orderService).saveOrder(orderCaptor.capture());
@@ -411,7 +415,7 @@ class TradingServiceTest {
 
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
                 .thenThrow(apiException);
 
         // Act & Assert
@@ -435,7 +439,7 @@ class TradingServiceTest {
 
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
                 .thenThrow(apiException);
 
         // Act & Assert
@@ -459,7 +463,7 @@ class TradingServiceTest {
         // Arrange
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(eurBalanceResponse);
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{eurBalanceResponse});
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(orderResponse);
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
 
@@ -481,8 +485,8 @@ class TradingServiceTest {
         // Arrange
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcBalanceResponse);
-        when(bitvavoApiClient.get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{btcBalanceResponse});
+        when(bitvavoApiClient.get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(orderResponse);
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
 
@@ -508,7 +512,7 @@ class TradingServiceTest {
 
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(eurBalanceResponse);
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{eurBalanceResponse});
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
 
         // Act
@@ -522,7 +526,7 @@ class TradingServiceTest {
         assertEquals("buy", alertCaptor.getValue().getAction());
 
         // Verify balance is checked
-        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
 
         // Verify order is NOT sent to Bitvavo
         verify(bitvavoApiClient, never()).post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
@@ -552,8 +556,8 @@ class TradingServiceTest {
 
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
-        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcBalanceResponse);
-        when(bitvavoApiClient.get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{btcBalanceResponse});
+        when(bitvavoApiClient.get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
 
         // Act
@@ -567,8 +571,8 @@ class TradingServiceTest {
         assertEquals("sell", alertCaptor.getValue().getAction());
 
         // Verify balances and price are checked
-        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
-        verify(bitvavoApiClient).get(eq("/ticker/price?market=BTCEUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
 
         // Verify order is NOT sent to Bitvavo
         verify(bitvavoApiClient, never()).post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));

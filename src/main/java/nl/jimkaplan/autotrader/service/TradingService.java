@@ -247,8 +247,19 @@ public class TradingService {
             double assetBalance = getAssetBalance(botConfig, asset);
             log.info("{} balance: {}", asset, assetBalance);
 
+            if (assetBalance == 0.0) {
+                String errorMessage = MessageFormat.format(
+                        "Insufficient {0} balance: {1}.",
+                        asset, assetBalance);
+                log.warn(errorMessage);
+                saveFailedOrder(botConfig.getBotId(), request.getTicker(), errorMessage);
+                return;
+            }
+
             // Get asset price
-            double assetPrice = getAssetPrice(request.getTicker(), botConfig);
+            // Bitvavo expects ticker to be in the format like, "BTC-EUR" (with a dash between asset and EUR)
+            String assetTicker = asset + "-EUR";
+            double assetPrice = getAssetPrice(assetTicker, botConfig);
             log.info("{} price: {} EUR", asset, assetPrice);
 
             // Calculate asset worth in EUR
@@ -317,9 +328,7 @@ public class TradingService {
      * @return The EUR balance
      */
     private double getEurBalance(BotConfiguration botConfig) {
-        GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get(
-                "/balance?symbol=EUR", GetAccountBalanceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
-        return balanceResponse.getAvailable().doubleValue();
+        return getAssetBalance(botConfig, "EUR");
     }
 
     /**
@@ -329,11 +338,15 @@ public class TradingService {
      * @param asset     The asset symbol (e.g., "BTC")
      * @return The asset balance
      */
-
     private double getAssetBalance(BotConfiguration botConfig, String asset) {
-        GetAccountBalanceResponse balanceResponse = bitvavoApiClient.get(
-                "/balance?symbol=" + asset, GetAccountBalanceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
-        return balanceResponse.getAvailable().doubleValue();
+        GetAccountBalanceResponse[] balanceResponses = bitvavoApiClient.get(
+                "/balance?symbol=" + asset, GetAccountBalanceResponse[].class, botConfig.getApiKey(), botConfig.getApiSecret());
+
+        if (balanceResponses == null || balanceResponses.length == 0) {
+            return 0.0;
+        }
+
+        return balanceResponses[0].getAvailable().doubleValue();
     }
 
     /**
