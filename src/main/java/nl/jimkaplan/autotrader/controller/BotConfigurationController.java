@@ -112,7 +112,7 @@ public class BotConfigurationController {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Bot configuration not found",
+                    description = "Bot configuration not found within active configurations",
                     content = @Content
             )
     })
@@ -129,7 +129,7 @@ public class BotConfigurationController {
                     return ResponseEntity.ok(response);
                 })
                 .orElseGet(() -> {
-                    log.warn("Bot configuration with ID: {} not found", botId);
+                    log.warn("Bot configuration with ID: {} not found within active configurations", botId);
                     return ResponseEntity.notFound().build();
                 });
     }
@@ -201,7 +201,7 @@ public class BotConfigurationController {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Bot configuration not found",
+                    description = "Bot configuration not found within active configurations",
                     content = @Content
             )
     })
@@ -217,7 +217,7 @@ public class BotConfigurationController {
             log.info("Successfully deactivated bot configuration with ID: {}", botId);
             return ResponseEntity.ok("Bot configuration deactivated ID: " + botId);
         } else {
-            log.warn("Bot configuration with ID: {} not found", botId);
+            log.warn("Bot configuration with ID: {} not found within active configurations", botId);
             return ResponseEntity.notFound().build();
         }
     }
@@ -243,7 +243,7 @@ public class BotConfigurationController {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Bot configuration not found",
+                    description = "Bot configuration not found within active configurations",
                     content = @Content
             )
     })
@@ -259,7 +259,7 @@ public class BotConfigurationController {
             log.info("Successfully activated bot configuration with ID: {}", botId);
             return ResponseEntity.ok("Bot configuration activated ID: " + botId);
         } else {
-            log.warn("Bot configuration with ID: {} not found", botId);
+            log.warn("Bot configuration with ID: {} not found within active configurations", botId);
             return ResponseEntity.notFound().build();
         }
     }
@@ -285,7 +285,7 @@ public class BotConfigurationController {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Bot configuration not found",
+                    description = "Bot configuration not found within active configurations",
                     content = @Content
             )
     })
@@ -297,7 +297,7 @@ public class BotConfigurationController {
 
         // Check if the bot exists
         if (botConfigurationService.getBotConfigurationIncludingInactive(botId).isEmpty()) {
-            log.warn("Bot configuration with ID: {} not found", botId);
+            log.warn("Bot configuration with ID: {} not found within active configurations", botId);
             return ResponseEntity.notFound().build();
         }
 
