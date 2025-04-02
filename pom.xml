@@ -11,7 +11,7 @@
     <groupId>nl.jimkaplan</groupId>
     <artifactId>autotrader</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <packaging>war</packaging>
+    <packaging>jar</packaging>
     <name>autotrader</name>
     <description>Test auto trading with TradingView and Bitvavo</description>
     <url/>
@@ -81,17 +81,6 @@
     </dependencies>
 
     <build>
-        <resources>
-            <resource>
-                <directory>${project.basedir}</directory>
-                <includes>
-                    <include>.env</include>
-                </includes>
-                <filtering>true</filtering>
-                <targetPath>${project.build.outputDirectory}</targetPath>
-            </resource>
-        </resources>
-
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

@@ -197,7 +197,8 @@ class BotConfigurationControllerTest {
         ResponseEntity<List<BotConfigurationResponse>> response = controller.getAllBotConfigurations(false);
 
         // Assert
-        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        assertTrue(Objects.requireNonNull(response.getHeaders().get("X-Message")).contains("No bot configurations found"));
         assertNotNull(response.getBody());
         assertTrue(response.getBody().isEmpty());
 

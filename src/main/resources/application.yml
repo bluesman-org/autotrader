@@ -7,6 +7,17 @@ spring:
       database: autotrader
       auto-index-creation: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, env
+  endpoint:
+    health:
+      show-details: always
+#    env:
+#      show-values: always
+
 bitvavo:
   api:
     url: ${BITVAVO_API_URL}

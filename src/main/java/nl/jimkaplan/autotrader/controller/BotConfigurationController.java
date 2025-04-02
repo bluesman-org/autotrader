@@ -168,6 +168,15 @@ public class BotConfigurationController {
                 .collect(Collectors.toList());
 
         log.info("Successfully retrieved {} bot configurations", response.size());
+
+        // If no configurations are found, return a message in the response header
+        if (response.isEmpty()) {
+            log.warn("No bot configurations found");
+            return ResponseEntity.status(HttpStatus.NO_CONTENT)
+                    .header("X-Message", "No bot configurations found")
+                    .body(response);
+        }
+
         return ResponseEntity.ok(response);
     }
 
