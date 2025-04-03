@@ -289,6 +289,7 @@ public class BotConfigurationController {
                     content = @Content
             )
     })
+
     @PostMapping("/webhook-key/{botId}")
     public ResponseEntity<WebhookApiKeyResponse> generateWebhookApiKey(
             @Parameter(description = "ID of the bot configuration to generate a webhook API key for", required = true)
