@@ -87,7 +87,7 @@ public class TradingViewWebhookController {
     })
     @PostMapping("/tradingview")
     public ResponseEntity<?> handleWebhook(
-            @Parameter(description = "API key for authentication", required = true)
+            @Parameter(description = "API key for authentication", allowEmptyValue = true)
             @RequestHeader("X-API-KEY") String apiKey,
 
             @Parameter(description = "Alert details from TradingView", required = true)
@@ -149,7 +149,7 @@ public class TradingViewWebhookController {
         String remoteAddr = httpServletRequest.getRemoteAddr();
         if (ALLOWED_IPS.contains(remoteAddr)) {
             return ValidationResult.VALID;
-        } else if (remoteAddr.equals("127.0.0.1")) {
+        } else if (isLocalhost(remoteAddr)) {
             // If request origin is localhost, validate the API key
             if (botConfigurationService.validateWebhookApiKey(tradingViewAlertRequest.getBotId(), apiKey)) {
                 return ValidationResult.VALID;
@@ -167,4 +167,10 @@ public class TradingViewWebhookController {
         IP_NOT_ALLOWED,
         INVALID_API_KEY
     }
+
+    private boolean isLocalhost(String remoteAddr) {
+        return remoteAddr.equals("127.0.0.1") || remoteAddr.equals("0:0:0:0:0:0:0:1") || remoteAddr.equals("::1");
+    }
 }
+
+
