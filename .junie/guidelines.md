@@ -17,6 +17,7 @@ REST API for interacting with the Bitvavo cryptocurrency exchange.
 - **JUnit 5**: Testing framework
 - **Mockito**: Mocking framework for testing
 - **OpenAPI/Swagger**: API documentation and testing via springdoc-openapi
+- **AES-256 Encryption**: For securing sensitive data like API keys
 
 ## Project Structure
 
@@ -65,8 +66,7 @@ autotrader/
    export MONGODB_AUTOTRADER_URI=your-mongodb-uri
    export MONGODB_AUTOTRADER_USER=your-mongodb-user
    export MONGODB_AUTOTRADER_PASSWORD=your-mongodb-password
-   export BITVAVO_API_KEY=your-api-key
-   export BITVAVO_API_SECRET=your-api-secret
+   export BITVAVO_API_URL=https://api.bitvavo.com/v2
    export ENCRYPTION_MASTER_KEY=your-base64-encoded-encryption-key
    ```
 
@@ -75,10 +75,12 @@ autotrader/
    MONGODB_AUTOTRADER_URI=your-mongodb-uri
    MONGODB_AUTOTRADER_USER=your-mongodb-user
    MONGODB_AUTOTRADER_PASSWORD=your-mongodb-password
-   BITVAVO_API_KEY=your-api-key
-   BITVAVO_API_SECRET=your-api-secret
+   BITVAVO_API_URL=https://api.bitvavo.com/v2
    ENCRYPTION_MASTER_KEY=your-base64-encoded-encryption-key
    ```
+
+   Note: The Bitvavo API key and secret are not set as environment variables. Instead, they are stored in the MongoDB
+   database in encrypted form using the ENCRYPTION_MASTER_KEY. You can configure them through the application's API.
 
 2. Run the application using Maven wrapper:
    ```bash
