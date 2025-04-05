@@ -75,13 +75,11 @@ public class TradingService {
             );
         }
 
-        // Process the alert based on action
-        if ("buy".equalsIgnoreCase(request.getAction())) {
-            processBuySignal(request, botConfig);
-        } else if ("sell".equalsIgnoreCase(request.getAction())) {
-            processSellSignal(request, botConfig);
-        } else {
-            throw new IllegalArgumentException(
+        // Process the alert based on action using switch expression
+        switch (request.getAction().toLowerCase()) {
+            case "buy" -> processBuySignal(request, botConfig);
+            case "sell" -> processSellSignal(request, botConfig);
+            default -> throw new IllegalArgumentException(
                     MessageFormat.format(
                             "Invalid action: {0}. Supported actions are ''buy'' and ''sell''.",
                             request.getAction())
@@ -96,25 +94,30 @@ public class TradingService {
      * @throws IllegalArgumentException if the request is invalid
      */
     private void validateRequest(TradingViewAlertRequest request) {
-        if (request.getBotId() == null || request.getBotId().isEmpty()) {
+        // Use pattern matching for null/empty checks
+        String botId = request.getBotId();
+        if (botId == null || botId.isEmpty()) {
             throw new IllegalArgumentException("Bot ID is required");
         }
 
-        if (request.getTicker() == null || request.getTicker().isEmpty()) {
+        String ticker = request.getTicker();
+        if (ticker == null || ticker.isEmpty()) {
             throw new IllegalArgumentException("Ticker is required");
         }
 
-        if (request.getAction() == null || request.getAction().isEmpty()) {
+        String action = request.getAction();
+        if (action == null || action.isEmpty()) {
             throw new IllegalArgumentException("Action is required");
         }
 
-        if (request.getTimestamp() == null || request.getTimestamp().isEmpty()) {
+        String timestamp = request.getTimestamp();
+        if (timestamp == null || timestamp.isEmpty()) {
             throw new IllegalArgumentException("Timestamp is required");
         }
 
         // Validate timestamp format
         try {
-            DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(request.getTimestamp());
+            DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(timestamp);
         } catch (DateTimeParseException e) {
             throw new IllegalArgumentException("Invalid timestamp format. Expected format: yyyy-MM-ddTHH:mm:ssZ");
         }
@@ -165,7 +168,7 @@ public class TradingService {
      * @param botConfig The bot configuration
      */
     private void processBuySignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
-        log.info("Processing buy signal for bot: {}, ticker: {}, dryRun: {}", 
+        log.info("Processing buy signal for bot: {}, ticker: {}, dryRun: {}",
                 botConfig.getBotId(), request.getTicker(), request.getDryRun());
 
         try {
@@ -236,7 +239,7 @@ public class TradingService {
      * @param botConfig The bot configuration
      */
     private void processSellSignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
-        log.info("Processing sell signal for bot: {}, ticker: {}, dryRun: {}", 
+        log.info("Processing sell signal for bot: {}, ticker: {}, dryRun: {}",
                 botConfig.getBotId(), request.getTicker(), request.getDryRun());
 
         try {
