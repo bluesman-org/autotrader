@@ -1,5 +1,9 @@
 # WARNING: SET UP YOUR ENVIRONMENT VARIABLES BEFORE RUNNING THE APPLICATION
 # EXAMPLE: export MONGODB_AUTOTRADER_USER=your_user
+server:
+  port: 8081
+  servlet:
+    context-path: /autotrader
 
 spring:
   application:
