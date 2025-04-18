@@ -177,8 +177,26 @@ class TradingViewWebhookControllerTest {
     // in normal execution, as validateRequest always returns one of the defined enum values.
     // 
     // We've already tested the null case, which is the most realistic edge case that could occur.
-    // For 100% line coverage, we could use a custom class loader or reflection to create a new enum value,
-    // but that would be overly complex for this test and not representative of real-world usage.
-    //
-    // Instead, we'll focus on ensuring that all the reachable code paths are tested.
+    // For 100% line coverage, we'll use a subclass of TradingViewWebhookController to test the default case.
+
+    @Test
+    void processValidationResult_withUnexpectedValidationResult_returnsInternalServerError() {
+        // Create a subclass of TradingViewWebhookController to test the default case
+        TradingViewWebhookController controllerSpy = new TradingViewWebhookController(botConfigurationService, tradingService) {
+            @Override
+            protected ValidationResult validateRequest(TradingViewAlertRequest tradingViewAlertRequest,
+                                                       HttpServletRequest httpServletRequest, String apiKey) {
+                // Return null to force the default case in the switch statement
+                return null;
+            }
+        };
+
+        // Act
+        ResponseEntity<?> response = controllerSpy.handleWebhook(validApiKey, validRequest, httpServletRequest);
+
+        // Assert
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals("Error processing alert for bot ID: " + botId, response.getBody());
+        verify(tradingService, never()).validateAndProcessAlert(any());
+    }
 }

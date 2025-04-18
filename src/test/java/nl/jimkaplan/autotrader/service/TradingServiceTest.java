@@ -26,10 +26,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -74,6 +76,7 @@ class TradingServiceTest {
     private TradingViewAlert savedAlert;
     private GetAccountBalanceResponse eurBalanceResponse;
     private GetAccountBalanceResponse btcBalanceResponse;
+    private GetAccountBalanceResponse zeroBalanceResponse;
     private GetPriceResponse btcPriceResponse;
     private CreateOrderResponse orderResponse;
     private Position existingPosition;
@@ -126,6 +129,10 @@ class TradingServiceTest {
 
         btcBalanceResponse = new GetAccountBalanceResponse();
         btcBalanceResponse.setAvailable(BigDecimal.valueOf(TEST_BTC_BALANCE));
+
+        zeroBalanceResponse = new GetAccountBalanceResponse();
+        zeroBalanceResponse.setAvailable(BigDecimal.ZERO);
+        zeroBalanceResponse.setInOrder(BigDecimal.ZERO);
 
         // Set up price response
         btcPriceResponse = new GetPriceResponse();
@@ -591,5 +598,121 @@ class TradingServiceTest {
         // For sell signals, we expect the position status to be updated to CLOSED
         existingPosition.setStatus("CLOSED");
         verify(positionService).savePosition(existingPosition);
+    }
+
+    @Test
+    void validateAndProcessAlertWithSellSignal_withZeroAssetBalance() {
+        // Arrange
+        TradingViewAlertRequest request = new TradingViewAlertRequest();
+        request.setBotId(TEST_BOT_ID);
+        request.setTicker(TEST_TICKER);
+        request.setAction("sell");
+        request.setTimestamp(TEST_TIMESTAMP);
+        request.setDryRun(false);
+
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(new GetAccountBalanceResponse[]{zeroBalanceResponse});
+
+        tradingService.validateAndProcessAlert(request);
+
+        // Assert: verify that orderService.saveOrder was called with a FAILED order (since tradingService.saveFailedOrder calls it)
+        verify(orderService).saveOrder(argThat(order ->
+                order.getBotId().equals(TEST_BOT_ID) &&
+                order.getOrderId() == null &&
+                order.getTicker().equals(TEST_TICKER) &&
+                order.getStatus().equals("FAILED") &&
+                order.getErrorMessage().equals("Insufficient BTC balance: 0.")
+        ));
+    }
+
+    @Test
+    void getAssetBalance_withNullResponse_returnsZero() {
+        // Arrange
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(null);
+
+        // Act
+        double balance = tradingService.getAssetBalance(botConfig, "BTC");
+
+        // Assert
+        assertEquals(0.0, balance);
+        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+    }
+
+    @Test
+    void getAssetBalance_withEmptyResponse_returnsZero() {
+        // Arrange
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(new GetAccountBalanceResponse[0]);
+
+        // Act
+        double balance = tradingService.getAssetBalance(botConfig, "BTC");
+
+        // Assert
+        assertEquals(0.0, balance);
+        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+    }
+
+    @Test
+    void updatePosition_withNoExistingPositionAndNonOpenStatus_doesNotCreatePosition() {
+        // Arrange
+        when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        // Act
+        tradingService.updatePosition(TEST_BOT_ID, TEST_TICKER, "CLOSED");
+
+        // Assert
+        verify(positionService).getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN");
+        verify(positionService, never()).savePosition(any(Position.class));
+    }
+
+    @Test
+    void getAssetPrice_shouldReturnPrice() {
+        // Arrange
+        String ticker = "BTC-EUR";
+        when(bitvavoApiClient.get(eq("/ticker/price?market=" + ticker), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(btcPriceResponse);
+
+        // Act
+        double price = tradingService.getAssetPrice(ticker, botConfig);
+
+        // Assert
+        assertEquals(btcPriceResponse.getPrice().doubleValue(), price);
+        verify(bitvavoApiClient).get(eq("/ticker/price?market=" + ticker), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+    }
+
+    @Test
+    void getEurBalance_shouldCallGetAssetBalanceWithEUR() {
+        // Arrange
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(new GetAccountBalanceResponse[]{eurBalanceResponse});
+
+        // Act
+        double balance = tradingService.getEurBalance(botConfig);
+
+        // Assert
+        assertEquals(TEST_EUR_BALANCE, balance);
+        verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+    }
+
+    @Test
+    void isEurBasedTicker_withEurTicker_returnsTrue() {
+        // Act
+        boolean result = tradingService.isEurBasedTicker("BTCEUR");
+
+        // Assert
+        assertTrue(result);
+    }
+
+    @Test
+    void isEurBasedTicker_withNonEurTicker_returnsFalse() {
+        // Act
+        boolean result = tradingService.isEurBasedTicker("BTCUSD");
+
+        // Assert
+        assertFalse(result);
     }
 }

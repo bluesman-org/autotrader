@@ -157,7 +157,7 @@ public class TradingService {
      * @param ticker The ticker to check
      * @return true if the ticker is EUR-based, false otherwise
      */
-    private boolean isEurBasedTicker(String ticker) {
+    boolean isEurBasedTicker(String ticker) {
         return ticker.endsWith("EUR");
     }
 
@@ -167,7 +167,7 @@ public class TradingService {
      * @param request   The alert request
      * @param botConfig The bot configuration
      */
-    private void processBuySignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
+    void processBuySignal(TradingViewAlertRequest request, BotConfiguration botConfig) {
         log.info("Processing buy signal for bot: {}, ticker: {}, dryRun: {}",
                 botConfig.getBotId(), request.getTicker(), request.getDryRun());
 
@@ -330,7 +330,7 @@ public class TradingService {
      * @param botConfig The bot configuration
      * @return The EUR balance
      */
-    private double getEurBalance(BotConfiguration botConfig) {
+    double getEurBalance(BotConfiguration botConfig) {
         return getAssetBalance(botConfig, "EUR");
     }
 
@@ -341,7 +341,7 @@ public class TradingService {
      * @param asset     The asset symbol (e.g., "BTC")
      * @return The asset balance
      */
-    private double getAssetBalance(BotConfiguration botConfig, String asset) {
+    double getAssetBalance(BotConfiguration botConfig, String asset) {
         GetAccountBalanceResponse[] balanceResponses = bitvavoApiClient.get(
                 "/balance?symbol=" + asset, GetAccountBalanceResponse[].class, botConfig.getApiKey(), botConfig.getApiSecret());
 
@@ -358,7 +358,7 @@ public class TradingService {
      * @param ticker The ticker (e.g., "BTCEUR")
      * @return The asset price in EUR
      */
-    private double getAssetPrice(String ticker, BotConfiguration botConfig) {
+    double getAssetPrice(String ticker, BotConfiguration botConfig) {
         GetPriceResponse priceResponse = bitvavoApiClient.get(
                 "/ticker/price?market=" + ticker, GetPriceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
         return priceResponse.getPrice().doubleValue();
@@ -371,7 +371,7 @@ public class TradingService {
      * @param ticker       The ticker
      * @param errorMessage The error message
      */
-    private void saveFailedOrder(String botId, String ticker, String errorMessage) {
+    void saveFailedOrder(String botId, String ticker, String errorMessage) {
         Order order = Order.builder()
                 .botId(botId)
                 .ticker(ticker)
@@ -390,7 +390,7 @@ public class TradingService {
      * @param ticker The ticker
      * @param status The new status
      */
-    private void updatePosition(String botId, String ticker, String status) {
+    void updatePosition(String botId, String ticker, String status) {
         // Check if position exists
         Optional<Position> existingPosition = positionService.getPositionByBotIdAndTickerAndStatus(botId, ticker, "OPEN");
 
@@ -409,4 +409,5 @@ public class TradingService {
             positionService.savePosition(position);
         }
     }
+
 }
