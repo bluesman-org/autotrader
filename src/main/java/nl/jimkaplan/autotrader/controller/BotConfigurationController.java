@@ -68,6 +68,8 @@ public class BotConfigurationController {
             @RequestBody BotConfigurationRequest request) {
         log.info("Received request to create bot configuration");
 
+        validateCreateRequest(request);
+
         BotConfiguration config = BotConfiguration.builder()
                 .botId(botConfigurationService.generateBotId())
                 .apiKey(request.getApiKey())
@@ -111,6 +113,11 @@ public class BotConfigurationController {
                     )
             ),
             @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid bot ID format",
+                    content = @Content
+            ),
+            @ApiResponse(
                     responseCode = "404",
                     description = "Bot configuration not found within active configurations",
                     content = @Content
@@ -121,6 +128,8 @@ public class BotConfigurationController {
             @Parameter(description = "ID of the bot configuration to retrieve", required = true)
             @PathVariable String botId) {
         log.info("Received request to get bot configuration with ID: {}", botId);
+
+        validateBotId(botId);
 
         return botConfigurationService.getBotConfiguration(botId)
                 .map(config -> {
@@ -211,6 +220,8 @@ public class BotConfigurationController {
             @PathVariable String botId) {
         log.info("Received request to deactivate bot configuration with ID: {}", botId);
 
+        validateBotId(botId);
+
         boolean deactivated = botConfigurationService.deactivateBotConfiguration(botId);
 
         if (deactivated) {
@@ -252,6 +263,8 @@ public class BotConfigurationController {
             @Parameter(description = "ID of the bot configuration to activate", required = true)
             @PathVariable String botId) {
         log.info("Received request to activate bot configuration with ID: {}", botId);
+
+        validateBotId(botId);
 
         boolean activated = botConfigurationService.activateBotConfiguration(botId);
 
@@ -296,6 +309,8 @@ public class BotConfigurationController {
             @PathVariable String botId) {
         log.info("Received request to generate webhook API key for bot with ID: {}", botId);
 
+        validateBotId(botId);
+
         // Check if the bot exists
         if (botConfigurationService.getBotConfigurationIncludingInactive(botId).isEmpty()) {
             log.warn("Bot configuration with ID: {} not found within active configurations", botId);
@@ -322,4 +337,26 @@ public class BotConfigurationController {
                 .active(config.getActive())
                 .build();
     }
+
+    private void validateBotId(String botId) {
+        if (botId == null || botId.length() != 6 || !botId.matches("[a-zA-Z0-9]+")) {
+            throw new IllegalArgumentException("Bot ID must be exactly 6 characters long and contain only letters and numbers");
+        }
+    }
+
+    private static void validateCreateRequest(BotConfigurationRequest request) {
+        if (request.getApiKey() == null || request.getApiKey().isEmpty()) {
+            throw new IllegalArgumentException("API key cannot be empty");
+        }
+        if (request.getApiSecret() == null || request.getApiSecret().isEmpty()) {
+            throw new IllegalArgumentException("API secret cannot be empty");
+        }
+        if (request.getTradingPair() == null || request.getTradingPair().isEmpty()) {
+            throw new IllegalArgumentException("Trading pair cannot be empty");
+        }
+        if (!request.getTradingPair().equals(request.getTradingPair().toUpperCase())) {
+            throw new IllegalArgumentException("Trading pair must be in uppercase");
+        }
+    }
+
 }

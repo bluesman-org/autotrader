@@ -158,3 +158,36 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Address review comments
     - Ensure all tests pass
     - Merge after approval
+
+## API Documentation
+
+The application provides a REST API for interacting with the Bitvavo cryptocurrency exchange. The API is documented
+using OpenAPI/Swagger.
+
+### Swagger UI
+
+You can explore the API documentation using the Swagger UI at:
+
+```
+http://localhost:8081/autotrader/swagger-ui.html
+```
+
+### Postman Integration
+
+The application automatically generates OpenAPI specification files that can be imported into Postman:
+
+- **JSON Format**: `http://localhost:8081/autotrader/api-docs/autotrader-openapi.json`
+- **YAML Format**: `http://localhost:8081/autotrader/api-docs/autotrader-openapi.yaml`
+
+These files are updated automatically whenever the application starts or when endpoints change, ensuring they always
+reflect the latest API endpoints.
+
+#### Importing into Postman
+
+1. Open Postman
+2. Click on "Import" in the top left corner
+3. Select "Link" tab
+4. Enter the URL to the YAML or JSON file (e.g., `http://localhost:8081/autotrader/api-docs/autotrader-openapi.yaml`)
+5. Click "Continue" and then "Import"
+
+This will create a collection in Postman with all the API endpoints defined in the application.

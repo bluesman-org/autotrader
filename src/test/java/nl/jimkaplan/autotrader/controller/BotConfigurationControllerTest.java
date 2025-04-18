@@ -23,6 +23,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -109,7 +110,7 @@ class BotConfigurationControllerTest {
     @Test
     void getBotConfiguration_withNonExistingBotId_returnsNotFound() {
         // Arrange
-        String nonExistingBotId = "nonexistent";
+        String nonExistingBotId = "nonext";  // Valid format (6 chars) but doesn't exist
         when(botConfigurationService.getBotConfiguration(eq(nonExistingBotId))).thenReturn(Optional.empty());
 
         // Act
@@ -224,7 +225,7 @@ class BotConfigurationControllerTest {
     @Test
     void deactivateBotConfiguration_withNonExistingBotId_returnsNotFound() {
         // Arrange
-        String nonExistingBotId = "nonexistent";
+        String nonExistingBotId = "nonext";  // Valid format (6 chars) but doesn't exist
         when(botConfigurationService.deactivateBotConfiguration(eq(nonExistingBotId))).thenReturn(false);
 
         // Act
@@ -256,7 +257,7 @@ class BotConfigurationControllerTest {
     @Test
     void activateBotConfiguration_withNonExistingBotId_returnsNotFound() {
         // Arrange
-        String nonExistingBotId = "nonexistent";
+        String nonExistingBotId = "nonext";  // Valid format (6 chars) but doesn't exist
         when(botConfigurationService.activateBotConfiguration(eq(nonExistingBotId))).thenReturn(false);
 
         // Act
@@ -290,7 +291,7 @@ class BotConfigurationControllerTest {
     @Test
     void generateWebhookApiKey_withNonExistingBotId_returnsNotFound() {
         // Arrange
-        String nonExistingBotId = "nonexistent";
+        String nonExistingBotId = "nonext";  // Valid format (6 chars) but doesn't exist
         when(botConfigurationService.getBotConfigurationIncludingInactive(eq(nonExistingBotId))).thenReturn(Optional.empty());
 
         // Act
@@ -302,5 +303,200 @@ class BotConfigurationControllerTest {
 
         verify(botConfigurationService).getBotConfigurationIncludingInactive(eq(nonExistingBotId));
         verify(botConfigurationService, never()).generateAndSaveWebhookApiKey(anyString());
+    }
+
+    // Tests for validateBotId method
+
+    @Test
+    void getBotConfiguration_withNullBotId_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.getBotConfiguration(null));
+
+        assertEquals("Bot ID must be exactly 6 characters long and contain only letters and numbers",
+                exception.getMessage());
+    }
+
+    @Test
+    void getBotConfiguration_withShortBotId_throwsIllegalArgumentException() {
+        // Arrange
+        String shortBotId = "abc12";  // 5 characters instead of 6
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.getBotConfiguration(shortBotId));
+
+        assertEquals("Bot ID must be exactly 6 characters long and contain only letters and numbers",
+                exception.getMessage());
+    }
+
+    @Test
+    void getBotConfiguration_withLongBotId_throwsIllegalArgumentException() {
+        // Arrange
+        String longBotId = "abc1234";  // 7 characters instead of 6
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.getBotConfiguration(longBotId));
+
+        assertEquals("Bot ID must be exactly 6 characters long and contain only letters and numbers",
+                exception.getMessage());
+    }
+
+    @Test
+    void getBotConfiguration_withInvalidCharactersBotId_throwsIllegalArgumentException() {
+        // Arrange
+        String invalidBotId = "abc-12";  // Contains invalid character '-'
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.getBotConfiguration(invalidBotId));
+
+        assertEquals("Bot ID must be exactly 6 characters long and contain only letters and numbers",
+                exception.getMessage());
+    }
+
+    @Test
+    void deactivateBotConfiguration_withInvalidBotId_throwsIllegalArgumentException() {
+        // Arrange
+        String invalidBotId = "abc-12";  // Contains invalid character '-'
+
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class,
+                () -> controller.deactivateBotConfiguration(invalidBotId));
+    }
+
+    @Test
+    void activateBotConfiguration_withInvalidBotId_throwsIllegalArgumentException() {
+        // Arrange
+        String invalidBotId = "abc-12";  // Contains invalid character '-'
+
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class,
+                () -> controller.activateBotConfiguration(invalidBotId));
+    }
+
+    @Test
+    void generateWebhookApiKey_withInvalidBotId_throwsIllegalArgumentException() {
+        // Arrange
+        String invalidBotId = "abc-12";  // Contains invalid character '-'
+
+        // Act & Assert
+        assertThrows(IllegalArgumentException.class,
+                () -> controller.generateWebhookApiKey(invalidBotId));
+    }
+
+    // Tests for validateCreateRequest method
+
+    @Test
+    void createBotConfiguration_withNullApiKey_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey(null)
+                .apiSecret("test-api-secret")
+                .tradingPair("BTC-EUR")
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("API key cannot be empty", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withEmptyApiKey_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("")
+                .apiSecret("test-api-secret")
+                .tradingPair("BTC-EUR")
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("API key cannot be empty", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withNullApiSecret_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("test-api-key")
+                .apiSecret(null)
+                .tradingPair("BTC-EUR")
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("API secret cannot be empty", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withEmptyApiSecret_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("test-api-key")
+                .apiSecret("")
+                .tradingPair("BTC-EUR")
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("API secret cannot be empty", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withNullTradingPair_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("test-api-key")
+                .apiSecret("test-api-secret")
+                .tradingPair(null)
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("Trading pair cannot be empty", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withEmptyTradingPair_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("test-api-key")
+                .apiSecret("test-api-secret")
+                .tradingPair("")
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("Trading pair cannot be empty", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withLowercaseTradingPair_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("test-api-key")
+                .apiSecret("test-api-secret")
+                .tradingPair("btc-eur")  // Lowercase instead of uppercase
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("Trading pair must be in uppercase", exception.getMessage());
     }
 }

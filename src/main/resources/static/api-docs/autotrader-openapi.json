@@ -1,0 +1,372 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AutoTrader API",
+    "description": "API for automating trading strategies",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8081/autotrader",
+      "description": "Generated server url"
+    }
+  ],
+  "tags": [
+    {
+      "name": "TradingView Webhook",
+      "description": "API for receiving and processing TradingView alerts"
+    },
+    {
+      "name": "Bot Configuration",
+      "description": "API for managing trading bot configurations"
+    }
+  ],
+  "paths": {
+    "/webhook/tradingview": {
+      "post": {
+        "tags": [
+          "TradingView Webhook"
+        ],
+        "summary": "Process TradingView alert",
+        "description": "Receives and processes alerts from TradingView to execute trading actions. Validates the request based on IP address and API key before processing.",
+        "operationId": "handleWebhook",
+        "parameters": [
+          {
+            "name": "X-API-KEY",
+            "in": "header",
+            "description": "API key for authentication",
+            "required": true,
+            "allowEmptyValue": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradingViewAlertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Alert processed successfully",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters or alert data",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Either IP address not in allowed list or invalid API key",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error processing the alert",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bots/webhook-key/{botId}": {
+      "post": {
+        "tags": [
+          "Bot Configuration"
+        ],
+        "summary": "Generate a new webhook API key",
+        "description": "Generates a new webhook API key for a specific bot configuration",
+        "operationId": "generateWebhookApiKey",
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to generate a webhook API key for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook API key generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookApiKeyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bot configuration not found within active configurations"
+          }
+        }
+      }
+    },
+    "/api/bots/create": {
+      "post": {
+        "tags": [
+          "Bot Configuration"
+        ],
+        "summary": "Create a new bot configuration",
+        "description": "Creates a new trading bot configuration with the provided details",
+        "operationId": "createBotConfiguration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotConfigurationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Bot configuration created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotConfigurationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bots/deactivate/{botId}": {
+      "patch": {
+        "tags": [
+          "Bot Configuration"
+        ],
+        "summary": "Deactivate a bot configuration",
+        "description": "Deactivates a specific bot configuration so it no longer processes trades",
+        "operationId": "deactivateBotConfiguration",
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to deactivate",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot configuration deactivated successfully",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bot configuration not found within active configurations"
+          }
+        }
+      }
+    },
+    "/api/bots/activate/{botId}": {
+      "patch": {
+        "tags": [
+          "Bot Configuration"
+        ],
+        "summary": "Activate a bot configuration",
+        "description": "Activates a specific bot configuration so it can process trades",
+        "operationId": "activateBotConfiguration",
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to activate",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot configuration activated successfully",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bot configuration not found within active configurations"
+          }
+        }
+      }
+    },
+    "/api/bots": {
+      "get": {
+        "tags": [
+          "Bot Configuration"
+        ],
+        "summary": "Get all bot configurations",
+        "description": "Retrieves a list of all bot configurations, optionally including inactive ones",
+        "operationId": "getAllBotConfigurations",
+        "parameters": [
+          {
+            "name": "includeInactive",
+            "in": "query",
+            "description": "Whether to include inactive bot configurations",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot configurations retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotConfigurationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bots/{botId}": {
+      "get": {
+        "tags": [
+          "Bot Configuration"
+        ],
+        "summary": "Get a bot configuration by ID",
+        "description": "Retrieves the details of a specific bot configuration",
+        "operationId": "getBotConfiguration",
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot configuration retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotConfigurationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bot configuration not found within active configurations"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TradingViewAlertRequest": {
+        "type": "object",
+        "description": "Alert details from TradingView",
+        "properties": {
+          "botId": {
+            "type": "string"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WebhookApiKeyResponse": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          }
+        }
+      },
+      "BotConfigurationRequest": {
+        "type": "object",
+        "description": "Bot configuration details",
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          },
+          "apiSecret": {
+            "type": "string"
+          },
+          "tradingPair": {
+            "type": "string"
+          }
+        }
+      },
+      "BotConfigurationResponse": {
+        "type": "object",
+        "properties": {
+          "botId": {
+            "type": "string"
+          },
+          "tradingPair": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}
