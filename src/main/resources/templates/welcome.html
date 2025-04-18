@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${appName}">Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-top: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .description {
+            color: #7f8c8d;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .feature {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature h3 {
+            color: #3498db;
+            margin-top: 0;
+        }
+
+        .api-section {
+            margin-top: 30px;
+        }
+
+        .api-link {
+            display: inline-block;
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+
+        .api-link:hover {
+            background-color: #2980b9;
+        }
+
+        footer {
+            margin-top: 40px;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1 th:text="${appName}">Autotrader</h1>
+        <p class="description" th:text="${appDescription}">Automated trading with TradingView and Bitvavo</p>
+    </header>
+
+    <main>
+        <p>Welcome to the Autotrader application. This platform provides automated trading capabilities by integrating
+            TradingView signals with the Bitvavo cryptocurrency exchange.</p>
+
+        <div class="features">
+            <div class="feature">
+                <h3>TradingView Integration</h3>
+                <p>Receive and process trading signals from TradingView through webhooks.</p>
+            </div>
+            <div class="feature">
+                <h3>Bitvavo API</h3>
+                <p>Execute trades on the Bitvavo cryptocurrency exchange using their API.</p>
+            </div>
+            <div class="feature">
+                <h3>Automated Trading</h3>
+                <p>Set up trading strategies that execute automatically based on received signals.</p>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <h2>API Documentation</h2>
+            <p>Explore the REST API endpoints available in this application:</p>
+            <a href="/autotrader/swagger-ui.html" class="api-link">Open API Documentation</a>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Autotrader. All rights reserved.</p>
+    </footer>
+</div>
+</body>
+</html>
