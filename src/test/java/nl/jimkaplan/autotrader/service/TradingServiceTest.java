@@ -146,7 +146,7 @@ class TradingServiceTest {
     }
 
     @Test
-    void processAlert_withValidBuySignal_processesSuccessfully() {
+    void validateAndProcessAlert_withValidBuySignal_processesSuccessfully() {
         // Arrange
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
@@ -155,7 +155,7 @@ class TradingServiceTest {
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
 
         // Act
-        tradingService.processAlert(validBuyRequest);
+        tradingService.validateAndProcessAlert(validBuyRequest);
 
         // Assert
         verify(tradingViewAlertService).saveAlert(alertCaptor.capture());
@@ -174,7 +174,7 @@ class TradingServiceTest {
     }
 
     @Test
-    void processAlert_withValidSellSignal_processesSuccessfully() {
+    void validateAndProcessAlert_withValidSellSignal_processesSuccessfully() {
         // Arrange
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
         when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
@@ -184,7 +184,7 @@ class TradingServiceTest {
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
 
         // Act
-        tradingService.processAlert(validSellRequest);
+        tradingService.validateAndProcessAlert(validSellRequest);
 
         // Assert
         verify(tradingViewAlertService).saveAlert(alertCaptor.capture());
@@ -206,7 +206,7 @@ class TradingServiceTest {
     // Request validation tests
 
     @Test
-    void processAlert_withMissingBotId_throwsException() {
+    void validateAndProcessAlert_withMissingBotId_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setTicker(TEST_TICKER);
@@ -214,13 +214,13 @@ class TradingServiceTest {
         request.setTimestamp(TEST_TIMESTAMP);
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Bot ID is required", exception.getMessage());
     }
 
     @Test
-    void processAlert_withMissingTicker_throwsException() {
+    void validateAndProcessAlert_withMissingTicker_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setBotId(TEST_BOT_ID);
@@ -228,13 +228,13 @@ class TradingServiceTest {
         request.setTimestamp(TEST_TIMESTAMP);
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Ticker is required", exception.getMessage());
     }
 
     @Test
-    void processAlert_withMissingAction_throwsException() {
+    void validateAndProcessAlert_withMissingAction_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setBotId(TEST_BOT_ID);
@@ -242,13 +242,13 @@ class TradingServiceTest {
         request.setTimestamp(TEST_TIMESTAMP);
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Action is required", exception.getMessage());
     }
 
     @Test
-    void processAlert_withMissingTimestamp_throwsException() {
+    void validateAndProcessAlert_withMissingTimestamp_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setBotId(TEST_BOT_ID);
@@ -256,13 +256,13 @@ class TradingServiceTest {
         request.setAction("buy");
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Timestamp is required", exception.getMessage());
     }
 
     @Test
-    void processAlert_withInvalidTimestampFormat_throwsException() {
+    void validateAndProcessAlert_withInvalidTimestampFormat_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setBotId(TEST_BOT_ID);
@@ -271,15 +271,15 @@ class TradingServiceTest {
         request.setTimestamp("invalid-timestamp");
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Invalid timestamp format. Expected format: yyyy-MM-ddTHH:mm:ssZ", exception.getMessage());
     }
 
     // Ticker mismatch test
 
     @Test
-    void processAlert_withTickerMismatch_throwsException() {
+    void validateAndProcessAlert_withTickerMismatch_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setBotId(TEST_BOT_ID);
@@ -291,15 +291,15 @@ class TradingServiceTest {
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Ticker mismatch: ETHUSD does not match configured trading pair: BTCEUR", exception.getMessage());
     }
 
     // Non-EUR-based ticker test
 
     @Test
-    void processAlert_withNonEurBasedTicker_throwsException() {
+    void validateAndProcessAlert_withNonEurBasedTicker_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setBotId(TEST_BOT_ID);
@@ -319,15 +319,15 @@ class TradingServiceTest {
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Unsupported ticker: BTCUSD. Only EUR-based trading pairs are supported in v1.", exception.getMessage());
     }
 
     // Invalid action test
 
     @Test
-    void processAlert_withInvalidAction_throwsException() {
+    void validateAndProcessAlert_withInvalidAction_throwsException() {
         // Arrange
         TradingViewAlertRequest request = new TradingViewAlertRequest();
         request.setBotId(TEST_BOT_ID);
@@ -339,8 +339,8 @@ class TradingServiceTest {
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, 
-                () -> tradingService.processAlert(request));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
         assertEquals("Invalid action: hold. Supported actions are 'buy' and 'sell'.", exception.getMessage());
     }
 
@@ -358,7 +358,7 @@ class TradingServiceTest {
                 .thenReturn(new GetAccountBalanceResponse[]{lowBalanceResponse});
 
         // Act
-        tradingService.processAlert(validBuyRequest);
+        tradingService.validateAndProcessAlert(validBuyRequest);
 
         // Assert
         verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
@@ -391,7 +391,7 @@ class TradingServiceTest {
                 .thenReturn(lowBtcPriceResponse);
 
         // Act
-        tradingService.processAlert(validSellRequest);
+        tradingService.validateAndProcessAlert(validSellRequest);
 
         // Assert
         verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
@@ -419,8 +419,8 @@ class TradingServiceTest {
                 .thenThrow(apiException);
 
         // Act & Assert
-        RuntimeException exception = assertThrows(RuntimeException.class, 
-                () -> tradingService.processAlert(validBuyRequest));
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> tradingService.validateAndProcessAlert(validBuyRequest));
 
         assertEquals("Error processing buy signal: API error", exception.getMessage());
 
@@ -443,8 +443,8 @@ class TradingServiceTest {
                 .thenThrow(apiException);
 
         // Act & Assert
-        RuntimeException exception = assertThrows(RuntimeException.class, 
-                () -> tradingService.processAlert(validSellRequest));
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> tradingService.validateAndProcessAlert(validSellRequest));
 
         assertEquals("Error processing sell signal: API error", exception.getMessage());
 
@@ -468,7 +468,7 @@ class TradingServiceTest {
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
 
         // Act
-        tradingService.processAlert(validBuyRequest);
+        tradingService.validateAndProcessAlert(validBuyRequest);
 
         // Assert
         verify(positionService).getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN");
@@ -491,7 +491,7 @@ class TradingServiceTest {
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
 
         // Act
-        tradingService.processAlert(validSellRequest);
+        tradingService.validateAndProcessAlert(validSellRequest);
 
         // Assert
         verify(positionService).getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN");
@@ -501,7 +501,7 @@ class TradingServiceTest {
     }
 
     @Test
-    void processAlert_withDryRunBuySignal_skipsOrderSubmission() {
+    void validateAndProcessAlert_withDryRunBuySignal_skipsOrderSubmission() {
         // Arrange
         TradingViewAlertRequest dryRunBuyRequest = new TradingViewAlertRequest();
         dryRunBuyRequest.setBotId(TEST_BOT_ID);
@@ -516,7 +516,7 @@ class TradingServiceTest {
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
 
         // Act
-        tradingService.processAlert(dryRunBuyRequest);
+        tradingService.validateAndProcessAlert(dryRunBuyRequest);
 
         // Assert
         // Verify alert is saved
@@ -545,7 +545,7 @@ class TradingServiceTest {
     }
 
     @Test
-    void processAlert_withDryRunSellSignal_skipsOrderSubmission() {
+    void validateAndProcessAlert_withDryRunSellSignal_skipsOrderSubmission() {
         // Arrange
         TradingViewAlertRequest dryRunSellRequest = new TradingViewAlertRequest();
         dryRunSellRequest.setBotId(TEST_BOT_ID);
@@ -561,7 +561,7 @@ class TradingServiceTest {
         when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
 
         // Act
-        tradingService.processAlert(dryRunSellRequest);
+        tradingService.validateAndProcessAlert(dryRunSellRequest);
 
         // Assert
         // Verify alert is saved

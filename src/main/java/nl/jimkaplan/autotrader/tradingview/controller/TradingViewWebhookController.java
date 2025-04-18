@@ -124,7 +124,7 @@ public class TradingViewWebhookController {
             case VALID:
                 try {
                     // Process the alert
-                    tradingService.processAlert(request);
+                    tradingService.validateAndProcessAlert(request);
                     return ResponseEntity.ok().build();
                 } catch (IllegalArgumentException e) {
                     // Bad request (invalid input)

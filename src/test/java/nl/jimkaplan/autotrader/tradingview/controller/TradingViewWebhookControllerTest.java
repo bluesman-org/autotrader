@@ -72,7 +72,7 @@ class TradingViewWebhookControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNull(response.getBody());
         verify(botConfigurationService).validateWebhookApiKey(eq(botId), eq(validApiKey));
-        verify(tradingService).processAlert(eq(validRequest));
+        verify(tradingService).validateAndProcessAlert(eq(validRequest));
     }
 
     @Test
@@ -88,7 +88,7 @@ class TradingViewWebhookControllerTest {
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         assertEquals("Invalid API key", response.getBody());
         verify(botConfigurationService).validateWebhookApiKey(eq(botId), eq(invalidApiKey));
-        verify(tradingService, never()).processAlert(any());
+        verify(tradingService, never()).validateAndProcessAlert(any());
     }
 
     @Test
@@ -96,7 +96,7 @@ class TradingViewWebhookControllerTest {
         // Arrange
         when(botConfigurationService.validateWebhookApiKey(eq(botId), eq(validApiKey))).thenReturn(true);
         String errorMessage = "Invalid request parameters";
-        doThrow(new IllegalArgumentException(errorMessage)).when(tradingService).processAlert(eq(validRequest));
+        doThrow(new IllegalArgumentException(errorMessage)).when(tradingService).validateAndProcessAlert(eq(validRequest));
 
         // Act
         ResponseEntity<?> response = controller.handleWebhook(validApiKey, validRequest, httpServletRequest);
@@ -105,7 +105,7 @@ class TradingViewWebhookControllerTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(errorMessage, response.getBody());
         verify(botConfigurationService).validateWebhookApiKey(eq(botId), eq(validApiKey));
-        verify(tradingService).processAlert(eq(validRequest));
+        verify(tradingService).validateAndProcessAlert(eq(validRequest));
     }
 
     @Test
@@ -113,7 +113,7 @@ class TradingViewWebhookControllerTest {
         // Arrange
         when(botConfigurationService.validateWebhookApiKey(eq(botId), eq(validApiKey))).thenReturn(true);
         String errorMessage = "Internal server error";
-        doThrow(new RuntimeException(errorMessage)).when(tradingService).processAlert(eq(validRequest));
+        doThrow(new RuntimeException(errorMessage)).when(tradingService).validateAndProcessAlert(eq(validRequest));
 
         // Act
         ResponseEntity<?> response = controller.handleWebhook(validApiKey, validRequest, httpServletRequest);
@@ -122,7 +122,7 @@ class TradingViewWebhookControllerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals("Error processing alert: " + errorMessage, response.getBody());
         verify(botConfigurationService).validateWebhookApiKey(eq(botId), eq(validApiKey));
-        verify(tradingService).processAlert(eq(validRequest));
+        verify(tradingService).validateAndProcessAlert(eq(validRequest));
     }
 
     @Test
@@ -139,7 +139,7 @@ class TradingViewWebhookControllerTest {
         assertNull(response.getBody());
         // API key validation should be skipped for allowed IPs
         verify(botConfigurationService, never()).validateWebhookApiKey(any(), any());
-        verify(tradingService).processAlert(eq(validRequest));
+        verify(tradingService).validateAndProcessAlert(eq(validRequest));
     }
 
     @Test
@@ -155,7 +155,7 @@ class TradingViewWebhookControllerTest {
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         assertEquals("Unauthorized access", response.getBody());
         verify(botConfigurationService, never()).validateWebhookApiKey(any(), any());
-        verify(tradingService, never()).processAlert(any());
+        verify(tradingService, never()).validateAndProcessAlert(any());
     }
 
     @Test
@@ -169,7 +169,7 @@ class TradingViewWebhookControllerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals("Error processing alert for bot ID: " + botId, response.getBody());
         // Verify that the trading service was never called
-        verify(tradingService, never()).processAlert(any());
+        verify(tradingService, never()).validateAndProcessAlert(any());
     }
 
     // We can't easily test the default case in the switch statement because ValidationResult is an enum

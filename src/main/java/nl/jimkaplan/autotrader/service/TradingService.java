@@ -47,7 +47,7 @@ public class TradingService {
      * @param request The alert request from TradingView
      * @throws IllegalArgumentException if the request is invalid
      */
-    public void processAlert(TradingViewAlertRequest request) {
+    public void validateAndProcessAlert(TradingViewAlertRequest request) {
         // Validate request
         validateRequest(request);
 
