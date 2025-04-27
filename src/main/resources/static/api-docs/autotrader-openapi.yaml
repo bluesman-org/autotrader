@@ -195,6 +195,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BotConfigurationResponse"
+        "400":
+          description: "Invalid bot ID format"
         "404":
           description: "Bot configuration not found within active configurations"
 components:

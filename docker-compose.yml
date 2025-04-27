@@ -2,6 +2,7 @@ services:
   autotrader:
     image: bluesman80/autotrader:latest
     container_name: autotrader
+    network_mode: "host"
     ports:
       - "8081:8081"
     environment:
