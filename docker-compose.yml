@@ -2,9 +2,11 @@ services:
   autotrader:
     image: bluesman80/autotrader:latest
     container_name: autotrader
+    # Using host network mode to pass the request IP to container
     network_mode: "host"
-    ports:
-      - "8081:8081"
+    # It's unnecessary to expose the port when using host network mode
+    #    ports:
+    #      - "8081:8081"
     environment:
       - MONGODB_AUTOTRADER_USER=${MONGODB_AUTOTRADER_USER}
       - MONGODB_AUTOTRADER_PASSWORD=${MONGODB_AUTOTRADER_PASSWORD}
