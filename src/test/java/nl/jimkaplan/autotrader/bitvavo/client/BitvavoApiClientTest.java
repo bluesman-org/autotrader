@@ -125,10 +125,11 @@ class BitvavoApiClientTest {
                 entityCaptor.capture(),
                 eq(Object.class)
         );
-        // The signed body and the sent body must represent the same JSON payload
+        // The signed body and the sent body must represent the same JSON payload;
+        // amounts are serialized as strings, as the Bitvavo API expects
         assertEquals(
                 objectMapper.readTree("{\"market\":\"BTC-EUR\",\"side\":\"buy\",\"orderType\":\"market\","
-                        + "\"amountQuote\":100.45,\"operatorId\":543462}"),
+                        + "\"amountQuote\":\"100.45\",\"operatorId\":543462}"),
                 objectMapper.readTree(entityCaptor.getValue().getBody().toString()));
     }
 

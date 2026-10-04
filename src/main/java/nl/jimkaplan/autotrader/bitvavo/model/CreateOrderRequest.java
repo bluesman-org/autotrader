@@ -1,6 +1,8 @@
 package nl.jimkaplan.autotrader.bitvavo.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -51,13 +53,17 @@ public class CreateOrderRequest {
     /**
      * The amount of the base currency to buy or sell.
      * Example: 1.567
+     * Bitvavo expects amounts as strings; serializing as a number loses precision guarantees.
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private BigDecimal amount;
 
     /**
      * The amount of the quote currency to buy or sell for the market, stopLoss, or takeProfit order types.
      * Example: 5000
+     * Bitvavo expects amounts as strings; serializing as a number loses precision guarantees.
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private BigDecimal amountQuote;
     
     /**
