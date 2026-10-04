@@ -6,6 +6,7 @@ import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
+import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetPriceResponse;
 import nl.jimkaplan.autotrader.model.Order;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
@@ -16,6 +17,7 @@ import nl.jimkaplan.autotrader.tradingview.service.TradingViewAlertService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.MessageFormat;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -40,6 +42,10 @@ public class TradingService {
 
     // Minimum EUR amount for trades
     private static final double MIN_EUR_AMOUNT = 5.0;
+
+    // Fallback decimals to use when Bitvavo does not report them for a market
+    private static final int FALLBACK_QUANTITY_DECIMALS = 8;
+    private static final int FALLBACK_NOTIONAL_DECIMALS = 2;
 
     /**
      * Process a TradingView alert.
@@ -186,16 +192,30 @@ public class TradingService {
                 return;
             }
 
+            // Round the spendable amount down to the market's allowed decimals
+            GetMarketResponse market = getMarketInfo(botConfig);
+            BigDecimal amountQuote = BigDecimal.valueOf(eurBalance)
+                    .setScale(resolveNotionalDecimals(market), RoundingMode.DOWN);
+
+            if (amountQuote.signum() <= 0) {
+                String errorMessage = "EUR amount too small for order precision";
+                log.warn(errorMessage);
+                saveFailedOrder(botConfig.getBotId(), request.getTicker(), errorMessage);
+                return;
+            }
+
             // Create market buy order
             CreateOrderRequest orderRequest = CreateOrderRequest.builder()
                     .market(request.getTicker())
                     .side("buy")
                     .orderType("market")
-                    .amountQuote(BigDecimal.valueOf(eurBalance))
+                    .amountQuote(amountQuote)
+                    .operatorId(botConfig.getOperatorId())
                     .build();
 
             CreateOrderResponse orderResponse;
             String orderId;
+            String status;
 
             // Check if this is a dry run
             if (Boolean.TRUE.equals(request.getDryRun())) {
@@ -203,21 +223,31 @@ public class TradingService {
                 log.info("DRY RUN: Skipping sending buy order to Bitvavo");
                 // Generate a dummy order ID for dry run
                 orderId = "dry-run-" + System.currentTimeMillis();
+                status = "COMPLETED";
+                orderResponse = null;
             } else {
                 // Send the order to Bitvavo in normal mode
                 orderResponse = bitvavoApiClient.post(
                         "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
                 orderId = orderResponse.getOrderId().toString();
+                // Record the status the exchange actually returned (e.g. "new", "filled")
+                status = (orderResponse.getStatus() != null && !orderResponse.getStatus().isEmpty())
+                        ? orderResponse.getStatus()
+                        : "COMPLETED";
                 log.info("Buy order placed successfully: {}", orderId);
             }
 
             // Save order to database
+            Instant orderTimestamp = (orderResponse != null && orderResponse.getCreated() != null)
+                    ? Instant.ofEpochMilli(orderResponse.getCreated())
+                    : Instant.now();
+
             Order order = Order.builder()
                     .botId(botConfig.getBotId())
                     .orderId(orderId)
                     .ticker(request.getTicker())
-                    .timestamp(Instant.now())
-                    .status("COMPLETED")
+                    .timestamp(orderTimestamp)
+                    .status(status)
                     .build();
 
             orderService.saveOrder(order);
@@ -259,6 +289,20 @@ public class TradingService {
                 return;
             }
 
+            // Round the sell quantity down to the market's allowed decimals
+            GetMarketResponse market = getMarketInfo(botConfig);
+            BigDecimal amount = BigDecimal.valueOf(assetBalance)
+                    .setScale(resolveQuantityDecimals(market), RoundingMode.DOWN);
+
+            if (amount.signum() <= 0) {
+                String errorMessage = MessageFormat.format(
+                        "Insufficient {0} balance: {1}. Below the minimum order precision for the market.",
+                        asset, assetBalance);
+                log.warn(errorMessage);
+                saveFailedOrder(botConfig.getBotId(), request.getTicker(), errorMessage);
+                return;
+            }
+
             // Get asset price
             // Bitvavo expects ticker to be in the format like, "BTC-EUR" (with a dash between asset and EUR)
             String assetTicker = asset + "-EUR";
@@ -266,7 +310,7 @@ public class TradingService {
             log.info("{} price: {} EUR", asset, assetPrice);
 
             // Calculate asset worth in EUR
-            double assetWorth = assetBalance * assetPrice;
+            double assetWorth = amount.doubleValue() * assetPrice;
             log.info("{} worth: {} EUR", asset, assetWorth);
 
             if (assetWorth < MIN_EUR_AMOUNT) {
@@ -283,11 +327,13 @@ public class TradingService {
                     .market(request.getTicker())
                     .side("sell")
                     .orderType("market")
-                    .amount(BigDecimal.valueOf(assetBalance))
+                    .amount(amount)
+                    .operatorId(botConfig.getOperatorId())
                     .build();
 
             CreateOrderResponse orderResponse;
             String orderId;
+            String status;
 
             // Check if this is a dry run
             if (Boolean.TRUE.equals(request.getDryRun())) {
@@ -295,21 +341,31 @@ public class TradingService {
                 log.info("DRY RUN: Skipping sending sell order to Bitvavo");
                 // Generate a dummy order ID for dry run
                 orderId = "dry-run-" + System.currentTimeMillis();
+                status = "COMPLETED";
+                orderResponse = null;
             } else {
                 // Send the order to Bitvavo in normal mode
                 orderResponse = bitvavoApiClient.post(
                         "/order", orderRequest, CreateOrderResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
                 orderId = orderResponse.getOrderId().toString();
+                // Record the status the exchange actually returned (e.g. "new", "filled")
+                status = (orderResponse.getStatus() != null && !orderResponse.getStatus().isEmpty())
+                        ? orderResponse.getStatus()
+                        : "COMPLETED";
                 log.info("Sell order placed successfully: {}", orderId);
             }
 
             // Save order to database
+            Instant orderTimestamp = (orderResponse != null && orderResponse.getCreated() != null)
+                    ? Instant.ofEpochMilli(orderResponse.getCreated())
+                    : Instant.now();
+
             Order order = Order.builder()
                     .botId(botConfig.getBotId())
                     .orderId(orderId)
                     .ticker(request.getTicker())
-                    .timestamp(Instant.now())
-                    .status("COMPLETED")
+                    .timestamp(orderTimestamp)
+                    .status(status)
                     .build();
 
             orderService.saveOrder(order);
@@ -354,14 +410,57 @@ public class TradingService {
 
     /**
      * Get the price of an asset.
+     * Bitvavo returns the price as a single-element array, even when a market is specified.
      *
-     * @param ticker The ticker (e.g., "BTCEUR")
+     * @param ticker The ticker (e.g., "BTC-EUR")
      * @return The asset price in EUR
      */
     double getAssetPrice(String ticker, BotConfiguration botConfig) {
-        GetPriceResponse priceResponse = bitvavoApiClient.get(
-                "/ticker/price?market=" + ticker, GetPriceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
-        return priceResponse.getPrice().doubleValue();
+        GetPriceResponse[] priceResponses = bitvavoApiClient.get(
+                "/ticker/price?market=" + ticker, GetPriceResponse[].class, botConfig.getApiKey(), botConfig.getApiSecret());
+
+        if (priceResponses == null || priceResponses.length == 0) {
+            throw new IllegalStateException("No price returned by Bitvavo for market: " + ticker);
+        }
+
+        return priceResponses[0].getPrice().doubleValue();
+    }
+
+    /**
+     * Fetch the market information (precision and minimums) for the bot's trading pair.
+     *
+     * @param botConfig The bot configuration
+     * @return The market information, or null if Bitvavo returned none
+     */
+    private GetMarketResponse getMarketInfo(BotConfiguration botConfig) {
+        GetMarketResponse[] markets = bitvavoApiClient.get(
+                "/markets?market=" + botConfig.getTradingPair(), GetMarketResponse[].class,
+                botConfig.getApiKey(), botConfig.getApiSecret());
+        return (markets != null && markets.length > 0) ? markets[0] : null;
+    }
+
+    /**
+     * Resolve the maximum number of decimals allowed for an order amount.
+     *
+     * @param market The market information, may be null
+     * @return The allowed decimals
+     */
+    private int resolveQuantityDecimals(GetMarketResponse market) {
+        return (market != null && market.getQuantityDecimals() != null)
+                ? market.getQuantityDecimals()
+                : FALLBACK_QUANTITY_DECIMALS;
+    }
+
+    /**
+     * Resolve the maximum number of decimals allowed for an order amountQuote.
+     *
+     * @param market The market information, may be null
+     * @return The allowed decimals
+     */
+    private int resolveNotionalDecimals(GetMarketResponse market) {
+        return (market != null && market.getNotionalDecimals() != null)
+                ? market.getNotionalDecimals()
+                : FALLBACK_NOTIONAL_DECIMALS;
     }
 
     /**

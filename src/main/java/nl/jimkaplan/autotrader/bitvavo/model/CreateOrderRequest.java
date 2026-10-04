@@ -38,6 +38,12 @@ public class CreateOrderRequest {
     private String orderType;
 
     /**
+     * Your identifier for the trader or the bot within your account that made the request.
+     * Required by the Bitvavo API for order creation.
+     */
+    private Long operatorId;
+
+    /**
      * Your (UUID) of the order.
      */
     private UUID clientOrderId;

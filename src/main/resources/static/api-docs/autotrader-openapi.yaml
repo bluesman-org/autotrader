@@ -230,6 +230,9 @@ components:
           type: "string"
         tradingPair:
           type: "string"
+        operatorId:
+          type: "integer"
+          format: "int64"
     BotConfigurationResponse:
       type: "object"
       properties:
@@ -239,3 +242,6 @@ components:
           type: "string"
         active:
           type: "boolean"
+        operatorId:
+          type: "integer"
+          format: "int64"

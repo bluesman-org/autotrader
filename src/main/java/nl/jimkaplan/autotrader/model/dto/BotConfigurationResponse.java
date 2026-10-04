@@ -16,4 +16,5 @@ public class BotConfigurationResponse {
     private String botId;
     private String tradingPair;
     private Boolean active;
+    private Long operatorId;
 }

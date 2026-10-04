@@ -25,6 +25,9 @@ public class BotConfiguration extends BaseDocument {
     @Field("botId")
     private String botId;
 
+    @Field("operator_id")
+    private Long operatorId;
+
     @Field("encryptedApiKey")
     private String encryptedApiKey;
 

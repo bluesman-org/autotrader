@@ -5,7 +5,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,16 +35,16 @@ public class CreateOrderResponse {
     private String market;
 
     /**
-     * The Unix timestamp when the order was created.
+     * The Unix timestamp in milliseconds when the order was created.
      * Example: 1706100650751
      */
-    private Instant created;
+    private Long created;
 
     /**
-     * The Unix timestamp when the order was last updated.
+     * The Unix timestamp in milliseconds when the order was last updated.
      * Example: 1706100650751
      */
-    private Instant updated;
+    private Long updated;
 
     /**
      * The status of an order. Possible values:

@@ -24,13 +24,17 @@ public class BitvavoApiClient {
 
     private final RestTemplate restTemplate;
     private final BitvavoAuthenticationService authenticationService;
+    private final ObjectMapper objectMapper;
 
     @Value("${bitvavo.api.url}")
     private String apiUrl;
 
-    public BitvavoApiClient(RestTemplate restTemplate, BitvavoAuthenticationService authenticationService) {
+    public BitvavoApiClient(RestTemplate restTemplate,
+                            BitvavoAuthenticationService authenticationService,
+                            ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
         this.authenticationService = authenticationService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -71,12 +75,13 @@ public class BitvavoApiClient {
         log.debug("Sending POST request to Bitvavo API: {}", endpoint);
 
         try {
-            ObjectMapper objectMapper = new ObjectMapper();
+            // Serialize once and use the same string for both the signature and the request body,
+            // so the signed payload is byte-for-byte identical to what is sent to Bitvavo.
             String bodyString = body != null ? objectMapper.writeValueAsString(body) : "";
             log.debug("Request body: {}", bodyString);
 
             HttpHeaders headers = createHeaders(HttpMethod.POST.name(), endpoint, bodyString, apiKey, apiSecret);
-            HttpEntity<?> entity = new HttpEntity<>(body, headers);
+            HttpEntity<?> entity = new HttpEntity<>(bodyString, headers);
             String url = apiUrl + endpoint;
 
             log.debug("Making request to: {}", url);

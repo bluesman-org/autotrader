@@ -72,6 +72,7 @@ public class BotConfigurationController {
 
         BotConfiguration config = BotConfiguration.builder()
                 .botId(botConfigurationService.generateBotId())
+                .operatorId(request.getOperatorId())
                 .apiKey(request.getApiKey())
                 .apiSecret(request.getApiSecret())
                 .tradingPair(request.getTradingPair())
@@ -335,6 +336,7 @@ public class BotConfigurationController {
                 .botId(config.getBotId())
                 .tradingPair(config.getTradingPair())
                 .active(config.getActive())
+                .operatorId(config.getOperatorId())
                 .build();
     }
 
@@ -356,6 +358,12 @@ public class BotConfigurationController {
         }
         if (!request.getTradingPair().equals(request.getTradingPair().toUpperCase())) {
             throw new IllegalArgumentException("Trading pair must be in uppercase");
+        }
+        if (request.getOperatorId() == null) {
+            throw new IllegalArgumentException("Operator ID is required");
+        }
+        if (request.getOperatorId() < 1) {
+            throw new IllegalArgumentException("Operator ID must be a positive number");
         }
     }
 
