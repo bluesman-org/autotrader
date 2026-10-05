@@ -55,10 +55,12 @@ class BotConfigurationControllerTest {
                 .apiKey("test-api-key")
                 .apiSecret("test-api-secret")
                 .tradingPair("BTC-EUR")
+                .operatorId(543462L)
                 .build();
 
         testBotConfig = BotConfiguration.builder()
                 .botId(testBotId)
+                .operatorId(543462L)
                 .encryptedApiKey("encrypted-api-key")
                 .encryptedApiSecret("encrypted-api-secret")
                 .tradingPair("BTC-EUR")
@@ -395,6 +397,7 @@ class BotConfigurationControllerTest {
                 .apiKey(null)
                 .apiSecret("test-api-secret")
                 .tradingPair("BTC-EUR")
+                .operatorId(543462L)
                 .build();
 
         // Act & Assert
@@ -411,6 +414,7 @@ class BotConfigurationControllerTest {
                 .apiKey("")
                 .apiSecret("test-api-secret")
                 .tradingPair("BTC-EUR")
+                .operatorId(543462L)
                 .build();
 
         // Act & Assert
@@ -427,6 +431,7 @@ class BotConfigurationControllerTest {
                 .apiKey("test-api-key")
                 .apiSecret(null)
                 .tradingPair("BTC-EUR")
+                .operatorId(543462L)
                 .build();
 
         // Act & Assert
@@ -443,6 +448,7 @@ class BotConfigurationControllerTest {
                 .apiKey("test-api-key")
                 .apiSecret("")
                 .tradingPair("BTC-EUR")
+                .operatorId(543462L)
                 .build();
 
         // Act & Assert
@@ -498,5 +504,39 @@ class BotConfigurationControllerTest {
                 () -> controller.createBotConfiguration(invalidRequest));
 
         assertEquals("Trading pair must be in uppercase", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withNullOperatorId_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("test-api-key")
+                .apiSecret("test-api-secret")
+                .tradingPair("BTC-EUR")
+                .operatorId(null)
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("Operator ID is required", exception.getMessage());
+    }
+
+    @Test
+    void createBotConfiguration_withNonPositiveOperatorId_throwsIllegalArgumentException() {
+        // Arrange
+        BotConfigurationRequest invalidRequest = BotConfigurationRequest.builder()
+                .apiKey("test-api-key")
+                .apiSecret("test-api-secret")
+                .tradingPair("BTC-EUR")
+                .operatorId(0L)
+                .build();
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> controller.createBotConfiguration(invalidRequest));
+
+        assertEquals("Operator ID must be a positive number", exception.getMessage());
     }
 }

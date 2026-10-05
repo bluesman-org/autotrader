@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -24,13 +25,17 @@ public class BitvavoApiClient {
 
     private final RestTemplate restTemplate;
     private final BitvavoAuthenticationService authenticationService;
+    private final ObjectMapper objectMapper;
 
     @Value("${bitvavo.api.url}")
     private String apiUrl;
 
-    public BitvavoApiClient(RestTemplate restTemplate, BitvavoAuthenticationService authenticationService) {
+    public BitvavoApiClient(RestTemplate restTemplate,
+                            BitvavoAuthenticationService authenticationService,
+                            ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
         this.authenticationService = authenticationService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -71,12 +76,13 @@ public class BitvavoApiClient {
         log.debug("Sending POST request to Bitvavo API: {}", endpoint);
 
         try {
-            ObjectMapper objectMapper = new ObjectMapper();
+            // Serialize once and use the same string for both the signature and the request body,
+            // so the signed payload is byte-for-byte identical to what is sent to Bitvavo.
             String bodyString = body != null ? objectMapper.writeValueAsString(body) : "";
             log.debug("Request body: {}", bodyString);
 
             HttpHeaders headers = createHeaders(HttpMethod.POST.name(), endpoint, bodyString, apiKey, apiSecret);
-            HttpEntity<?> entity = new HttpEntity<>(body, headers);
+            HttpEntity<?> entity = new HttpEntity<>(bodyString, headers);
             String url = apiUrl + endpoint;
 
             log.debug("Making request to: {}", url);
@@ -108,6 +114,11 @@ public class BitvavoApiClient {
         BitvavoAuthHeaders authHeaders = authenticationService.createAuthHeaders(method, endpoint, body, apiKey, apiSecret);
 
         HttpHeaders headers = new HttpHeaders();
+        // The body is the serialized JSON string, so it must be sent as application/json;
+        // otherwise StringHttpMessageConverter would default to text/plain.
+        if (!HttpMethod.GET.matches(method)) {
+            headers.setContentType(MediaType.APPLICATION_JSON);
+        }
         headers.set("Bitvavo-Access-Key", authHeaders.getBitvavoBitvAvoAccessKey());
         headers.set("Bitvavo-Access-Signature", authHeaders.getBitvavoBitvAvoAccessSignature());
         headers.set("Bitvavo-Access-Timestamp", authHeaders.getBitvavoBitvAvoAccessTimestamp());

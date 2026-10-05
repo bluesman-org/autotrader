@@ -353,6 +353,10 @@
           },
           "tradingPair": {
             "type": "string"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -367,6 +371,10 @@
           },
           "active": {
             "type": "boolean"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       }

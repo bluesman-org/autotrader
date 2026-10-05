@@ -16,4 +16,5 @@ public class BotConfigurationRequest {
     private String apiKey;
     private String apiSecret;
     private String tradingPair;
+    private Long operatorId;
 }

@@ -1,14 +1,19 @@
 package nl.jimkaplan.autotrader.bitvavo.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.bitvavo.model.BitvavoAuthHeaders;
+import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.service.BitvavoAuthenticationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpClientErrorException;
@@ -17,8 +22,10 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.math.BigDecimal;
 import java.net.ConnectException;
-import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,13 +45,14 @@ class BitvavoApiClientTest {
     private RestTemplate restTemplate;
 
     private BitvavoApiClient bitvavoApiClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final String apiKey = "test-api-key";
     private final String apiSecret = "test-api-secret";
     private final String apiUrl = "https://api.bitvavo.com/v2";
 
     @BeforeEach
     void setUp() {
-        bitvavoApiClient = new BitvavoApiClient(restTemplate, authenticationService);
+        bitvavoApiClient = new BitvavoApiClient(restTemplate, authenticationService, objectMapper);
         ReflectionTestUtils.setField(bitvavoApiClient, "apiUrl", apiUrl);
     }
 
@@ -84,13 +92,19 @@ class BitvavoApiClientTest {
     }
 
     @Test
-    void testPostRequest() {
+    void testPostRequest() throws Exception {
         // This test verifies that the authentication service is called with the correct parameters
-        // and that the API client correctly constructs the request
+        // and that the API client correctly constructs and serializes the request
 
         // Arrange
         String endpoint = "/order";
-        String body = "{\"market\":\"BTC-EUR\",\"side\":\"buy\",\"amount\":\"0.1\",\"orderId\":\"" + getRandomUUID() + "\"}";
+        CreateOrderRequest orderRequest = CreateOrderRequest.builder()
+                .market("BTC-EUR")
+                .side("buy")
+                .orderType("market")
+                .amountQuote(new BigDecimal("100.45"))
+                .operatorId(543462L)
+                .build();
         when(authenticationService.createAuthHeaders(eq("POST"), eq(endpoint), any(), eq(apiKey), eq(apiSecret)))
                 .thenReturn(BitvavoAuthHeaders.builder().build());
         when(restTemplate.exchange(
@@ -101,25 +115,37 @@ class BitvavoApiClientTest {
         )).thenReturn(ResponseEntity.ok().build());
 
         // Act
-        bitvavoApiClient.post(endpoint, body, Object.class, apiKey, apiSecret);
+        bitvavoApiClient.post(endpoint, orderRequest, Object.class, apiKey, apiSecret);
 
-        // Assert
-        verify(authenticationService).createAuthHeaders(eq("POST"), eq(endpoint), any(), eq(apiKey), eq(apiSecret));
+        // Assert: the body string used for signing must be the exact body that is sent
+        ArgumentCaptor<String> signedBodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authenticationService).createAuthHeaders(eq("POST"), eq(endpoint), signedBodyCaptor.capture(), eq(apiKey), eq(apiSecret));
+        ArgumentCaptor<HttpEntity<?>> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
         verify(restTemplate).exchange(
                 eq(apiUrl + endpoint),
                 eq(HttpMethod.POST),
-                any(),
+                entityCaptor.capture(),
                 eq(Object.class)
         );
+        HttpEntity<?> sentEntity = entityCaptor.getValue();
+        assertEquals(signedBodyCaptor.getValue(), sentEntity.getBody());
+        assertEquals(MediaType.APPLICATION_JSON, sentEntity.getHeaders().getContentType());
+        // The signed body and the sent body must represent the same JSON payload;
+        // amounts are serialized as strings, as the Bitvavo API expects
+        assertEquals(
+                objectMapper.readTree("{\"market\":\"BTC-EUR\",\"side\":\"buy\",\"orderType\":\"market\","
+                        + "\"amountQuote\":\"100.45\",\"operatorId\":543462}"),
+                objectMapper.readTree(sentEntity.getBody().toString()));
     }
 
     @Test
     void testPostRequestWithInvalidBody() {
-        // This test verifies that an IllegalArgumentException is thrown when the request body is invalid
+        // This test verifies that an IllegalArgumentException is thrown when the request body cannot be serialized
 
         // Arrange
         String endpoint = "/order";
-        Object invalidBody = new Object(); // This will cause JsonProcessingException
+        Map<String, Object> invalidBody = new HashMap<>();
+        invalidBody.put("self", invalidBody); // Circular reference, causes JsonProcessingException
 
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> bitvavoApiClient.post(endpoint, invalidBody, Object.class, apiKey, apiSecret));
@@ -211,7 +237,13 @@ class BitvavoApiClientTest {
     void testPostRequest_withHttpClientErrorException_propagatesException() {
         // Arrange
         String endpoint = "/order";
-        String body = "{\"market\":\"BTC-EUR\",\"side\":\"buy\",\"amount\":\"0.1\"}";
+        CreateOrderRequest orderRequest = CreateOrderRequest.builder()
+                .market("BTC-EUR")
+                .side("buy")
+                .orderType("market")
+                .amount(new BigDecimal("0.1"))
+                .operatorId(543462L)
+                .build();
         when(authenticationService.createAuthHeaders(eq("POST"), eq(endpoint), any(), eq(apiKey), eq(apiSecret)))
                 .thenReturn(BitvavoAuthHeaders.builder().build());
         when(restTemplate.exchange(
@@ -223,12 +255,8 @@ class BitvavoApiClientTest {
 
         // Act & Assert
         HttpClientErrorException exception = assertThrows(HttpClientErrorException.class,
-                () -> bitvavoApiClient.post(endpoint, body, Object.class, apiKey, apiSecret));
+                () -> bitvavoApiClient.post(endpoint, orderRequest, Object.class, apiKey, apiSecret));
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertEquals("400 Bad Request", exception.getMessage());
-    }
-
-    private static UUID getRandomUUID() {
-        return UUID.randomUUID();
     }
 }
