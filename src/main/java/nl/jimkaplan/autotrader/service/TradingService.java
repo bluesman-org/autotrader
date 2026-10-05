@@ -81,6 +81,15 @@ public class TradingService {
             );
         }
 
+        // Verify the bot has an operator ID configured; Bitvavo requires it for every order
+        if (botConfig.getOperatorId() == null) {
+            throw new IllegalArgumentException(
+                    MessageFormat.format(
+                            "Bot configuration for bot ID {0} has no operator ID. Recreate the bot with an operator ID.",
+                            botConfig.getBotId())
+            );
+        }
+
         // Process the alert based on action using switch expression
         switch (request.getAction().toLowerCase()) {
             case "buy" -> processBuySignal(request, botConfig);
@@ -303,9 +312,8 @@ public class TradingService {
                 return;
             }
 
-            // Get asset price
-            // Bitvavo expects ticker to be in the format like, "BTC-EUR" (with a dash between asset and EUR)
-            String assetTicker = asset + "-EUR";
+            // Get asset price, using Bitvavo's dashed market format (e.g. "BTC-EUR")
+            String assetTicker = toBitvavoMarket(request.getTicker());
             double assetPrice = getAssetPrice(assetTicker, botConfig);
             log.info("{} price: {} EUR", asset, assetPrice);
 
@@ -433,10 +441,21 @@ public class TradingService {
      * @return The market information, or null if Bitvavo returned none
      */
     private GetMarketResponse getMarketInfo(BotConfiguration botConfig) {
+        String market = toBitvavoMarket(botConfig.getTradingPair());
         GetMarketResponse[] markets = bitvavoApiClient.get(
-                "/markets?market=" + botConfig.getTradingPair(), GetMarketResponse[].class,
+                "/markets?market=" + market, GetMarketResponse[].class,
                 botConfig.getApiKey(), botConfig.getApiSecret());
         return (markets != null && markets.length > 0) ? markets[0] : null;
+    }
+
+    /**
+     * Convert a ticker to Bitvavo's market format (e.g. "BTCEUR" or "BTC-EUR" to "BTC-EUR").
+     *
+     * @param ticker The ticker or trading pair
+     * @return The market in Bitvavo's format
+     */
+    private String toBitvavoMarket(String ticker) {
+        return ticker.replace("-", "").replace("EUR", "-EUR");
     }
 
     /**

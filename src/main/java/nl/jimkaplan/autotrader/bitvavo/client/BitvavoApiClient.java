@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -113,6 +114,11 @@ public class BitvavoApiClient {
         BitvavoAuthHeaders authHeaders = authenticationService.createAuthHeaders(method, endpoint, body, apiKey, apiSecret);
 
         HttpHeaders headers = new HttpHeaders();
+        // The body is the serialized JSON string, so it must be sent as application/json;
+        // otherwise StringHttpMessageConverter would default to text/plain.
+        if (!HttpMethod.GET.matches(method)) {
+            headers.setContentType(MediaType.APPLICATION_JSON);
+        }
         headers.set("Bitvavo-Access-Key", authHeaders.getBitvavoBitvAvoAccessKey());
         headers.set("Bitvavo-Access-Signature", authHeaders.getBitvavoBitvAvoAccessSignature());
         headers.set("Bitvavo-Access-Timestamp", authHeaders.getBitvavoBitvAvoAccessTimestamp());

@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpClientErrorException;
@@ -116,8 +117,9 @@ class BitvavoApiClientTest {
         // Act
         bitvavoApiClient.post(endpoint, orderRequest, Object.class, apiKey, apiSecret);
 
-        // Assert
-        verify(authenticationService).createAuthHeaders(eq("POST"), eq(endpoint), any(), eq(apiKey), eq(apiSecret));
+        // Assert: the body string used for signing must be the exact body that is sent
+        ArgumentCaptor<String> signedBodyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(authenticationService).createAuthHeaders(eq("POST"), eq(endpoint), signedBodyCaptor.capture(), eq(apiKey), eq(apiSecret));
         ArgumentCaptor<HttpEntity<?>> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
         verify(restTemplate).exchange(
                 eq(apiUrl + endpoint),
@@ -125,12 +127,15 @@ class BitvavoApiClientTest {
                 entityCaptor.capture(),
                 eq(Object.class)
         );
+        HttpEntity<?> sentEntity = entityCaptor.getValue();
+        assertEquals(signedBodyCaptor.getValue(), sentEntity.getBody());
+        assertEquals(MediaType.APPLICATION_JSON, sentEntity.getHeaders().getContentType());
         // The signed body and the sent body must represent the same JSON payload;
         // amounts are serialized as strings, as the Bitvavo API expects
         assertEquals(
                 objectMapper.readTree("{\"market\":\"BTC-EUR\",\"side\":\"buy\",\"orderType\":\"market\","
                         + "\"amountQuote\":\"100.45\",\"operatorId\":543462}"),
-                objectMapper.readTree(entityCaptor.getValue().getBody().toString()));
+                objectMapper.readTree(sentEntity.getBody().toString()));
     }
 
     @Test
