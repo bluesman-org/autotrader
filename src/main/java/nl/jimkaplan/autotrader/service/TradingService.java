@@ -418,20 +418,20 @@ public class TradingService {
 
     /**
      * Get the price of an asset.
-     * Bitvavo returns the price as a single-element array, even when a market is specified.
+     * Bitvavo returns a single price object when a market is specified.
      *
-     * @param ticker The ticker (e.g., "BTC-EUR")
+     * @param ticker The ticker in Bitvavo's market format (e.g., "BTC-EUR")
      * @return The asset price in EUR
      */
     double getAssetPrice(String ticker, BotConfiguration botConfig) {
-        GetPriceResponse[] priceResponses = bitvavoApiClient.get(
-                "/ticker/price?market=" + ticker, GetPriceResponse[].class, botConfig.getApiKey(), botConfig.getApiSecret());
+        GetPriceResponse priceResponse = bitvavoApiClient.get(
+                "/ticker/price?market=" + ticker, GetPriceResponse.class, botConfig.getApiKey(), botConfig.getApiSecret());
 
-        if (priceResponses == null || priceResponses.length == 0) {
+        if (priceResponse == null) {
             throw new IllegalStateException("No price returned by Bitvavo for market: " + ticker);
         }
 
-        return priceResponses[0].getPrice().doubleValue();
+        return priceResponse.getPrice().doubleValue();
     }
 
     /**
@@ -442,14 +442,14 @@ public class TradingService {
      */
     private GetMarketResponse getMarketInfo(BotConfiguration botConfig) {
         String market = toBitvavoMarket(botConfig.getTradingPair());
-        GetMarketResponse[] markets = bitvavoApiClient.get(
-                "/markets?market=" + market, GetMarketResponse[].class,
+        return bitvavoApiClient.get(
+                "/markets?market=" + market, GetMarketResponse.class,
                 botConfig.getApiKey(), botConfig.getApiSecret());
-        return (markets != null && markets.length > 0) ? markets[0] : null;
     }
 
     /**
      * Convert a ticker to Bitvavo's market format (e.g. "BTCEUR" or "BTC-EUR" to "BTC-EUR").
+     * Bitvavo rejects market parameters without the dash (errorCode 205).
      *
      * @param ticker The ticker or trading pair
      * @return The market in Bitvavo's format
