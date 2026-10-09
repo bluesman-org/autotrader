@@ -189,7 +189,7 @@ class TradingServiceTest {
         verify(bitvavoApiClient).post(eq("/order"), orderRequestCaptor.capture(), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
 
         CreateOrderRequest capturedRequest = orderRequestCaptor.getValue();
-        assertEquals(TEST_TICKER, capturedRequest.getMarket());
+        assertEquals(TEST_MARKET, capturedRequest.getMarket());
         assertEquals("buy", capturedRequest.getSide());
         assertEquals("market", capturedRequest.getOrderType());
         assertEquals(TEST_OPERATOR_ID, capturedRequest.getOperatorId());
@@ -222,7 +222,7 @@ class TradingServiceTest {
         verify(bitvavoApiClient).post(eq("/order"), orderRequestCaptor.capture(), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
 
         CreateOrderRequest capturedRequest = orderRequestCaptor.getValue();
-        assertEquals(TEST_TICKER, capturedRequest.getMarket());
+        assertEquals(TEST_MARKET, capturedRequest.getMarket());
         assertEquals("sell", capturedRequest.getSide());
         assertEquals("market", capturedRequest.getOrderType());
         assertEquals(TEST_OPERATOR_ID, capturedRequest.getOperatorId());

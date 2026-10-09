@@ -215,7 +215,7 @@ public class TradingService {
 
             // Create market buy order
             CreateOrderRequest orderRequest = CreateOrderRequest.builder()
-                    .market(request.getTicker())
+                    .market(toBitvavoMarket(request.getTicker()))
                     .side("buy")
                     .orderType("market")
                     .amountQuote(amountQuote)
@@ -332,7 +332,7 @@ public class TradingService {
 
             // Create market sell order
             CreateOrderRequest orderRequest = CreateOrderRequest.builder()
-                    .market(request.getTicker())
+                    .market(toBitvavoMarket(request.getTicker()))
                     .side("sell")
                     .orderType("market")
                     .amount(amount)
@@ -455,7 +455,11 @@ public class TradingService {
      * @return The market in Bitvavo's format
      */
     private String toBitvavoMarket(String ticker) {
-        return ticker.replace("-", "").replace("EUR", "-EUR");
+        String market = ticker.replace("-", "");
+        if (market.endsWith("EUR")) {
+            market = market.substring(0, market.length() - "EUR".length()) + "-EUR";
+        }
+        return market;
     }
 
     /**
