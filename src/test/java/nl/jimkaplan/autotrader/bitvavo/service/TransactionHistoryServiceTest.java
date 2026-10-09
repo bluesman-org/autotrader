@@ -92,7 +92,7 @@ class TransactionHistoryServiceTest {
     }
 
     @Test
-    void getTransactions_withEmptyType_omitsTypeParameter() {
+    void getTransactions_withBlankType_omitsTypeParameter() {
         // Arrange
         when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(botConfig));
         when(bitvavoApiClient.get(
@@ -101,7 +101,7 @@ class TransactionHistoryServiceTest {
 
         // Act
         GetAccountHistoryResponse result = transactionHistoryService
-                .getTransactions(BOT_ID, null, null, null, 5, "");
+                .getTransactions(BOT_ID, null, null, null, 5, " ");
 
         // Assert
         assertEquals(historyResponse, result);

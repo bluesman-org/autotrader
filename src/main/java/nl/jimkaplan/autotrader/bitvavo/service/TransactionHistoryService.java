@@ -69,7 +69,7 @@ public class TransactionHistoryService {
         if (maxItems != null) {
             builder.queryParam("maxItems", maxItems);
         }
-        if (type != null && !type.isEmpty()) {
+        if (type != null && !type.isBlank()) {
             builder.queryParam("type", type);
         }
         return builder.build().encode().toUriString();

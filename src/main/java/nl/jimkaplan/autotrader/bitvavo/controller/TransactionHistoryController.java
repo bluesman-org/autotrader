@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
  * Controller for viewing Bitvavo transaction history for a bot.
  * Provides an endpoint to retrieve the transaction history of the account a bot trades on.
@@ -28,6 +31,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @Tag(name = "Transaction History", description = "API for viewing Bitvavo transaction history")
 public class TransactionHistoryController {
+
+    private static final Set<String> ALLOWED_TRANSACTION_TYPES = Set.of(
+            "buy", "sell", "staking", "fixed_staking", "deposit", "withdrawal",
+            "affiliate", "distribution", "internal_transfer", "withdrawal_cancelled",
+            "rebate", "loan", "external_transferred_funds", "manually_assigned");
+
+    private static final String ALLOWED_TRANSACTION_TYPES_MESSAGE = ALLOWED_TRANSACTION_TYPES.stream()
+            .sorted()
+            .collect(Collectors.joining(", "));
 
     private final TransactionHistoryService transactionHistoryService;
 
@@ -59,6 +71,11 @@ public class TransactionHistoryController {
                     )
             ),
             @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid bot ID or request parameters",
+                    content = @Content
+            ),
+            @ApiResponse(
                     responseCode = "404",
                     description = "Bot configuration not found within active configurations",
                     content = @Content
@@ -85,10 +102,51 @@ public class TransactionHistoryController {
             @RequestParam(required = false) String type) {
         log.info("Received request to get transaction history for bot: {}", botId);
 
+        validateBotId(botId);
+        validateQueryParameters(fromDate, toDate, page, maxItems, type);
+
         GetAccountHistoryResponse response = transactionHistoryService
                 .getTransactions(botId, fromDate, toDate, page, maxItems, type);
 
         log.info("Successfully retrieved transaction history for bot: {}", botId);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Validate the format of the bot ID, consistent with the bot configuration endpoints.
+     *
+     * @param botId The bot ID to validate
+     * @throws IllegalArgumentException if the bot ID format is invalid
+     */
+    private void validateBotId(String botId) {
+        if (botId == null || botId.length() != 6 || !botId.matches("[a-zA-Z0-9]+")) {
+            throw new IllegalArgumentException("Bot ID must be exactly 6 characters long and contain only letters and numbers");
+        }
+    }
+
+    /**
+     * Validate the optional query parameters against the ranges Bitvavo accepts.
+     *
+     * @throws IllegalArgumentException if a parameter is out of range
+     */
+    private void validateQueryParameters(Long fromDate, Long toDate, Integer page, Integer maxItems, String type) {
+        if (fromDate != null && fromDate < 0) {
+            throw new IllegalArgumentException("fromDate must not be negative");
+        }
+        if (toDate != null && toDate < 0) {
+            throw new IllegalArgumentException("toDate must not be negative");
+        }
+        if (fromDate != null && toDate != null && fromDate > toDate) {
+            throw new IllegalArgumentException("fromDate must not be after toDate");
+        }
+        if (page != null && page < 1) {
+            throw new IllegalArgumentException("page must be at least 1");
+        }
+        if (maxItems != null && (maxItems < 1 || maxItems > 100)) {
+            throw new IllegalArgumentException("maxItems must be between 1 and 100");
+        }
+        if (type != null && !type.isBlank() && !ALLOWED_TRANSACTION_TYPES.contains(type)) {
+            throw new IllegalArgumentException("type must be one of: " + ALLOWED_TRANSACTION_TYPES_MESSAGE);
+        }
     }
 }

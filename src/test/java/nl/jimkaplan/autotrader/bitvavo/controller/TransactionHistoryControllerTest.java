@@ -12,7 +12,9 @@ import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,5 +61,68 @@ class TransactionHistoryControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         verify(transactionHistoryService).getTransactions(BOT_ID, null, null, null, null, null);
+    }
+
+    @Test
+    void getTransactions_withInvalidBotId_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> transactionHistoryController.getTransactions("abc", null, null, null, null, null));
+
+        assertEquals("Bot ID must be exactly 6 characters long and contain only letters and numbers",
+                exception.getMessage());
+        verifyNoInteractions(transactionHistoryService);
+    }
+
+    @Test
+    void getTransactions_withMaxItemsOutOfRange_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> transactionHistoryController.getTransactions(BOT_ID, null, null, null, 101, null));
+
+        assertEquals("maxItems must be between 1 and 100", exception.getMessage());
+        verifyNoInteractions(transactionHistoryService);
+    }
+
+    @Test
+    void getTransactions_withPageBelowOne_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> transactionHistoryController.getTransactions(BOT_ID, null, null, 0, null, null));
+
+        assertEquals("page must be at least 1", exception.getMessage());
+        verifyNoInteractions(transactionHistoryService);
+    }
+
+    @Test
+    void getTransactions_withUnknownType_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> transactionHistoryController.getTransactions(BOT_ID, null, null, null, null, "foo"));
+
+        assertEquals("type must be one of: affiliate, buy, deposit, distribution, external_transferred_funds, "
+                + "fixed_staking, internal_transfer, loan, manually_assigned, rebate, sell, staking, withdrawal, "
+                + "withdrawal_cancelled", exception.getMessage());
+        verifyNoInteractions(transactionHistoryService);
+    }
+
+    @Test
+    void getTransactions_withFromDateAfterToDate_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> transactionHistoryController.getTransactions(BOT_ID, 2L, 1L, null, null, null));
+
+        assertEquals("fromDate must not be after toDate", exception.getMessage());
+        verifyNoInteractions(transactionHistoryService);
+    }
+
+    @Test
+    void getTransactions_withNegativeFromDate_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> transactionHistoryController.getTransactions(BOT_ID, -1L, null, null, null, null));
+
+        assertEquals("fromDate must not be negative", exception.getMessage());
+        verifyNoInteractions(transactionHistoryService);
     }
 }

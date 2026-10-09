@@ -118,6 +118,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handle IllegalArgumentException.
+     * This is thrown when request parameters are invalid.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException ex, WebRequest request) {
+        log.warn("Invalid request: {}", ex.getMessage());
+
+        String path = getRequestPath(request);
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.BAD_REQUEST,
+                ex.getMessage(),
+                path
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
      * Handle NoSuchElementException.
      * This is thrown when an element is not found.
      */
