@@ -28,7 +28,7 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
     @Value("${spring.data.mongodb.database}")
     private String databaseName;
 
-    @Value("${spring.data.mongodb.ssl-enabled:true}")
+    @Value("${mongodb.ssl.enabled:true}")
     private boolean sslEnabled;
 
     @NonNull
