@@ -138,6 +138,9 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Never commit API keys or secrets to version control
     - Always use environment variables for sensitive information
     - Follow the authentication pattern used for Bitvavo API
+    - The REST API is not authenticated: anyone who can reach the app can manage bots and read
+      account data, including transaction history. Run it on a private network behind the host's
+      firewall; the production compose uses host networking, so exposure is whatever the host allows.
 
 ## Development Workflow
 
