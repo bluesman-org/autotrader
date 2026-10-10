@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Response model for the Bitvavo transaction history.
- * Based on the <a href="https://docs.bitvavo.com/docs/rest-api/get-account-history">Bitvavo API documentation</a>.
+ * Based on the <a href="https://docs.bitvavo.com/docs/rest-api/get-transaction-history/">Bitvavo API documentation</a>.
  */
 @Data
 @NoArgsConstructor
