@@ -140,7 +140,8 @@ class BitvavoApiClientTest {
 
     @Test
     void testPostRequestWithInvalidBody() {
-        // This test verifies that an IllegalArgumentException is thrown when the request body cannot be serialized
+        // This test verifies that an IllegalStateException is thrown when the request body cannot be serialized,
+        // so that an internal serialization failure is not reported as a client error
 
         // Arrange
         String endpoint = "/order";
@@ -148,7 +149,7 @@ class BitvavoApiClientTest {
         invalidBody.put("self", invalidBody); // Circular reference, causes JsonProcessingException
 
         // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> bitvavoApiClient.post(endpoint, invalidBody, Object.class, apiKey, apiSecret));
+        assertThrows(IllegalStateException.class, () -> bitvavoApiClient.post(endpoint, invalidBody, Object.class, apiKey, apiSecret));
     }
 
     @Test

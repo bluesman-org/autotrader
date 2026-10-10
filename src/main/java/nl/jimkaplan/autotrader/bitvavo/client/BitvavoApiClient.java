@@ -71,6 +71,7 @@ public class BitvavoApiClient {
      * @param body         Request body
      * @param responseType Class of the expected response
      * @return Response from the API
+     * @throws IllegalStateException if the request body cannot be serialized
      */
     public <T> T post(String endpoint, Object body, Class<T> responseType, String apiKey, String apiSecret) {
         log.debug("Sending POST request to Bitvavo API: {}", endpoint);
@@ -96,7 +97,7 @@ public class BitvavoApiClient {
             log.debug("Received response from Bitvavo API: {} with status {}", endpoint, response.getStatusCode());
             return response.getBody();
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Error serializing request body", e);
+            throw new IllegalStateException("Error serializing request body", e);
         }
     }
 

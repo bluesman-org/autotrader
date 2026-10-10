@@ -119,7 +119,9 @@ public class GlobalExceptionHandler {
 
     /**
      * Handle IllegalArgumentException.
-     * This is thrown when request parameters are invalid.
+     * Intended for request validation errors thrown by controllers and services for client-caused
+     * problems. Internal code must not throw IllegalArgumentException for server-side failures,
+     * or the resulting 400 would misclassify a bug as a bad request.
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException ex, WebRequest request) {
