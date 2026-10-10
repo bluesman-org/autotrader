@@ -118,6 +118,26 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handle IllegalArgumentException.
+     * Intended for request validation errors thrown by controllers and services for client-caused
+     * problems. Internal code must not throw IllegalArgumentException for server-side failures,
+     * or the resulting 400 would misclassify a bug as a bad request.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException ex, WebRequest request) {
+        log.warn("Invalid request: {}", ex.getMessage());
+
+        String path = getRequestPath(request);
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.BAD_REQUEST,
+                ex.getMessage(),
+                path
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
      * Handle NoSuchElementException.
      * This is thrown when an element is not found.
      */

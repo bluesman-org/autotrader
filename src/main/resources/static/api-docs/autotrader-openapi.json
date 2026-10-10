@@ -19,6 +19,10 @@
     {
       "name": "Bot Configuration",
       "description": "API for managing trading bot configurations"
+    },
+    {
+      "name": "Transaction History",
+      "description": "API for viewing Bitvavo transaction history"
     }
   ],
   "paths": {
@@ -308,6 +312,94 @@
           }
         }
       }
+    },
+    "/api/bots/{botId}/transactions": {
+      "get": {
+        "tags": [
+          "Transaction History"
+        ],
+        "summary": "Get transaction history for a bot",
+        "description": "Returns the Bitvavo transaction history for the account of the specified bot. The history is account-wide; the bot only provides the API credentials used for the request. Results can be filtered by date range and transaction type, and are paginated.",
+        "operationId": "getTransactions",
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot whose credentials are used",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "Unix timestamp in milliseconds to return transactions from",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "Unix timestamp in milliseconds to return transactions up to",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "maxItems",
+            "in": "query",
+            "description": "Maximum number of items per page (1-100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Transaction type to filter by (e.g. buy, sell, deposit, withdrawal)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction history retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAccountHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bot ID or request parameters"
+          },
+          "404": {
+            "description": "Bot configuration not found within active configurations"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -375,6 +467,71 @@
           "operatorId": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "GetAccountHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Transaction"
+            }
+          },
+          "currentPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "transactionId": {
+            "type": "string"
+          },
+          "executedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string"
+          },
+          "priceCurrency": {
+            "type": "string"
+          },
+          "priceAmount": {
+            "type": "number"
+          },
+          "sentCurrency": {
+            "type": "string"
+          },
+          "sentAmount": {
+            "type": "number"
+          },
+          "receivedCurrency": {
+            "type": "string"
+          },
+          "receivedAmount": {
+            "type": "number"
+          },
+          "feesCurrency": {
+            "type": "string"
+          },
+          "feesAmount": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string"
           }
         }
       }
