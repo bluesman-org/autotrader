@@ -32,3 +32,10 @@ bitvavo:
 # Encryption settings for sensitive data
 encryption:
   master-key: ${ENCRYPTION_MASTER_KEY}  # Base64 encoded key, should be set via environment variable in production
+
+# TLS for the MongoDB client built in MongoConfig (default: true).
+# Set to false to connect to a local server without TLS. Note that Spring Boot's
+# spring.data.mongodb.ssl.enabled has no effect because this application builds its own client.
+# mongodb:
+#   ssl:
+#     enabled: true

@@ -28,6 +28,9 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
     @Value("${spring.data.mongodb.database}")
     private String databaseName;
 
+    @Value("${mongodb.ssl.enabled:true}")
+    private boolean sslEnabled;
+
     @NonNull
     @Override
     public String getDatabaseName() {
@@ -52,7 +55,7 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
                 .retryReads(true)
                 .readPreference(ReadPreference.secondaryPreferred())
                 .writeConcern(WriteConcern.MAJORITY)
-                .applyToSslSettings(builder -> builder.enabled(true))
+                .applyToSslSettings(builder -> builder.enabled(sslEnabled))
                 .build();
 
         return MongoClients.create(settings);
