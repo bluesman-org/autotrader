@@ -282,8 +282,10 @@ public class TradingService {
                 botConfig.getBotId(), request.getTicker(), request.getDryRun());
 
         try {
-            // Extract asset from ticker (e.g., "BTC" from "BTCEUR")
-            String asset = request.getTicker().replace("EUR", "");
+            // Normalise the ticker once (e.g. "BTCEUR" or "BTC-EUR" to "BTC-EUR") and derive
+            // the asset symbol (e.g. "BTC") for the balance check
+            String market = toBitvavoMarket(request.getTicker());
+            String asset = market.replace("-EUR", "");
 
             // Check asset balance
             double assetBalance = getAssetBalance(botConfig, asset);
@@ -299,9 +301,9 @@ public class TradingService {
             }
 
             // Round the sell quantity down to the market's allowed decimals
-            GetMarketResponse market = getMarketInfo(botConfig);
+            GetMarketResponse marketInfo = getMarketInfo(botConfig);
             BigDecimal amount = BigDecimal.valueOf(assetBalance)
-                    .setScale(resolveQuantityDecimals(market), RoundingMode.DOWN);
+                    .setScale(resolveQuantityDecimals(marketInfo), RoundingMode.DOWN);
 
             if (amount.signum() <= 0) {
                 String errorMessage = MessageFormat.format(
@@ -313,8 +315,7 @@ public class TradingService {
             }
 
             // Get asset price, using Bitvavo's dashed market format (e.g. "BTC-EUR")
-            String assetTicker = toBitvavoMarket(request.getTicker());
-            double assetPrice = getAssetPrice(assetTicker, botConfig);
+            double assetPrice = getAssetPrice(market, botConfig);
             log.info("{} price: {} EUR", asset, assetPrice);
 
             // Calculate asset worth in EUR
@@ -332,7 +333,7 @@ public class TradingService {
 
             // Create market sell order
             CreateOrderRequest orderRequest = CreateOrderRequest.builder()
-                    .market(toBitvavoMarket(request.getTicker()))
+                    .market(market)
                     .side("sell")
                     .orderType("market")
                     .amount(amount)

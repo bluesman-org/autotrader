@@ -229,6 +229,44 @@ class TradingServiceTest {
         assertEquals(0, BigDecimal.valueOf(TEST_BTC_BALANCE).compareTo(capturedRequest.getAmount()));
     }
 
+    @Test
+    void validateAndProcessAlert_withDashedTradingPair_usesNormalizedBalanceSymbol() {
+        // Arrange: a bot whose trading pair is stored in Bitvavo's dashed form
+        TradingViewAlertRequest dashedSellRequest = new TradingViewAlertRequest();
+        dashedSellRequest.setBotId(TEST_BOT_ID);
+        dashedSellRequest.setTicker(TEST_MARKET);
+        dashedSellRequest.setAction("sell");
+        dashedSellRequest.setTimestamp(TEST_TIMESTAMP);
+
+        BotConfiguration dashedBotConfig = BotConfiguration.builder()
+                .botId(TEST_BOT_ID)
+                .tradingPair(TEST_MARKET)
+                .operatorId(TEST_OPERATOR_ID)
+                .apiKey(TEST_API_KEY)
+                .apiSecret(TEST_API_SECRET)
+                .build();
+
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(dashedBotConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{btcBalanceResponse});
+        when(bitvavoApiClient.get(eq("/ticker/price?market=" + TEST_MARKET), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
+        when(bitvavoApiClient.get(eq("/markets?market=" + TEST_MARKET), eq(GetMarketResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcMarketResponse);
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(orderResponse);
+        when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_MARKET, "OPEN")).thenReturn(Optional.of(existingPosition));
+
+        // Act
+        tradingService.validateAndProcessAlert(dashedSellRequest);
+
+        // Assert: the balance symbol is normalised ("BTC", not "BTC-") and the order keeps the dashed market
+        verify(bitvavoApiClient).get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/ticker/price?market=" + TEST_MARKET), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).get(eq("/markets?market=" + TEST_MARKET), eq(GetMarketResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+        verify(bitvavoApiClient).post(eq("/order"), orderRequestCaptor.capture(), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
+
+        assertEquals(TEST_MARKET, orderRequestCaptor.getValue().getMarket());
+        assertEquals(0, BigDecimal.valueOf(TEST_BTC_BALANCE).compareTo(orderRequestCaptor.getValue().getAmount()));
+    }
+
     // Request validation tests
 
     @Test
