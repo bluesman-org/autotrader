@@ -51,15 +51,7 @@ public final class Macd {
         if (closes == null) {
             throw new IllegalArgumentException("closes must not be null");
         }
-        if (fastPeriod < 1 || fastPeriod > MAX_PERIOD) {
-            throw new IllegalArgumentException("fastPeriod must be between 1 and " + MAX_PERIOD);
-        }
-        if (slowPeriod < fastPeriod || slowPeriod > MAX_PERIOD) {
-            throw new IllegalArgumentException("slowPeriod must be between fastPeriod and " + MAX_PERIOD);
-        }
-        if (signalPeriod < 1 || signalPeriod > MAX_PERIOD) {
-            throw new IllegalArgumentException("signalPeriod must be between 1 and " + MAX_PERIOD);
-        }
+        validatePeriods(fastPeriod, slowPeriod, signalPeriod);
 
         int length = closes.length;
         double[] macd = new double[length];
@@ -116,6 +108,26 @@ public final class Macd {
             outputIndex++;
         }
         return new MacdResult(macd, signal, histogram);
+    }
+
+    /**
+     * Validate MACD periods, so configuration can be checked without calculating.
+     *
+     * @param fastPeriod   Fast EMA period, between 1 and {@link #MAX_PERIOD}
+     * @param slowPeriod   Slow EMA period, between {@code fastPeriod} and {@link #MAX_PERIOD}
+     * @param signalPeriod Signal EMA period, between 1 and {@link #MAX_PERIOD}
+     * @throws IllegalArgumentException if a period is out of range
+     */
+    public static void validatePeriods(int fastPeriod, int slowPeriod, int signalPeriod) {
+        if (fastPeriod < 1 || fastPeriod > MAX_PERIOD) {
+            throw new IllegalArgumentException("fastPeriod must be between 1 and " + MAX_PERIOD);
+        }
+        if (slowPeriod < fastPeriod || slowPeriod > MAX_PERIOD) {
+            throw new IllegalArgumentException("slowPeriod must be between fastPeriod and " + MAX_PERIOD);
+        }
+        if (signalPeriod < 1 || signalPeriod > MAX_PERIOD) {
+            throw new IllegalArgumentException("signalPeriod must be between 1 and " + MAX_PERIOD);
+        }
     }
 
     private static double average(double[] values, int from, int count) {
