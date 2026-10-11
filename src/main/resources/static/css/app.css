@@ -1,0 +1,240 @@
+/* Shared styling for the Autotrader pages. */
+:root {
+    --accent: #3498db;
+    --accent-dark: #2980b9;
+    --nav: #2c3e50;
+    --bg: #f5f5f5;
+    --card: #ffffff;
+    --text: #333333;
+    --muted: #7f8c8d;
+    --border: #e3e7ea;
+    --train: #eaf4fb;
+    --train-text: #21618c;
+    --validate: #eafaf1;
+    --validate-text: #1e8449;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.5;
+    color: var(--text);
+    background-color: var(--bg);
+    margin: 0;
+}
+
+.nav {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    padding: 12px 22px;
+    background: var(--nav);
+}
+
+.nav a {
+    color: #ecf0f1;
+    text-decoration: none;
+}
+
+.nav a:hover {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+.nav .brand {
+    font-weight: 600;
+    margin-right: auto;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 22px auto;
+    padding: 0 20px;
+}
+
+h1 {
+    color: var(--nav);
+    margin: 6px 0 4px;
+}
+
+h2 {
+    color: var(--nav);
+    margin: 26px 0 6px;
+}
+
+a {
+    color: var(--accent-dark);
+}
+
+.card {
+    background: var(--card);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    padding: 22px 24px;
+    margin: 16px 0 22px;
+}
+
+fieldset {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 0 0 18px;
+    padding: 12px 16px 16px;
+}
+
+legend {
+    font-weight: 600;
+    color: var(--nav);
+    padding: 0 6px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px 18px;
+}
+
+label {
+    display: block;
+    font-size: 0.9rem;
+    color: #34495e;
+}
+
+input[type=text], input[type=date], select {
+    width: 100%;
+    padding: 7px 9px;
+    margin-top: 3px;
+    border: 1px solid #cfd6dc;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    background: #ffffff;
+}
+
+.checks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 4px 16px;
+    margin-top: 8px;
+}
+
+.checks label {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.checks input {
+    width: auto;
+    margin: 0;
+}
+
+.actions {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+button.primary {
+    background: var(--accent);
+    color: #ffffff;
+    border: 0;
+    border-radius: 4px;
+    padding: 11px 22px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+button.primary:hover {
+    background: var(--accent-dark);
+}
+
+.muted {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.banner {
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 0.95rem;
+}
+
+.banner.error {
+    background: #fdecea;
+    color: #b03a2e;
+    border: 1px solid #f5c6c0;
+}
+
+.table-wrap {
+    overflow-x: auto;
+    background: var(--card);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    padding: 6px 10px 12px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 7px 9px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+th.left, td.left {
+    text-align: left;
+}
+
+thead th {
+    background: #f0f4f7;
+    color: var(--nav);
+    font-weight: 600;
+}
+
+thead th.group-train {
+    background: var(--train);
+    color: var(--train-text);
+    text-align: center;
+}
+
+thead th.group-validate {
+    background: var(--validate);
+    color: var(--validate-text);
+    text-align: center;
+}
+
+.pill {
+    display: inline-block;
+    background: #eaf4fb;
+    color: #21618c;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 0.78rem;
+    margin-right: 5px;
+}
+
+.stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 28px;
+}
+
+.stat {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.stat b {
+    display: block;
+    font-size: 1.02rem;
+    color: var(--nav);
+}
