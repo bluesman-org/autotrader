@@ -5,20 +5,29 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.ServletWebRequest;
+import org.springframework.web.context.request.WebRequest;
+
+import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
 
 class GlobalExceptionHandlerTest {
+
+    private static final String PATH = "/autotrader/api/bots/abc/transactions";
 
     private final GlobalExceptionHandler globalExceptionHandler = new GlobalExceptionHandler();
 
     @Test
     void handleIllegalArgumentException_returnsBadRequestWithMessageAndPath() {
         // Arrange
-        ServletWebRequest request = new ServletWebRequest(
-                new MockHttpServletRequest("GET", "/autotrader/api/bots/abc/transactions"));
+        ServletWebRequest request = request();
 
         // Act
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleIllegalArgumentException(
@@ -26,11 +35,96 @@ class GlobalExceptionHandlerTest {
                 request);
 
         // Assert
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertError(response, HttpStatus.BAD_REQUEST,
+                "Bot ID must be exactly 6 characters long and contain only letters and numbers");
+    }
+
+    @Test
+    void handleIllegalStateException_returnsInternalServerErrorWithoutDetails() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleIllegalStateException(
+                new IllegalStateException("missing configuration"), request());
+
+        assertError(response, HttpStatus.INTERNAL_SERVER_ERROR, "Internal error occurred.");
+    }
+
+    @Test
+    void handleHttpClientErrorException_keepsTheClientStatus() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleHttpClientErrorException(
+                new HttpClientErrorException(HttpStatus.NOT_FOUND, "Not Found"), request());
+
+        assertError(response, HttpStatus.NOT_FOUND, "External API client error: Not Found");
+    }
+
+    @Test
+    void handleHttpServerErrorException_mapsToBadGateway() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleHttpServerErrorException(
+                new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error"), request());
+
+        assertError(response, HttpStatus.BAD_GATEWAY, "External API server error: Internal Server Error");
+    }
+
+    @Test
+    void handleResourceAccessException_mapsToServiceUnavailable() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleResourceAccessException(
+                new ResourceAccessException("Connection refused"), request());
+
+        assertError(response, HttpStatus.SERVICE_UNAVAILABLE, "External service unavailable: Connection refused");
+    }
+
+    @Test
+    void handleRestClientException_mapsToInternalServerError() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleRestClientException(
+                new RestClientException("Unknown error"), request());
+
+        assertError(response, HttpStatus.INTERNAL_SERVER_ERROR, "External API communication error: Unknown error");
+    }
+
+    @Test
+    void handleNoSuchElementException_mapsToNotFound() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleNoSuchElementException(
+                new NoSuchElementException("No value present"), request());
+
+        assertError(response, HttpStatus.NOT_FOUND, "Resource not found: No value present");
+    }
+
+    @Test
+    void handleGenericException_withoutCause_returnsTheStandardResponse() {
+        // Regression: building the log message from ex.getCause() threw an NPE for the (common)
+        // cause-less exception, bypassing the standard response entirely.
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleGenericException(
+                new NullPointerException("boom"), request());
+
+        assertError(response, HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+    }
+
+    @Test
+    void handleGenericException_withCause_returnsTheStandardResponse() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleGenericException(
+                new IllegalStateException("outer", new RuntimeException("inner")), request());
+
+        assertError(response, HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+    }
+
+    @Test
+    void handler_withNonServletWebRequest_returnsEmptyPath() {
+        WebRequest plainRequest = mock(WebRequest.class);
+
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleNoSuchElementException(
+                new NoSuchElementException("No value present"), plainRequest);
+
         assertNotNull(response.getBody());
-        assertEquals(HttpStatus.BAD_REQUEST.value(), response.getBody().getStatus());
-        assertEquals("Bot ID must be exactly 6 characters long and contain only letters and numbers",
-                response.getBody().getMessage());
-        assertEquals("/autotrader/api/bots/abc/transactions", response.getBody().getPath());
+        assertEquals("", response.getBody().getPath());
+    }
+
+    private static ServletWebRequest request() {
+        return new ServletWebRequest(new MockHttpServletRequest("GET", PATH));
+    }
+
+    private static void assertError(ResponseEntity<ErrorResponse> response, HttpStatus status, String message) {
+        assertEquals(status, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(status.value(), response.getBody().getStatus());
+        assertEquals(message, response.getBody().getMessage());
+        assertEquals(PATH, response.getBody().getPath());
     }
 }

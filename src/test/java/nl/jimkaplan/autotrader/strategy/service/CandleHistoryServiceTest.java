@@ -302,6 +302,93 @@ class CandleHistoryServiceTest {
         assertEquals(1440, batches.get(0).size());
     }
 
+    @Test
+    void ensureRange_withRangeEndingBeforeItStarts_returnsZeroWithoutTouchingTheStores() {
+        int fetched = candleHistoryService.ensureRange(MARKET, INTERVAL,
+                Instant.ofEpochMilli(BASE + 2 * HOUR), Instant.ofEpochMilli(BASE + HOUR));
+
+        assertEquals(0, fetched);
+        verifyNoInteractions(candleRepository, bitvavoApiClient);
+    }
+
+    @Test
+    void ensureRange_whenTheApiReturnsNoRows_fetchesNothing() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.empty());
+        when(bitvavoApiClient.getPublic(anyString(), eq(String[][].class))).thenReturn(new String[0][]);
+
+        int fetched = candleHistoryService.ensureRange(MARKET, INTERVAL,
+                Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + HOUR));
+
+        assertEquals(0, fetched);
+        verify(candleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void ensureRange_whenTheApiReturnsNull_fetchesNothing() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.empty());
+        when(bitvavoApiClient.getPublic(anyString(), eq(String[][].class))).thenReturn(null);
+
+        int fetched = candleHistoryService.ensureRange(MARKET, INTERVAL,
+                Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + HOUR));
+
+        assertEquals(0, fetched);
+        verify(candleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void ensureRange_whenEveryRowIsOutsideTheWindow_fetchesNothing() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.empty());
+        // The only row is newer than the last candle the window allows
+        when(bitvavoApiClient.getPublic(anyString(), eq(String[][].class)))
+                .thenReturn(new String[][]{row(BASE + HOUR)});
+
+        int fetched = candleHistoryService.ensureRange(MARKET, INTERVAL,
+                Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + HOUR));
+
+        assertEquals(0, fetched);
+        verify(candleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void ensureRange_whenTheLastPageEndsAtTheWindowStart_stopsFetching() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.empty());
+        // A full page whose oldest candle is exactly the window start
+        when(bitvavoApiClient.getPublic(anyString(), eq(String[][].class)))
+                .thenReturn(rowsDescending(BASE + 1439 * HOUR, 1440));
+
+        int fetched = candleHistoryService.ensureRange(MARKET, INTERVAL,
+                Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + 1440 * HOUR));
+
+        assertEquals(1440, fetched);
+        verify(bitvavoApiClient).getPublic(anyString(), eq(String[][].class));
+        captureSavedBatches(1);
+    }
+
+    @Test
+    void ensureRange_whenInterruptedDuringThePause_throwsCancellation() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.empty());
+        when(bitvavoApiClient.getPublic(anyString(), eq(String[][].class)))
+                .thenAnswer(invocation -> {
+                    Thread.currentThread().interrupt();
+                    return rowsDescending(BASE + 1999 * HOUR, 1440);
+                });
+        ReflectionTestUtils.setField(candleHistoryService, "requestSpacingMs", 5L);
+
+        try {
+            assertThrows(CancellationException.class, () -> candleHistoryService.ensureRange(MARKET, INTERVAL,
+                    Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + 2000 * HOUR)));
+        } finally {
+            Thread.interrupted();
+        }
+
+        captureSavedBatches(1);
+    }
+
     private static String[] row(long openTime) {
         return new String[]{String.valueOf(openTime), "1.0", "2.0", "0.5", "1.5", "10.5"};
     }

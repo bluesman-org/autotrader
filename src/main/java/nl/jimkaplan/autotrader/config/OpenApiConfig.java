@@ -29,7 +29,19 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
     private static final Logger log = LoggerFactory.getLogger(OpenApiConfig.class);
     private static final String OPENAPI_JSON_FILENAME = "autotrader-openapi.json";
     private static final String OPENAPI_YAML_FILENAME = "autotrader-openapi.yaml";
-    private static final String EXPORT_DIR = "src/main/resources/static/api-docs";
+
+    /**
+     * Directory the specifications are written to; configurable so tests do not touch the
+     * committed files.
+     */
+    @Value("${openapi.export-dir:src/main/resources/static/api-docs}")
+    private String exportDir;
+
+    /**
+     * Delay before the startup export, giving the web server time to come up.
+     */
+    @Value("${openapi.export-startup-delay-ms:5000}")
+    private long exportStartupDelayMs;
 
     @Override
     public void onApplicationEvent(WebServerInitializedEvent event) {
@@ -64,7 +76,7 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
             String jsonSpec = response.getBody();
 
             // Create export directory if it doesn't exist
-            Path exportDirPath = Paths.get(EXPORT_DIR);
+            Path exportDirPath = Paths.get(exportDir);
             if (!Files.exists(exportDirPath)) {
                 Files.createDirectories(exportDirPath);
                 log.info("Created directory for OpenAPI specification export: {}", exportDirPath);
@@ -102,7 +114,7 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
         return args -> {
             try {
                 // Wait a bit to ensure the server is fully started
-                Thread.sleep(5000);
+                Thread.sleep(exportStartupDelayMs);
                 exportOpenApiSpecification();
             } catch (Exception e) {
                 log.error("Failed to export OpenAPI specification", e);

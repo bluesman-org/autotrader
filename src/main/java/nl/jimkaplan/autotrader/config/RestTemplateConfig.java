@@ -21,8 +21,8 @@ import java.util.Collections;
 @Configuration
 public class RestTemplateConfig {
 
-    private static final int PUBLIC_CONNECT_TIMEOUT_MILLIS = 10_000;
-    private static final int PUBLIC_READ_TIMEOUT_MILLIS = 15_000;
+    static final int PUBLIC_CONNECT_TIMEOUT_MILLIS = 10_000;
+    static final int PUBLIC_READ_TIMEOUT_MILLIS = 15_000;
 
     private final CurlLoggingInterceptor curlLoggingInterceptor;
 

@@ -472,6 +472,94 @@ class TradingServiceTest {
         assertTrue(capturedOrder.getErrorMessage().contains("Insufficient BTC balance worth"));
     }
 
+    @Test
+    void validateAndProcessAlert_withUnknownBotId_throwsException() {
+        // Arrange: the bot ID passes format validation but no configuration exists for it
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(validBuyRequest));
+        assertTrue(exception.getMessage().contains("Bot configuration not found: " + TEST_BOT_ID));
+        verify(tradingViewAlertService, never()).saveAlert(any());
+    }
+
+    @Test
+    void processBuySignal_whenTheAmountRoundsToZero_savesFailedOrder() {
+        // Arrange: an unusual market whose notional precision rounds the balance down to zero
+        GetAccountBalanceResponse smallBalanceResponse = new GetAccountBalanceResponse();
+        smallBalanceResponse.setAvailable(BigDecimal.valueOf(5.5));
+        GetMarketResponse oddMarketResponse = new GetMarketResponse();
+        oddMarketResponse.setNotionalDecimals(-1);
+
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(new GetAccountBalanceResponse[]{smallBalanceResponse});
+        when(bitvavoApiClient.get(eq("/markets?market=" + TEST_MARKET), eq(GetMarketResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(oddMarketResponse);
+
+        // Act
+        tradingService.validateAndProcessAlert(validBuyRequest);
+
+        // Assert
+        verify(bitvavoApiClient, never()).post(anyString(), any(CreateOrderRequest.class), any(), anyString(), anyString());
+        verify(orderService).saveOrder(orderCaptor.capture());
+        assertEquals("FAILED", orderCaptor.getValue().getStatus());
+        assertTrue(orderCaptor.getValue().getErrorMessage().contains("EUR amount too small for order precision"));
+    }
+
+    @Test
+    void processSellSignal_whenTheAmountRoundsToZero_savesFailedOrder() {
+        // Arrange: a market with no quantity decimals rounds the remaining balance to zero
+        GetAccountBalanceResponse smallBtcBalance = new GetAccountBalanceResponse();
+        smallBtcBalance.setAvailable(BigDecimal.valueOf(0.5));
+        GetMarketResponse zeroDecimalsMarket = new GetMarketResponse();
+        zeroDecimalsMarket.setQuantityDecimals(0);
+
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(new GetAccountBalanceResponse[]{smallBtcBalance});
+        when(bitvavoApiClient.get(eq("/markets?market=" + TEST_MARKET), eq(GetMarketResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET)))
+                .thenReturn(zeroDecimalsMarket);
+
+        // Act
+        tradingService.validateAndProcessAlert(validSellRequest);
+
+        // Assert
+        verify(bitvavoApiClient, never()).post(anyString(), any(CreateOrderRequest.class), any(), anyString(), anyString());
+        verify(orderService).saveOrder(orderCaptor.capture());
+        assertEquals("FAILED", orderCaptor.getValue().getStatus());
+        assertTrue(orderCaptor.getValue().getErrorMessage().contains("Below the minimum order precision"));
+    }
+
+    @Test
+    void processSellSignal_withExchangeResponse_recordsExchangeStatusAndTimestamp() {
+        // Arrange
+        long exchangeCreatedMillis = 1706100650751L;
+        CreateOrderResponse exchangeOrderResponse = new CreateOrderResponse();
+        exchangeOrderResponse.setOrderId(TEST_ORDER_ID);
+        exchangeOrderResponse.setStatus("new");
+        exchangeOrderResponse.setCreated(exchangeCreatedMillis);
+
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=BTC"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{btcBalanceResponse});
+        when(bitvavoApiClient.get(eq("/markets?market=" + TEST_MARKET), eq(GetMarketResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcMarketResponse);
+        when(bitvavoApiClient.get(eq("/ticker/price?market=BTC-EUR"), eq(GetPriceResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcPriceResponse);
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(exchangeOrderResponse);
+        when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.of(existingPosition));
+
+        // Act
+        tradingService.validateAndProcessAlert(validSellRequest);
+
+        // Assert: the order reflects what the exchange actually reported
+        verify(orderService).saveOrder(orderCaptor.capture());
+        assertEquals("new", orderCaptor.getValue().getStatus());
+        assertEquals(Instant.ofEpochMilli(exchangeCreatedMillis), orderCaptor.getValue().getTimestamp());
+    }
+
     // Exception handling tests
 
     @Test
