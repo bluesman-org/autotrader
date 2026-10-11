@@ -4,9 +4,9 @@ Tracking document for replacing TradingView with an in-app strategy engine, buil
 data and our own indicators. **Update this file with every PR**: check off completed steps,
 add new follow-ups, and keep the status line current.
 
-**Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5). Phase 2 in
-progress: MACD and Parabolic SAR implemented and pinned to frozen TA-Lib fixtures (PR #6);
-next: the rule model.
+**Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5), indicators
+pinned to the reference fixtures (PR #6). Phase 2 complete pending review: the rule and parameter
+models are in (PR #7); next: Phase 3, the backtester.
 
 ## Objective
 
@@ -52,7 +52,7 @@ next: the rule model.
 - [x] Live verification: 100 days of BTC-EUR 1h backfilled and idempotent on re-run, index
       migration, boundary-inclusive time-range queries
 
-### Phase 2 — Indicators and rules (in progress)
+### Phase 2 — Indicators and rules ✅ (PRs #6–#7)
 
 - [x] MACD (published definition, TA-Lib-compatible bootstrap) — bit-exact against the frozen fixtures
 - [x] Parabolic SAR (published definition, TA-Lib-compatible bootstrap) — bit-exact against the
@@ -60,8 +60,10 @@ next: the rule model.
 - [x] Indicator verification: written spec (`docs/indicators.md`), hand-worked linear case,
       degenerate cases (flat, oscillating, minimum length), frozen TA-Lib fixtures
       (`src/test/resources/indicators/`)
-- [ ] Rule model: independent entry/exit condition sets per indicator, AND/OR combination
-- [ ] Parameter model shared by backtest, UI and live engine
+- [x] Rule model: 10 conditions across both indicators, independent entry/exit sets combined with
+      ALL (AND) or ANY (OR), raw per-bar signals — specified in `docs/rules.md`
+- [x] Parameter model shared by backtest, UI and live engine (`MacdParameters`,
+      `ParabolicSarParameters`, eager validation)
 
 ### Phase 3 — Backtester and API
 
