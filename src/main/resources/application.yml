@@ -8,6 +8,11 @@ server:
 spring:
   application:
     name: autotrader
+  # The pages stay dot-decimal like the API, the docs and the numeric form fields, whatever
+  # locale a browser sends.
+  web:
+    locale: en_US
+    locale-resolver: fixed
   data:
     mongodb:
       uri: mongodb+srv://${MONGODB_AUTOTRADER_USER}:${MONGODB_AUTOTRADER_PASSWORD}@${MONGODB_AUTOTRADER_URI}

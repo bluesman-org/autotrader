@@ -1,0 +1,98 @@
+package nl.jimkaplan.autotrader.strategy.controller;
+
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunMetrics;
+import nl.jimkaplan.autotrader.strategy.service.BacktestService;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Renders the backtest templates, so a broken expression fails here instead of in the browser.
+ * The property overrides stand in for the environment variables the application.yml placeholders
+ * expect, which a test run does not have.
+ */
+@WebMvcTest(controllers = BacktestUiController.class, properties = {
+        "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-test",
+        "bitvavo.api.url=http://localhost:9999",
+        "encryption.master-key=dGVzdC1rZXk="
+})
+class BacktestUiControllerRenderTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockitoBean
+    private BacktestService backtestService;
+
+    @Test
+    void formPageRendersTheDefaultsAndTheOptions() throws Exception {
+        when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+
+        mockMvc.perform(get("/ui/backtests"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Strategy backtests")))
+                .andExpect(content().string(containsString("name=\"market\"")))
+                .andExpect(content().string(containsString("value=\"BTC-EUR\"")))
+                .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
+                .andExpect(content().string(containsString("SAR BEARISH CROSSOVER")))
+                .andExpect(content().string(containsString("Run sweep")));
+    }
+
+    @Test
+    void runPageRendersTheRankedTable() throws Exception {
+        when(backtestService.get("run-1")).thenReturn(Optional.of(run()));
+
+        mockMvc.perform(get("/ui/backtests/run-1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Backtest BTC-EUR 1h")))
+                .andExpect(content().string(containsString("12/26/9")))
+                .andExpect(content().string(containsString("Train — earlier part (optimised on)")))
+                .andExpect(content().string(containsString("Validate — held out")))
+                .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
+                // A profit factor with no losses prints as the infinity symbol, not a broken cell
+                .andExpect(content().string(containsString("∞")))
+                .andExpect(content().string(containsString("0.64")));
+    }
+
+    private static BacktestRun run() {
+        BacktestRunEntry entry = BacktestRunEntry.builder()
+                .fastPeriod(12).slowPeriod(26).signalPeriod(9)
+                .acceleration(0.02).maximum(0.2)
+                .entryOperator("ALL").entryConditions(List.of("MACD_BULLISH_CROSSOVER"))
+                .exitOperator("ALL").exitConditions(List.of("SAR_BEARISH_CROSSOVER"))
+                .train(BacktestRunMetrics.builder()
+                        .finalEquity(1003.1).totalReturnPercent(0.31).maxDrawdownPercent(1.28)
+                        .tradeCount(48).winRatePercent(52.1).profitFactor(Double.POSITIVE_INFINITY)
+                        .build())
+                .validate(BacktestRunMetrics.builder()
+                        .finalEquity(1006.4).totalReturnPercent(0.64).maxDrawdownPercent(0.9)
+                        .tradeCount(21).winRatePercent(57.1).profitFactor(1.4)
+                        .build())
+                .build();
+        BacktestRun run = BacktestRun.builder()
+                .runAt(Instant.parse("2026-10-11T17:40:00Z"))
+                .market("BTC-EUR").interval("1h")
+                .fromTime(Instant.parse("2026-07-03T00:00:00Z").toEpochMilli())
+                .toTime(Instant.parse("2026-10-12T00:00:00Z").toEpochMilli())
+                .candleCount(2399).initialCapital(1000.0).amountPerBuy(100.0).feeRate(0.002)
+                .warmUpCandles(200).trainRatio(0.7).rankingMetric("TOTAL_RETURN")
+                .combinationsEvaluated(1).entries(List.of(entry))
+                .build();
+        run.setId("run-1");
+        return run;
+    }
+}

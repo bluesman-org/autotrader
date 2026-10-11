@@ -5,9 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.repository.BacktestRunRepository;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestConfig;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestSweep;
-import nl.jimkaplan.autotrader.strategy.backtest.RankingMetric;
 import nl.jimkaplan.autotrader.strategy.backtest.SweepDefinition;
 import nl.jimkaplan.autotrader.strategy.backtest.SweepEntry;
 import nl.jimkaplan.autotrader.strategy.backtest.SweepResult;
@@ -24,7 +24,6 @@ import nl.jimkaplan.autotrader.strategy.rule.CandleSeries;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.MacdParameters;
 import nl.jimkaplan.autotrader.strategy.rule.ParabolicSarParameters;
-import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
 import nl.jimkaplan.autotrader.strategy.rule.RuleGroup;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -55,16 +54,6 @@ public class BacktestService {
      * well as with the combination count, so a synchronous run needs a ceiling on both.
      */
     static final long MAX_CANDLES = 50_000;
-
-    private static final double DEFAULT_INITIAL_CAPITAL = 1000.0;
-    private static final double DEFAULT_AMOUNT_PER_BUY = 100.0;
-    private static final double DEFAULT_FEE_RATE = 0.002;
-    private static final int DEFAULT_WARM_UP_CANDLES = 200;
-    private static final double DEFAULT_TRAIN_RATIO = 0.7;
-    private static final RuleGroup DEFAULT_ENTRY_RULES = new RuleGroup(LogicalOperator.ALL,
-            List.of(RuleCondition.MACD_BULLISH_CROSSOVER));
-    private static final RuleGroup DEFAULT_EXIT_RULES = new RuleGroup(LogicalOperator.ALL,
-            List.of(RuleCondition.SAR_BEARISH_CROSSOVER));
 
     private final CandleHistoryService candleHistoryService;
     private final BacktestRunRepository backtestRunRepository;
@@ -154,20 +143,20 @@ public class BacktestService {
 
     private static BacktestConfig config(BacktestRunRequest request) {
         return new BacktestConfig(
-                orDefault(request.getInitialCapital(), DEFAULT_INITIAL_CAPITAL),
-                orDefault(request.getAmountPerBuy(), DEFAULT_AMOUNT_PER_BUY),
-                orDefault(request.getFeeRate(), DEFAULT_FEE_RATE),
-                orDefault(request.getWarmUpCandles(), DEFAULT_WARM_UP_CANDLES));
+                orDefault(request.getInitialCapital(), BacktestDefaults.INITIAL_CAPITAL),
+                orDefault(request.getAmountPerBuy(), BacktestDefaults.AMOUNT_PER_BUY),
+                orDefault(request.getFeeRate(), BacktestDefaults.FEE_RATE),
+                orDefault(request.getWarmUpCandles(), BacktestDefaults.WARM_UP_CANDLES));
     }
 
     private static SweepDefinition definition(BacktestRunRequest request) {
         return new SweepDefinition(
                 macdParameters(request.getMacdParameters()),
                 sarParameters(request.getSarParameters()),
-                ruleGroups(request.getEntryRules(), DEFAULT_ENTRY_RULES),
-                ruleGroups(request.getExitRules(), DEFAULT_EXIT_RULES),
-                orDefault(request.getTrainRatio(), DEFAULT_TRAIN_RATIO),
-                request.getRankingMetric() == null ? RankingMetric.TOTAL_RETURN : request.getRankingMetric());
+                ruleGroups(request.getEntryRules(), BacktestDefaults.ENTRY_RULES),
+                ruleGroups(request.getExitRules(), BacktestDefaults.EXIT_RULES),
+                orDefault(request.getTrainRatio(), BacktestDefaults.TRAIN_RATIO),
+                request.getRankingMetric() == null ? BacktestDefaults.RANKING_METRIC : request.getRankingMetric());
     }
 
     private static List<MacdParameters> macdParameters(List<MacdParametersRequest> requests) {

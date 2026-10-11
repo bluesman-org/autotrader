@@ -38,6 +38,12 @@ public class BacktestUiController {
      */
     static final int RECENT_LIMIT = 10;
 
+    /**
+     * Shown when the candle fetch fails; the transport message is not user-facing text.
+     */
+    static final String CANDLE_FETCH_ERROR =
+            "The candles could not be fetched from Bitvavo; try again in a moment.";
+
     private static final DateTimeFormatter TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC);
     private static final DateTimeFormatter DATE =
@@ -61,23 +67,30 @@ public class BacktestUiController {
     }
 
     /**
-     * Run the configured sweep and show its ranked results.
+     * Run the configured sweep and show its ranked results. Both outcomes redirect (post/redirect/
+     * get), so a reload never re-runs the sweep: success to the stored run, a rejection back to the
+     * form with the message and the submitted values.
      *
-     * @param form  The submitted form
-     * @param model The model, reused with the error when the request is rejected
-     * @return A redirect to the stored run, or the form again with the error
+     * @param form               The submitted form
+     * @param redirectAttributes Carries the error and the submitted values back to the form
+     * @return A redirect to the stored run, or back to the form
      */
     @PostMapping
-    public String run(@ModelAttribute("form") BacktestRunForm form, Model model) {
+    public String run(@ModelAttribute("form") BacktestRunForm form, RedirectAttributes redirectAttributes) {
         try {
             BacktestRun run = backtestService.run(form.toRequest());
             log.info("UI ran backtest {}", run.getId());
             return "redirect:/ui/backtests/" + run.getId();
-        } catch (IllegalArgumentException | RestClientException ex) {
+        } catch (IllegalArgumentException ex) {
             log.warn("Backtest form rejected: {}", ex.getMessage());
-            model.addAttribute("error", ex.getMessage());
-            populate(model);
-            return "backtests/form";
+            redirectAttributes.addFlashAttribute("form", form);
+            redirectAttributes.addFlashAttribute("error", ex.getMessage());
+            return "redirect:/ui/backtests";
+        } catch (RestClientException ex) {
+            log.warn("Candle fetch failed for the submitted sweep", ex);
+            redirectAttributes.addFlashAttribute("form", form);
+            redirectAttributes.addFlashAttribute("error", CANDLE_FETCH_ERROR);
+            return "redirect:/ui/backtests";
         }
     }
 
@@ -118,7 +131,8 @@ public class BacktestUiController {
     }
 
     private static String rangeText(BacktestRun run) {
+        // The stored end bound is exclusive, so the last included instant is one millisecond earlier
         return DATE.format(Instant.ofEpochMilli(run.getFromTime()))
-                + " → " + DATE.format(Instant.ofEpochMilli(run.getToTime()));
+                + " → " + DATE.format(Instant.ofEpochMilli(run.getToTime() - 1));
     }
 }

@@ -105,6 +105,9 @@ Phase 5, the live engine.
 - [ ] 405 responses should carry the `Allow` header that Spring's default resolver sets from
       `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
       handler is next touched)
+- [ ] Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
+      run where half the entries were skipped currently looks identical to one with none, and that
+      matters more once Phase 5 trades live
 - [ ] Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
 - [ ] Optionally move the remaining `.junie/` design docs under `docs/`
 - [x] Duplicate `botId` on create returns a clear 400 (PR #4)

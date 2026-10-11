@@ -23,7 +23,8 @@ class BacktestRunFormTest {
         assertEquals("BTC-EUR", request.getMarket());
         assertEquals("1h", request.getInterval());
         assertEquals(epochMillis(today.minusDays(100)), request.getFromDate());
-        assertEquals(epochMillis(today), request.getToDate());
+        // The picked end day is inclusive, so the exclusive bound is the start of the next day
+        assertEquals(epochMillis(today.plusDays(1)), request.getToDate());
         assertEquals(1000.0, request.getInitialCapital());
         assertEquals(100.0, request.getAmountPerBuy());
         assertEquals(0.002, request.getFeeRate());
@@ -63,7 +64,7 @@ class BacktestRunFormTest {
         assertEquals("ETH-EUR", request.getMarket());
         assertEquals("4h", request.getInterval());
         assertEquals(epochMillis(LocalDate.parse("2026-01-01")), request.getFromDate());
-        assertEquals(epochMillis(LocalDate.parse("2026-03-01")), request.getToDate());
+        assertEquals(epochMillis(LocalDate.parse("2026-03-02")), request.getToDate());
         assertEquals(500.0, request.getInitialCapital());
         assertEquals(50.0, request.getAmountPerBuy());
         assertEquals(0.001, request.getFeeRate());
@@ -80,6 +81,33 @@ class BacktestRunFormTest {
         assertEquals(List.of(new RuleSetRequest(LogicalOperator.ANY,
                 List.of(RuleCondition.SAR_BEARISH_CROSSOVER, RuleCondition.MACD_BEARISH_CROSSOVER))),
                 request.getExitRules());
+    }
+
+    @Test
+    void toRequest_makesTheEndDayInclusive() {
+        BacktestRunForm form = BacktestRunForm.defaults();
+        form.setFromDate("2026-01-01");
+        form.setToDate("2026-01-01");
+
+        BacktestRunRequest request = form.toRequest();
+
+        // A same-day range is valid because the end bound moves past that day
+        assertEquals(epochMillis(LocalDate.parse("2026-01-01")), request.getFromDate());
+        assertEquals(epochMillis(LocalDate.parse("2026-01-02")), request.getToDate());
+    }
+
+    @Test
+    void toRequest_acceptsCommaDecimalsInTheSingleValueFields() {
+        BacktestRunForm form = BacktestRunForm.defaults();
+        form.setInitialCapital("500,5");
+        form.setFeeRate("0,002");
+        form.setTrainRatio("0,6");
+
+        BacktestRunRequest request = form.toRequest();
+
+        assertEquals(500.5, request.getInitialCapital());
+        assertEquals(0.002, request.getFeeRate());
+        assertEquals(0.6, request.getTrainRatio());
     }
 
     @Test
@@ -120,6 +148,10 @@ class BacktestRunFormTest {
         BacktestRunForm badDate = BacktestRunForm.defaults();
         badDate.setFromDate("11-10-2026");
         assertMessage("the from date must be a date like 2026-10-11", badDate);
+
+        BacktestRunForm badToDate = BacktestRunForm.defaults();
+        badToDate.setToDate("tomorrow");
+        assertMessage("the to date must be a date like 2026-10-11", badToDate);
 
         BacktestRunForm badCapital = BacktestRunForm.defaults();
         badCapital.setInitialCapital("ten thousand");

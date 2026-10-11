@@ -82,36 +82,37 @@ class BacktestUiControllerTest {
     @Test
     void run_redirectsToTheStoredRun() {
         when(backtestService.run(any())).thenReturn(run("run-1"));
-        Model model = new ExtendedModelMap();
 
-        String view = backtestUiController.run(BacktestRunForm.defaults(), model);
+        String view = backtestUiController.run(BacktestRunForm.defaults(), new RedirectAttributesModelMap());
 
         assertEquals("redirect:/ui/backtests/run-1", view);
     }
 
     @Test
-    void run_rendersTheFormAgainWithTheValidationMessage() {
+    void run_redirectsBackWithTheValidationMessageAndTheSubmittedValues() {
         when(backtestService.run(any())).thenThrow(new IllegalArgumentException("the market is required"));
-        when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
-        Model model = new ExtendedModelMap();
+        BacktestRunForm form = BacktestRunForm.defaults();
+        RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
-        String view = backtestUiController.run(BacktestRunForm.defaults(), model);
+        String view = backtestUiController.run(form, redirectAttributes);
 
-        assertEquals("backtests/form", view);
-        assertEquals("the market is required", model.getAttribute("error"));
-        assertNotNull(model.getAttribute("runs"));
+        assertEquals("redirect:/ui/backtests", view);
+        assertEquals("the market is required", redirectAttributes.getFlashAttributes().get("error"));
+        assertSame(form, redirectAttributes.getFlashAttributes().get("form"));
     }
 
     @Test
-    void run_rendersTheFormAgainWhenTheCandleFetchFails() {
-        when(backtestService.run(any())).thenThrow(new ResourceAccessException("connect timed out"));
-        when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
-        Model model = new ExtendedModelMap();
+    void run_redirectsBackWithAFixedMessageWhenTheCandleFetchFails() {
+        when(backtestService.run(any())).thenThrow(
+                new ResourceAccessException("I/O error on GET request for \"https://api.bitvavo.com\": connect timed out"));
+        RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
-        String view = backtestUiController.run(BacktestRunForm.defaults(), model);
+        String view = backtestUiController.run(BacktestRunForm.defaults(), redirectAttributes);
 
-        assertEquals("backtests/form", view);
-        assertEquals("connect timed out", model.getAttribute("error"));
+        assertEquals("redirect:/ui/backtests", view);
+        // The transport message is logged, not shown
+        assertEquals(BacktestUiController.CANDLE_FETCH_ERROR,
+                redirectAttributes.getFlashAttributes().get("error"));
     }
 
     @Test
@@ -145,7 +146,8 @@ class BacktestUiControllerTest {
                 .market("BTC-EUR")
                 .interval("1h")
                 .fromTime(LocalDate.parse("2026-07-03").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
-                .toTime(LocalDate.parse("2026-10-11").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+                // The stored end bound is exclusive: the start of the day after the last included day
+                .toTime(LocalDate.parse("2026-10-12").atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
                 .candleCount(2399)
                 .combinationsEvaluated(1)
                 .rankingMetric("TOTAL_RETURN")
