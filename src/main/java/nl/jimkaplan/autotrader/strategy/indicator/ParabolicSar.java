@@ -46,12 +46,7 @@ public final class ParabolicSar {
         if (highs.length != lows.length) {
             throw new IllegalArgumentException("highs and lows must have the same length");
         }
-        if (!Double.isFinite(acceleration) || acceleration < 0) {
-            throw new IllegalArgumentException("acceleration must be finite and not negative");
-        }
-        if (!Double.isFinite(maximum) || maximum < 0) {
-            throw new IllegalArgumentException("maximum must be finite and not negative");
-        }
+        validateParameters(acceleration, maximum);
 
         double[] sarValues = new double[highs.length];
         Arrays.fill(sarValues, Double.NaN);
@@ -168,5 +163,21 @@ public final class ParabolicSar {
             }
         }
         return sarValues;
+    }
+
+    /**
+     * Validate SAR parameters, so configuration can be checked without calculating.
+     *
+     * @param acceleration Acceleration factor: finite, at least 0
+     * @param maximum      Maximum acceleration factor: finite, at least 0
+     * @throws IllegalArgumentException if a parameter is not finite or negative
+     */
+    public static void validateParameters(double acceleration, double maximum) {
+        if (!Double.isFinite(acceleration) || acceleration < 0) {
+            throw new IllegalArgumentException("acceleration must be finite and not negative");
+        }
+        if (!Double.isFinite(maximum) || maximum < 0) {
+            throw new IllegalArgumentException("maximum must be finite and not negative");
+        }
     }
 }
