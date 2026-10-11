@@ -18,6 +18,7 @@ Generated files:
     macd_linear_3_5_2.csv         close,macd,signal,histogram for closes 1..40
     sar_flat.csv                  high,low,sar for a flat series (high=2, low=1)
     sar_oscillating.csv           high,low,sar for an up-then-down series
+    sar_descending.csv            high,low,sar for a descending series
 """
 
 import csv
