@@ -1,0 +1,38 @@
+# Development stack: the app in a container together with the local MongoDB.
+#
+# Build the jar first, since the image copies target/autotrader.jar:
+#   ./mvnw -B package -DskipTests
+# Then start it (builds the image on first run):
+#   docker compose -f docker-compose.dev.yml up -d --build
+# Stop:
+#   docker compose -f docker-compose.dev.yml down
+#
+# Reads MONGO_ROOT_PASSWORD, MONGO_APP_PASSWORD and ENCRYPTION_MASTER_KEY from the repo-root
+# .env file (gitignored). The UI is served on http://<host>:8081/autotrader/ui/backtests.
+include:
+  - docker-compose.local.yml
+
+services:
+  app:
+    image: autotrader-dev:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autotrader-dev
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      # Development settings only: the local Mongo over the compose network, no production
+      # credentials. The encryption key is the same one the Maven loop uses, so data written
+      # through either path stays readable through the other.
+      SPRING_DATA_MONGODB_URI: mongodb://autotrader:${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}@mongo:27017/autotrader
+      MONGODB_SSL_ENABLED: "false"
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?set ENCRYPTION_MASTER_KEY in .env}
+      BITVAVO_API_URL: ${BITVAVO_API_URL:-https://api.bitvavo.com/v2}
+    ports:
+      - "8081:8081"
+    volumes:
+      # Its own subdirectory: the container writes as root and must not clash with the Maven loop
+      - ./logs/autotrader-dev:/app/logs

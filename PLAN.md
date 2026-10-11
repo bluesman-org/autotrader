@@ -6,8 +6,8 @@ add new follow-ups, and keep the status line current.
 
 **Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5), indicators
 pinned to the reference fixtures (PR #6), rules in (PR #7), backtest engine and sweep in (PR #8),
-REST API in (PR #9), in-app UI in (PR #10). Next: a Docker development stack (before Phase 5),
-then Phase 5, the live engine.
+REST API in (PR #9), in-app UI in (PR #10). Phase 4.5 in progress: the Docker development stack
+is in PR #11 (under review); next: Phase 5, the live engine.
 
 ## Objective
 
@@ -86,12 +86,12 @@ then Phase 5, the live engine.
 - [x] Run backtests and browse ranked results (synchronous run with inline validation errors, the
       ranked table with train and validate metrics side by side, recent runs, welcome-page link)
 
-### Phase 4.5 — Docker development stack (before Phase 5)
+### Phase 4.5 — Docker development stack ✅ (PR #11, in review)
 
-- [ ] New docker compose implementation for development: the app in a container against the local
-      MongoDB, usable instead of `./mvnw spring-boot:run` (dev settings, no production credentials)
-- [ ] All Dockerfiles multi-platform: the app image is currently pinned to `linux/arm64`, so it
-      does not build natively on an x86_64 machine
+- [x] New docker compose implementation for development (`docker-compose.dev.yml`: the app
+      container plus the local Mongo, dev settings, no production credentials)
+- [x] All Dockerfiles multi-platform (the image no longer pins `linux/arm64`; the platform is
+      chosen at build time — native locally, `linux/arm64` in the deploy workflow)
 
 ### Phase 5 — Live engine
 

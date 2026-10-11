@@ -1,0 +1,8 @@
+# Build context hygiene: the image only needs the built jar, so keep the repository's secrets,
+# history and build output out of the context that is sent to the daemon.
+.git
+.env
+.env.test
+logs
+target/*
+!target/autotrader.jar
