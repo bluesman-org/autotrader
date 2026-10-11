@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.config;
 
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
+import org.bson.Document;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -10,13 +11,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.index.Index;
 import org.springframework.data.mongodb.core.index.IndexOperations;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,6 +42,8 @@ class MongoIndexInitializerTest {
 
     @Test
     void createsUniqueIndexesForCandlesAndBotConfigurations() {
+        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
+                .thenReturn(aggregationResults());
         when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
         when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
@@ -56,5 +65,24 @@ class MongoIndexInitializerTest {
         assertEquals(1, botConfigurationIndex.getIndexKeys().size());
         assertEquals(1, botConfigurationIndex.getIndexKeys().get("botId"));
         assertEquals(Boolean.TRUE, botConfigurationIndex.getIndexOptions().get("unique"));
+    }
+
+    @Test
+    void withDuplicateBotIds_throwsActionableErrorAndDoesNotCreateTheBotIdIndex() {
+        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
+                .thenReturn(aggregationResults(new Document("_id", "duplicate-bot")));
+        when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
+        when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> mongoIndexInitializer.run(new DefaultApplicationArguments()));
+
+        assertTrue(exception.getMessage().contains("duplicate-bot"));
+        assertTrue(exception.getMessage().contains("bot_configurations.botId"));
+        verify(mongoTemplate, never()).indexOps(BotConfiguration.class);
+    }
+
+    private static AggregationResults<Document> aggregationResults(Document... results) {
+        return new AggregationResults<>(List.of(results), new Document());
     }
 }
