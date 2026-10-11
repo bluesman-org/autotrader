@@ -105,9 +105,12 @@ export MONGODB_SSL_ENABLED=false
 ```
 
 Historical candles are cached in this database. They are excluded from
-`scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo. The application
-creates the indexes it needs at startup (`MongoIndexInitializer`);
-`spring.data.mongodb.auto-index-creation` has no effect with the custom `MongoConfig`.
+`scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo. Indexes are created
+at startup by `MongoIndexInitializer`, explicitly, so that the duplicate-`botId` check runs
+before the unique index and reports an actionable error. `MongoConfig` honors
+`spring.data.mongodb.auto-index-creation`; it is off by default (and not set in
+`application.yml`) — enabling it creates the annotation-declared indexes during repository
+setup instead, before that check can run.
 
 ## Testing
 
@@ -152,7 +155,8 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Follow the existing test patterns (Arrange-Act-Assert)
     - Use mocks for external dependencies
     - Test both happy paths and error cases
-    - Aim for having 100% line coverage. If not possible, do not go below 90%
+    - Minimum 90% line coverage and 100% method coverage, except POJOs and similar classes.
+      All LLM assistants must follow this rule.
 
 4. **Security**:
     - Never commit API keys or secrets to version control

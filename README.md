@@ -1,3 +1,3 @@
 # Autotrader
 
-See .junie/guidelines.md for the full project structure, details, and API documentation.
+See AGENTS.md for the full project structure, details, and API documentation.
