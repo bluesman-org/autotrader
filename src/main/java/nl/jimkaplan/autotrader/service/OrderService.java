@@ -74,7 +74,7 @@ public class OrderService {
      * @return List of orders for the specified bot and time range
      */
     public List<Order> getOrdersByBotIdAndTimeRange(String botId, Instant startTime, Instant endTime) {
-        return orderRepository.findByBotIdAndTimestampBetween(botId, startTime, endTime);
+        return orderRepository.findByBotIdAndTimestampRange(botId, startTime, endTime);
     }
 
     /**

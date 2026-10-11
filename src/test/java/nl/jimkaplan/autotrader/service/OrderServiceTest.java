@@ -125,7 +125,7 @@ class OrderServiceTest {
         List<Order> orders = Collections.singletonList(testOrder);
         Instant startTime = Instant.parse("2023-01-01T00:00:00Z");
         Instant endTime = Instant.parse("2023-01-02T00:00:00Z");
-        when(orderRepository.findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime)).thenReturn(orders);
+        when(orderRepository.findByBotIdAndTimestampRange(TEST_BOT_ID, startTime, endTime)).thenReturn(orders);
 
         // Act
         List<Order> result = orderService.getOrdersByBotIdAndTimeRange(TEST_BOT_ID, startTime, endTime);
@@ -135,7 +135,7 @@ class OrderServiceTest {
         assertEquals(TEST_ORDER_ID, result.getFirst().getId());
         assertEquals(TEST_BOT_ID, result.getFirst().getBotId());
         assertEquals(TEST_TIMESTAMP, result.getFirst().getTimestamp());
-        verify(orderRepository).findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime);
+        verify(orderRepository).findByBotIdAndTimestampRange(TEST_BOT_ID, startTime, endTime);
     }
 
     @Test
