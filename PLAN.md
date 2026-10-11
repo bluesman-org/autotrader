@@ -4,7 +4,7 @@ Tracking document for replacing TradingView with an in-app strategy engine, buil
 data and our own indicators. **Update this file with every PR**: check off completed steps,
 add new follow-ups, and keep the status line current.
 
-**Status (2026-10-11):** Phase 1 complete (PR #4). Next: the coverage follow-up, then Phase 2.
+**Status (2026-10-11):** Phase 1 complete (PR #4). Coverage gate added; next: Phase 2.
 
 ## Objective
 
@@ -83,9 +83,9 @@ add new follow-ups, and keep the status line current.
 
 ## Follow-ups
 
-- [ ] **Coverage** — raise to the AGENTS.md rule (90% line / 100% method, POJOs and bootstrap
-      classes excluded) and add the JaCoCo gate at those thresholds; includes the
-      `GlobalExceptionHandler` null-cause fix *(next task)*
+- [x] **Coverage** — raised to the AGENTS.md rule (90% line / 100% method, POJOs and bootstrap
+      classes excluded) and enforced in CI on every PR (`.github/workflows/coverage.yml`,
+      `./mvnw verify -Ddocker.skip=true`); includes the `GlobalExceptionHandler` null-cause fix
 - [ ] Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
 - [ ] Optionally move the remaining `.junie/` design docs under `docs/`
 - [x] Duplicate `botId` on create returns a clear 400 (PR #4)
