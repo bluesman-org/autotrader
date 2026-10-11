@@ -108,6 +108,21 @@ class MongoIndexInitializerTest {
         verify(mongoTemplate, never()).indexOps(BotConfiguration.class);
     }
 
+    @Test
+    void withMissingCollection_skipsTheLegacyIndexCheck() {
+        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
+                .thenReturn(aggregationResults());
+        when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(false);
+        when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
+        when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
+
+        mongoIndexInitializer.run(new DefaultApplicationArguments());
+
+        verify(indexOperations, never()).getIndexInfo();
+        verify(indexOperations, times(2)).ensureIndex(any(Index.class));
+    }
+
     private static AggregationResults<Document> aggregationResults(Document... results) {
         return new AggregationResults<>(List.of(results), new Document());
     }

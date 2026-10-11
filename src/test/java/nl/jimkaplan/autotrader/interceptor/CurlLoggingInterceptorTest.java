@@ -3,6 +3,7 @@ package nl.jimkaplan.autotrader.interceptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
@@ -16,6 +17,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,6 +47,34 @@ class CurlLoggingInterceptorTest {
     @BeforeEach
     void setUp() {
         interceptor = new CurlLoggingInterceptor(logger);
+    }
+
+    @Test
+    void defaultConstructor_createsItsOwnLogger() {
+        assertNotNull(new CurlLoggingInterceptor());
+    }
+
+    @Test
+    void shouldRedactSensitiveHeaders() throws IOException {
+        // Arrange
+        when(logger.isTraceEnabled()).thenReturn(true);
+        when(request.getMethod()).thenReturn(HttpMethod.GET);
+        when(request.getURI()).thenReturn(URI.create("https://api.bitvavo.com/v2/account"));
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Bitvavo-Access-Key", "super-secret");
+        headers.add("Accept", "application/json");
+        when(request.getHeaders()).thenReturn(headers);
+        when(execution.execute(eq(request), any())).thenReturn(response);
+
+        // Act
+        interceptor.intercept(request, new byte[0], execution);
+
+        // Assert
+        ArgumentCaptor<Object> curlCommand = ArgumentCaptor.forClass(Object.class);
+        verify(logger).trace(eq("Request (curl): {}"), curlCommand.capture());
+        String logged = curlCommand.getValue().toString();
+        assertTrue(logged.contains("REDACTED"));
+        assertFalse(logged.contains("super-secret"));
     }
 
     @Test
