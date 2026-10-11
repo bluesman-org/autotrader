@@ -20,10 +20,11 @@ import java.util.List;
 /**
  * Creates the indexes the application relies on at startup.
  *
- * <p>Spring Data's {@code spring.data.mongodb.auto-index-creation} property is not
- * effective with the custom {@link MongoConfig}, so the indexes are ensured explicitly
- * here instead of relying on the {@code @Indexed} annotations. Index creation is
- * idempotent.</p>
+ * <p>{@code spring.data.mongodb.auto-index-creation} is off by default (see
+ * {@link MongoConfig}), so the {@code @Indexed} annotations alone would not create these
+ * indexes: they are ensured explicitly here, which also lets the duplicate-{@code botId}
+ * check run before the unique index and keeps the definitions unit-tested. Index creation
+ * is idempotent.</p>
  */
 @Slf4j
 @Component
