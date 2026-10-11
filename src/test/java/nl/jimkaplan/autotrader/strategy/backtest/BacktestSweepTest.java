@@ -155,8 +155,11 @@ class BacktestSweepTest {
         SweepDefinition definition = new SweepDefinition(macd, sar, entries, exits, 0.7,
                 RankingMetric.TOTAL_RETURN);
 
-        assertThrows(IllegalArgumentException.class,
+        // The message pins the guard: with the old int product the wrap (-489,934,592) slipped past
+        // it and died later in the capacity allocation with the same exception type
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
                 () -> BacktestSweep.run(zigZagSeries(10), definition, CONFIG));
+        assertTrue(rejected.getMessage().contains("at most " + BacktestSweep.MAX_COMBINATIONS));
     }
 
     @Test
