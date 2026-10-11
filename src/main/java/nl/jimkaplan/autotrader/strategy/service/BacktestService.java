@@ -85,7 +85,13 @@ public class BacktestService {
         if (from >= to) {
             throw new IllegalArgumentException("fromDate must be before toDate");
         }
-        long estimatedCandles = (to - from) / interval.getMillis() + 1;
+        long span = to - from;
+        if (span < 0) {
+            // The timestamps span more than a long can measure: no run may cover that.
+            throw new IllegalArgumentException("the range is longer than the maximum of " + MAX_CANDLES
+                    + " candles");
+        }
+        long estimatedCandles = span / interval.getMillis() + 1;
         if (estimatedCandles > MAX_CANDLES) {
             throw new IllegalArgumentException("the range holds about " + estimatedCandles
                     + " candles; the maximum is " + MAX_CANDLES);

@@ -66,7 +66,8 @@ public class BacktestController {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "Invalid request, no candles for the range, or more than 5000 combinations",
+                    description = "Invalid request: missing or malformed fields, no candles for the range, " +
+                                  "more than 5000 combinations, or a range over the 50,000-candle maximum",
                     content = @Content
             )
     })

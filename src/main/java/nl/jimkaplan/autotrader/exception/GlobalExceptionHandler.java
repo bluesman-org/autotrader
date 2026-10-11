@@ -6,6 +6,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpClientErrorException;
@@ -14,6 +17,8 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.NoSuchElementException;
 
@@ -173,6 +178,79 @@ public class GlobalExceptionHandler {
         );
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Handle request parameter binding errors: a non-numeric number, or a missing required
+     * parameter. Spring's own resolvers map these to 400, but this advice's catch-all would
+     * answer 500 first.
+     */
+    @ExceptionHandler({MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class})
+    public ResponseEntity<ErrorResponse> handleInvalidRequestParameter(Exception ex, WebRequest request) {
+        log.warn("Invalid request parameter: {}", ex.getMessage());
+
+        String path = getRequestPath(request);
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.BAD_REQUEST,
+                "Invalid request parameter",
+                path
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Handle unsupported HTTP methods, which Spring maps to 405 by default.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupportedException(
+            HttpRequestMethodNotSupportedException ex, WebRequest request) {
+        log.warn("Method not allowed: {}", ex.getMessage());
+
+        String path = getRequestPath(request);
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.METHOD_NOT_ALLOWED,
+                "Method not allowed",
+                path
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.METHOD_NOT_ALLOWED);
+    }
+
+    /**
+     * Handle unsupported request media types, which Spring maps to 415 by default.
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotSupportedException(
+            HttpMediaTypeNotSupportedException ex, WebRequest request) {
+        log.warn("Unsupported media type: {}", ex.getMessage());
+
+        String path = getRequestPath(request);
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Unsupported media type",
+                path
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    /**
+     * Handle unknown paths, which Spring maps to 404 by default.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(
+            NoResourceFoundException ex, WebRequest request) {
+        log.warn("No resource found: {}", ex.getMessage());
+
+        String path = getRequestPath(request);
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.NOT_FOUND,
+                "Resource not found",
+                path
+        );
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
     }
 
     /**

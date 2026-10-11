@@ -231,6 +231,22 @@ class BacktestServiceTest {
         verifyNoInteractions(candleHistoryService);
     }
 
+    @Test
+    void run_rejectsRangesWhoseSpanOverflows() {
+        BacktestRunRequest preEpoch = minimalRequest();
+        preEpoch.setFromDate(-1_000_000L);
+        preEpoch.setToDate(Long.MAX_VALUE);
+
+        BacktestRunRequest extreme = minimalRequest();
+        extreme.setFromDate(Long.MIN_VALUE);
+        extreme.setToDate(Long.MAX_VALUE);
+
+        // The subtraction wraps, so a negative span must be rejected as over-long too
+        assertThrows(IllegalArgumentException.class, () -> backtestService.run(preEpoch));
+        assertThrows(IllegalArgumentException.class, () -> backtestService.run(extreme));
+        verifyNoInteractions(candleHistoryService);
+    }
+
     private static BacktestRunRequest minimalRequest() {
         BacktestRunRequest request = new BacktestRunRequest();
         request.setMarket("BTC-EUR");
