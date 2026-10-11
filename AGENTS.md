@@ -104,6 +104,26 @@ export SPRING_DATA_MONGODB_URI="mongodb://autotrader:<MONGO_APP_PASSWORD>@127.0.
 export MONGODB_SSL_ENABLED=false
 ```
 
+### Local Docker development stack
+
+`docker-compose.dev.yml` runs the app and that MongoDB together — it includes
+`docker-compose.local.yml` and adds the app container. The image copies `target/autotrader.jar`, so
+build the jar first:
+
+```bash
+./mvnw -B package -DskipTests
+docker compose -f docker-compose.dev.yml up -d --build
+```
+
+It reads `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD` and `DEV_ENCRYPTION_MASTER_KEY` from the
+repo-root `.env`; the encryption key is a throwaway for development, so bots or exchange keys
+configured through this stack are not portable to another key. The UI is served on
+`http://<host>:8081/autotrader/ui/backtests`. `./mvnw spring-boot:run` remains the faster
+edit/run loop (devtools restarts the app on recompiles); the container is the stable one.
+
+The `Dockerfile` is platform-agnostic: the target platform is chosen at build time — native by
+default, `linux/arm64` in the deploy workflow for the arm64 deployment host.
+
 Historical candles are cached in this database. They are excluded from
 `scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo. Indexes are created
 at startup by `MongoIndexInitializer`, explicitly, so that the duplicate-`botId` check runs

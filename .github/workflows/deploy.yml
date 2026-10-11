@@ -24,6 +24,9 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push with Maven
+        # The deployment host is arm64 while this runner is amd64, so the image is built for arm64
+        env:
+          DOCKER_DEFAULT_PLATFORM: linux/arm64
         run: mvn -B install -Ddocker.username=${{ secrets.DOCKERHUB_USERNAME }} -Ddocker.password=${{ secrets.DOCKERHUB_TOKEN }} --file pom.xml
 
       - name: Copy docker-compose.yml to Remote Server

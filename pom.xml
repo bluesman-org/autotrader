@@ -147,10 +147,6 @@
                             <build>
                                 <contextDir>${project.basedir}</contextDir>
                                 <dockerFile>Dockerfile</dockerFile>
-                                <args>
-                                    <BUILDPLATFORM>linux/arm64</BUILDPLATFORM>
-                                    <TARGETPLATFORM>linux/arm64</TARGETPLATFORM>
-                                </args>
                             </build>
                         </image>
                     </images>

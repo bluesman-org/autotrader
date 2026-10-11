@@ -1,4 +1,6 @@
-FROM --platform=linux/arm64 eclipse-temurin:21-jre-alpine
+# Platform-agnostic: the target platform is chosen at build time (native by default, or via
+# DOCKER_DEFAULT_PLATFORM / docker buildx --platform), so the same file builds on amd64 and arm64.
+FROM eclipse-temurin:21-jre-alpine
 
 # Install the required tzdata package for Alpine
 RUN apk add --no-cache tzdata && \
