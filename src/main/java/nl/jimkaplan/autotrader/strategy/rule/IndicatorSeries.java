@@ -1,6 +1,8 @@
 package nl.jimkaplan.autotrader.strategy.rule;
 
+import nl.jimkaplan.autotrader.strategy.indicator.Macd;
 import nl.jimkaplan.autotrader.strategy.indicator.MacdResult;
+import nl.jimkaplan.autotrader.strategy.indicator.ParabolicSar;
 
 import java.util.Objects;
 
@@ -27,6 +29,21 @@ public record IndicatorSeries(MacdResult macd, double[] sar) {
                 || macd.macd().length != sar.length) {
             throw new IllegalArgumentException("the indicator series must be aligned");
         }
+    }
+
+    /**
+     * Compute the indicator series for a parameter set — the single definition of how parameters
+     * map onto the indicators, shared by single-run evaluation and the sweep.
+     *
+     * @param series The candle series
+     * @param macd   The MACD parameters
+     * @param sar    The Parabolic SAR parameters
+     * @return The indicator series, aligned with the candles
+     */
+    public static IndicatorSeries of(CandleSeries series, MacdParameters macd, ParabolicSarParameters sar) {
+        return new IndicatorSeries(
+                Macd.calculate(series.closes(), macd.fastPeriod(), macd.slowPeriod(), macd.signalPeriod()),
+                ParabolicSar.calculate(series.highs(), series.lows(), sar.acceleration(), sar.maximum()));
     }
 
     /**

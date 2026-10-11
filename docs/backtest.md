@@ -14,7 +14,7 @@ a number that can be ranked.
   bar, exactly as the live engine would re-evaluate.
 - **Fixed EUR amount per buy.** Each buy spends the configured amount, before fees. If the
   remaining cash cannot cover the amount **plus its fee**, the signal is skipped and recorded
-  (`INSUFFICIENT_BALANCE`) rather than partially filled.
+  (`INSUFFICIENT_BALANCE`) against the signal's own bar, rather than partially filled.
 - **Fees per side, in EUR.** A buy costs `amount + amount × feeRate`; a sell returns
   `gross − gross × feeRate`, where `gross = quantity × price`. This mirrors the exchange's
   charging model. The default is the account's taker rate (**0.20%** — market orders take
@@ -47,8 +47,16 @@ portion:
 - Indicators are computed once over the whole range (the validate side is allowed to look back
   into earlier data — that is past information, not look-ahead), and both sides start from the
   same initial capital.
+- The configured warm-up applies to the **train** side only: the validate side trades from its
+  first bar because its indicators already carry the earlier data's warm-up. The two sides
+  therefore trade under different warm-up conditions by design.
 - Each combination is ranked by the configured metric on the **train** side; the validate side
   is reported next to it so a strategy that only worked in-sample is visible.
+- **A combination whose train side never traded ranks last**, whatever the metric: a flat curve
+  is no evidence, and it would otherwise win "best drawdown" (0%) over every strategy that
+  risked capital.
+- Win rate is a plain ratio, so a single lucky trade scores 100% — read it together with the
+  trade count.
 - Ranking is stable and deterministic: ties keep the combination's grid order.
 
 ## Sweep bounds

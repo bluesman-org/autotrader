@@ -1,8 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.rule;
 
-import nl.jimkaplan.autotrader.strategy.indicator.Macd;
 import nl.jimkaplan.autotrader.strategy.indicator.MacdResult;
-import nl.jimkaplan.autotrader.strategy.indicator.ParabolicSar;
 
 /**
  * Evaluates strategies on closed candles.
@@ -25,11 +23,7 @@ public final class StrategyEvaluator {
      * @return The indicator series, aligned with the candles
      */
     public static IndicatorSeries indicators(CandleSeries series, StrategyDefinition strategy) {
-        MacdParameters macd = strategy.macd();
-        ParabolicSarParameters sar = strategy.sar();
-        return new IndicatorSeries(
-                Macd.calculate(series.closes(), macd.fastPeriod(), macd.slowPeriod(), macd.signalPeriod()),
-                ParabolicSar.calculate(series.highs(), series.lows(), sar.acceleration(), sar.maximum()));
+        return IndicatorSeries.of(series, strategy.macd(), strategy.sar());
     }
 
     /**

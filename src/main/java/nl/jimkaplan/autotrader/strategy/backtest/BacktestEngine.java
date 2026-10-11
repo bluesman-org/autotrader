@@ -56,7 +56,8 @@ public final class BacktestEngine {
                 double price = series.opens()[i];
                 double fee = config.amountPerBuy() * config.feeRate();
                 if (cash < config.amountPerBuy() + fee) {
-                    skippedSignals.add(new SkippedSignal(i, series.times()[i], SkipReason.INSUFFICIENT_BALANCE));
+                    // Recorded against the signal's own bar (the fill would have happened here)
+                    skippedSignals.add(new SkippedSignal(i - 1, series.times()[i - 1], SkipReason.INSUFFICIENT_BALANCE));
                 } else {
                     amountSpent = config.amountPerBuy();
                     entryFee = fee;

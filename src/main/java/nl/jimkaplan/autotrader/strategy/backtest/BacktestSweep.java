@@ -1,7 +1,5 @@
 package nl.jimkaplan.autotrader.strategy.backtest;
 
-import nl.jimkaplan.autotrader.strategy.indicator.Macd;
-import nl.jimkaplan.autotrader.strategy.indicator.ParabolicSar;
 import nl.jimkaplan.autotrader.strategy.rule.CandleSeries;
 import nl.jimkaplan.autotrader.strategy.rule.IndicatorSeries;
 import nl.jimkaplan.autotrader.strategy.rule.MacdParameters;
@@ -43,11 +41,16 @@ public final class BacktestSweep {
      *                                  too short for the split
      */
     public static SweepResult run(CandleSeries series, SweepDefinition definition, BacktestConfig config) {
-        int combinations = definition.macdParameters().size() * definition.sarParameters().size()
-                * definition.entryRules().size() * definition.exitRules().size();
-        if (combinations > MAX_COMBINATIONS) {
-            throw new IllegalArgumentException("a sweep may evaluate at most " + MAX_COMBINATIONS
-                    + " combinations, requested " + combinations);
+        // Fold with a long accumulator, checking after each factor: the product cannot overflow
+        // and cannot be wrapped past the guard
+        long combinations = 1;
+        for (long size : new long[]{definition.macdParameters().size(), definition.sarParameters().size(),
+                definition.entryRules().size(), definition.exitRules().size()}) {
+            combinations *= size;
+            if (combinations > MAX_COMBINATIONS) {
+                throw new IllegalArgumentException("a sweep may evaluate at most " + MAX_COMBINATIONS
+                        + " combinations");
+            }
         }
         int splitIndex = (int) Math.floor(series.length() * definition.trainRatio());
         if (splitIndex < 1 || splitIndex >= series.length()) {
@@ -61,12 +64,10 @@ public final class BacktestSweep {
         BacktestConfig validateConfig = new BacktestConfig(config.initialCapital(), config.amountPerBuy(),
                 config.feeRate(), 0);
 
-        List<SweepEntry> entries = new ArrayList<>(combinations);
+        List<SweepEntry> entries = new ArrayList<>((int) combinations);
         for (MacdParameters macd : definition.macdParameters()) {
             for (ParabolicSarParameters sar : definition.sarParameters()) {
-                IndicatorSeries indicators = new IndicatorSeries(
-                        Macd.calculate(series.closes(), macd.fastPeriod(), macd.slowPeriod(), macd.signalPeriod()),
-                        ParabolicSar.calculate(series.highs(), series.lows(), sar.acceleration(), sar.maximum()));
+                IndicatorSeries indicators = IndicatorSeries.of(series, macd, sar);
                 List<boolean[]> entrySignalSets = new ArrayList<>(definition.entryRules().size());
                 for (RuleGroup entryRules : definition.entryRules()) {
                     entrySignalSets.add(StrategyEvaluator.evaluate(entryRules, series, indicators));
@@ -94,11 +95,16 @@ public final class BacktestSweep {
             }
         }
 
-        Comparator<SweepEntry> comparator = Comparator.comparingDouble(
+        Comparator<SweepEntry> byMetric = Comparator.comparingDouble(
                 entry -> definition.rankingMetric().value(entry.train()));
         if (definition.rankingMetric().higherIsBetter()) {
-            comparator = comparator.reversed();
+            byMetric = byMetric.reversed();
         }
+        // A combination whose train side never traded has no evidence; it ranks last whatever the
+        // metric says (a flat curve would otherwise win "best drawdown")
+        Comparator<SweepEntry> comparator = Comparator
+                .comparingInt((SweepEntry entry) -> entry.train().tradeCount() == 0 ? 1 : 0)
+                .thenComparing(byMetric);
         entries.sort(comparator);
         return new SweepResult(entries.size(), List.copyOf(entries));
     }
