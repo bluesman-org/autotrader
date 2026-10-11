@@ -29,6 +29,11 @@ public final class Macd {
      */
     public static final int DEFAULT_SIGNAL_PERIOD = 9;
 
+    /**
+     * Upper bound for all periods, mirroring the reference implementation's bound.
+     */
+    public static final int MAX_PERIOD = 100_000;
+
     private Macd() {
     }
 
@@ -36,9 +41,9 @@ public final class Macd {
      * Calculate the MACD line, signal line and histogram.
      *
      * @param closes       Closing prices, oldest first
-     * @param fastPeriod   Fast EMA period, at least 1 and at most {@code slowPeriod}
-     * @param slowPeriod   Slow EMA period, at least {@code fastPeriod}
-     * @param signalPeriod Signal EMA period, at least 1
+     * @param fastPeriod   Fast EMA period, between 1 and {@link #MAX_PERIOD} and at most {@code slowPeriod}
+     * @param slowPeriod   Slow EMA period, between {@code fastPeriod} and {@link #MAX_PERIOD}
+     * @param signalPeriod Signal EMA period, between 1 and {@link #MAX_PERIOD}
      * @return The three series, aligned with the input
      * @throws IllegalArgumentException if an argument is out of range
      */
@@ -46,14 +51,14 @@ public final class Macd {
         if (closes == null) {
             throw new IllegalArgumentException("closes must not be null");
         }
-        if (fastPeriod < 1) {
-            throw new IllegalArgumentException("fastPeriod must be at least 1");
+        if (fastPeriod < 1 || fastPeriod > MAX_PERIOD) {
+            throw new IllegalArgumentException("fastPeriod must be between 1 and " + MAX_PERIOD);
         }
-        if (slowPeriod < fastPeriod) {
-            throw new IllegalArgumentException("slowPeriod must be at least fastPeriod");
+        if (slowPeriod < fastPeriod || slowPeriod > MAX_PERIOD) {
+            throw new IllegalArgumentException("slowPeriod must be between fastPeriod and " + MAX_PERIOD);
         }
-        if (signalPeriod < 1) {
-            throw new IllegalArgumentException("signalPeriod must be at least 1");
+        if (signalPeriod < 1 || signalPeriod > MAX_PERIOD) {
+            throw new IllegalArgumentException("signalPeriod must be between 1 and " + MAX_PERIOD);
         }
 
         int length = closes.length;
@@ -64,7 +69,8 @@ public final class Macd {
         Arrays.fill(signal, Double.NaN);
         Arrays.fill(histogram, Double.NaN);
 
-        int minimumLength = slowPeriod + signalPeriod - 1;
+        // Widened so the sum cannot wrap even at the maximum periods
+        long minimumLength = (long) slowPeriod + signalPeriod - 1;
         if (length < minimumLength) {
             return new MacdResult(macd, signal, histogram);
         }

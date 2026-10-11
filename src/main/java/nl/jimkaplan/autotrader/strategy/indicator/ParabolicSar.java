@@ -31,8 +31,8 @@ public final class ParabolicSar {
      *
      * @param highs        Bar highs, oldest first
      * @param lows         Bar lows, oldest first
-     * @param acceleration Acceleration factor, at least 0; capped to {@code maximum} before use
-     * @param maximum      Maximum acceleration factor, at least 0
+     * @param acceleration Acceleration factor: finite, at least 0; capped to {@code maximum} before use
+     * @param maximum      Maximum acceleration factor: finite, at least 0
      * @return The SAR, aligned with the bars
      * @throws IllegalArgumentException if an argument is out of range or the arrays differ in length
      */
@@ -46,11 +46,11 @@ public final class ParabolicSar {
         if (highs.length != lows.length) {
             throw new IllegalArgumentException("highs and lows must have the same length");
         }
-        if (acceleration < 0) {
-            throw new IllegalArgumentException("acceleration must not be negative");
+        if (!Double.isFinite(acceleration) || acceleration < 0) {
+            throw new IllegalArgumentException("acceleration must be finite and not negative");
         }
-        if (maximum < 0) {
-            throw new IllegalArgumentException("maximum must not be negative");
+        if (!Double.isFinite(maximum) || maximum < 0) {
+            throw new IllegalArgumentException("maximum must be finite and not negative");
         }
 
         double[] sarValues = new double[highs.length];
