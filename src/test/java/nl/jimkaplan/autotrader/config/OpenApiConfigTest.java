@@ -24,7 +24,8 @@ import static org.mockito.Mockito.mock;
 class OpenApiConfigTest {
 
     private static final String SPEC_JSON =
-            "{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"autotrader\",\"version\":\"v1\"}}";
+            "{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"autotrader\",\"version\":\"v1\"},"
+                    + "\"tags\":[{\"name\":\"Test\"}]}";
 
     @TempDir
     Path exportDir;
@@ -60,9 +61,12 @@ class OpenApiConfigTest {
         Path json = exportDir.resolve("autotrader-openapi.json");
         Path yaml = exportDir.resolve("autotrader-openapi.yaml");
         assertTrue(Files.exists(json));
-        assertEquals(SPEC_JSON, Files.readString(json));
         assertTrue(Files.exists(yaml));
-        assertTrue(Files.readString(yaml).contains("openapi"));
+        // The exports match the committed style: 2-space pretty JSON and indented YAML sequences
+        String jsonSpec = Files.readString(json);
+        assertTrue(jsonSpec.contains("\n  \"openapi\""));
+        assertEquals(SPEC_JSON, jsonSpec.replaceAll("\\s+", ""));
+        assertTrue(Files.readString(yaml).contains("\n  - "));
     }
 
     @Test

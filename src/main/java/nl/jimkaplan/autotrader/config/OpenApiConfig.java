@@ -1,7 +1,10 @@
 package nl.jimkaplan.autotrader.config;
 
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.core.util.Separators;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -82,18 +85,23 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
                 log.info("Created directory for OpenAPI specification export: {}", exportDirPath);
             }
 
-            // Export OpenAPI specification to JSON file
+            // Export OpenAPI specification to JSON file, pretty-printed to match the committed spec
             Path jsonFilePath = exportDirPath.resolve(OPENAPI_JSON_FILENAME);
-            Files.writeString(jsonFilePath, jsonSpec);
-            log.info("Exported OpenAPI specification to JSON file: {}", jsonFilePath);
-
-            // Export OpenAPI specification to YAML file
-            // Convert JSON to YAML
             ObjectMapper jsonMapper = new ObjectMapper();
             Object jsonObject = jsonMapper.readValue(jsonSpec, Object.class);
-            ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-            String yamlSpec = yamlMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonObject);
+            Separators separators = Separators.createDefaultInstance()
+                    .withObjectFieldValueSpacing(Separators.Spacing.AFTER);
+            String prettyJson = jsonMapper.writer(new DefaultPrettyPrinter().withSeparators(separators))
+                    .writeValueAsString(jsonObject);
+            Files.writeString(jsonFilePath, prettyJson + System.lineSeparator());
+            log.info("Exported OpenAPI specification to JSON file: {}", jsonFilePath);
+
+            // Export OpenAPI specification to YAML file; sequences are indented like the committed spec
             Path yamlFilePath = exportDirPath.resolve(OPENAPI_YAML_FILENAME);
+            YAMLFactory yamlFactory = new YAMLFactory();
+            yamlFactory.enable(YAMLGenerator.Feature.INDENT_ARRAYS_WITH_INDICATOR);
+            ObjectMapper yamlMapper = new ObjectMapper(yamlFactory);
+            String yamlSpec = yamlMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonObject);
             Files.writeString(yamlFilePath, yamlSpec);
             log.info("Exported OpenAPI specification to YAML file: {}", yamlFilePath);
 

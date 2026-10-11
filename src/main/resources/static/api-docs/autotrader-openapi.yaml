@@ -10,6 +10,8 @@ servers:
 tags:
   - name: "TradingView Webhook"
     description: "API for receiving and processing TradingView alerts"
+  - name: "Backtests"
+    description: "API for running strategy backtests over stored candles"
   - name: "Bot Configuration"
     description: "API for managing trading bot configurations"
   - name: "Transaction History"
@@ -73,7 +75,8 @@ paths:
       parameters:
         - name: "botId"
           in: "path"
-          description: "ID of the bot configuration to generate a webhook API key for"
+          description: "ID of the bot configuration to generate a webhook API key\
+            \ for"
           required: true
           schema:
             type: "string"
@@ -106,6 +109,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BotConfigurationResponse"
+  /api/backtests:
+    get:
+      tags:
+        - "Backtests"
+      summary: "List recent backtest runs"
+      description: "Returns the most recent runs, newest first. Stored entries are\
+        \ omitted from the list."
+      operationId: "recent"
+      parameters:
+        - name: "limit"
+          in: "query"
+          description: "Maximum number of runs to return (1-100)"
+          required: false
+          schema:
+            type: "integer"
+            format: "int32"
+            default: 20
+      responses:
+        "200":
+          description: "Runs returned"
+          content:
+            application/json: {}
+        "400":
+          description: "limit is out of range"
+    post:
+      tags:
+        - "Backtests"
+      summary: "Run a backtest sweep"
+      description: "Fetches the requested candles, sweeps the entry×exit rule matrices\
+        \ and the indicator parameter grids (at most 5000 combinations), optimises\
+        \ on the earlier part of the range and verifies on the held-out newer part,\
+        \ then stores the top ranked entries. Fields left out fall back to their defaults\
+        \ (1000 EUR capital, 100 EUR per buy, 0.20% fee per side, 200-candle warm-up,\
+        \ 0.7 split, TOTAL_RETURN ranking, 12/26/9 MACD, 0.02/0.2 SAR, a MACD bullish\
+        \ crossover entry and a bearish SAR crossover exit)."
+      operationId: "run"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BacktestRunRequest"
+        required: true
+      responses:
+        "201":
+          description: "Backtest run completed and stored"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BacktestRun"
+        "400":
+          description: "Invalid request, no candles for the range, or more than 5000\
+            \ combinations"
   /api/bots/deactivate/{botId}:
     patch:
       tags:
@@ -263,6 +318,29 @@ paths:
           description: "Invalid bot ID or request parameters"
         "404":
           description: "Bot configuration not found within active configurations"
+  /api/backtests/{id}:
+    get:
+      tags:
+        - "Backtests"
+      summary: "Get a backtest run"
+      description: "Returns a stored backtest run and its ranked entries."
+      operationId: "get"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the backtest run"
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Run found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BacktestRun"
+        "404":
+          description: "No run with that ID"
 components:
   schemas:
     TradingViewAlertRequest:
@@ -309,6 +387,247 @@ components:
         operatorId:
           type: "integer"
           format: "int64"
+    BacktestRunRequest:
+      type: "object"
+      properties:
+        market:
+          type: "string"
+          description: "Market in Bitvavo format"
+          example: "BTC-EUR"
+        interval:
+          type: "string"
+          description: "Candlestick interval code"
+          example: "1h"
+        fromDate:
+          type: "integer"
+          format: "int64"
+          description: "Range start, epoch milliseconds"
+          example: 1783069200000
+        toDate:
+          type: "integer"
+          format: "int64"
+          description: "Range end, epoch milliseconds"
+          example: 1791705600000
+        initialCapital:
+          type: "number"
+          format: "double"
+          description: "Starting cash in EUR"
+          example: 1000
+        amountPerBuy:
+          type: "number"
+          format: "double"
+          description: "Fixed EUR amount per buy, before fees"
+          example: 100
+        feeRate:
+          type: "number"
+          format: "double"
+          description: "Fee per side as a fraction; defaults to the account's taker\
+            \ rate"
+          example: 0.002
+        warmUpCandles:
+          type: "integer"
+          format: "int32"
+          description: "Leading candles that are never traded"
+          example: 200
+        trainRatio:
+          type: "number"
+          format: "double"
+          description: "Share of the range the sweep optimises on"
+          example: 0.7
+        rankingMetric:
+          type: "string"
+          description: "Metric to rank by"
+          enum:
+            - "TOTAL_RETURN"
+            - "PROFIT_FACTOR"
+            - "MAX_DRAWDOWN"
+            - "WIN_RATE"
+          example: "TOTAL_RETURN"
+        macdParameters:
+          type: "array"
+          description: "MACD parameter candidates; defaults to 12/26/9"
+          items:
+            $ref: "#/components/schemas/MacdParametersRequest"
+        sarParameters:
+          type: "array"
+          description: "Parabolic SAR parameter candidates; defaults to 0.02/0.2"
+          items:
+            $ref: "#/components/schemas/SarParametersRequest"
+        entryRules:
+          type: "array"
+          description: "Entry rule sets to sweep; defaults to a MACD bullish crossover"
+          items:
+            $ref: "#/components/schemas/RuleSetRequest"
+        exitRules:
+          type: "array"
+          description: "Exit rule sets to sweep; defaults to a bearish SAR crossover"
+          items:
+            $ref: "#/components/schemas/RuleSetRequest"
+    MacdParametersRequest:
+      type: "object"
+      properties:
+        fastPeriod:
+          type: "integer"
+          format: "int32"
+          description: "Fast EMA period"
+          example: 12
+        slowPeriod:
+          type: "integer"
+          format: "int32"
+          description: "Slow EMA period"
+          example: 26
+        signalPeriod:
+          type: "integer"
+          format: "int32"
+          description: "Signal EMA period"
+          example: 9
+    RuleSetRequest:
+      type: "object"
+      properties:
+        operator:
+          type: "string"
+          description: "How the conditions combine"
+          enum:
+            - "ALL"
+            - "ANY"
+          example: "ALL"
+        conditions:
+          type: "array"
+          description: "The conditions"
+          example:
+            - "MACD_BULLISH_CROSSOVER"
+          items:
+            type: "string"
+            enum:
+              - "MACD_BULLISH_CROSSOVER"
+              - "MACD_BEARISH_CROSSOVER"
+              - "MACD_ABOVE_SIGNAL"
+              - "MACD_BELOW_SIGNAL"
+              - "HISTOGRAM_POSITIVE"
+              - "HISTOGRAM_NEGATIVE"
+              - "PRICE_ABOVE_SAR"
+              - "PRICE_BELOW_SAR"
+              - "SAR_BULLISH_CROSSOVER"
+              - "SAR_BEARISH_CROSSOVER"
+    SarParametersRequest:
+      type: "object"
+      properties:
+        acceleration:
+          type: "number"
+          format: "double"
+          description: "Acceleration factor"
+          example: 0.02
+        maximum:
+          type: "number"
+          format: "double"
+          description: "Maximum acceleration factor"
+          example: 0.2
+    BacktestRun:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+        createdAt:
+          type: "string"
+          format: "date-time"
+        updatedAt:
+          type: "string"
+          format: "date-time"
+        runAt:
+          type: "string"
+          format: "date-time"
+        market:
+          type: "string"
+        interval:
+          type: "string"
+        fromTime:
+          type: "integer"
+          format: "int64"
+        toTime:
+          type: "integer"
+          format: "int64"
+        candleCount:
+          type: "integer"
+          format: "int32"
+        initialCapital:
+          type: "number"
+          format: "double"
+        amountPerBuy:
+          type: "number"
+          format: "double"
+        feeRate:
+          type: "number"
+          format: "double"
+        warmUpCandles:
+          type: "integer"
+          format: "int32"
+        trainRatio:
+          type: "number"
+          format: "double"
+        rankingMetric:
+          type: "string"
+        combinationsEvaluated:
+          type: "integer"
+          format: "int32"
+        entries:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/BacktestRunEntry"
+    BacktestRunEntry:
+      type: "object"
+      properties:
+        fastPeriod:
+          type: "integer"
+          format: "int32"
+        slowPeriod:
+          type: "integer"
+          format: "int32"
+        signalPeriod:
+          type: "integer"
+          format: "int32"
+        acceleration:
+          type: "number"
+          format: "double"
+        maximum:
+          type: "number"
+          format: "double"
+        entryOperator:
+          type: "string"
+        entryConditions:
+          type: "array"
+          items:
+            type: "string"
+        exitOperator:
+          type: "string"
+        exitConditions:
+          type: "array"
+          items:
+            type: "string"
+        train:
+          $ref: "#/components/schemas/BacktestRunMetrics"
+        validate:
+          $ref: "#/components/schemas/BacktestRunMetrics"
+    BacktestRunMetrics:
+      type: "object"
+      properties:
+        finalEquity:
+          type: "number"
+          format: "double"
+        totalReturnPercent:
+          type: "number"
+          format: "double"
+        maxDrawdownPercent:
+          type: "number"
+          format: "double"
+        tradeCount:
+          type: "integer"
+          format: "int32"
+        winRatePercent:
+          type: "number"
+          format: "double"
+        profitFactor:
+          type: "number"
+          format: "double"
     GetAccountHistoryResponse:
       type: "object"
       properties:
