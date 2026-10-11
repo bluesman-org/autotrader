@@ -1,14 +1,18 @@
 package nl.jimkaplan.autotrader.strategy.backtest;
 
 import nl.jimkaplan.autotrader.strategy.rule.CandleSeries;
+import nl.jimkaplan.autotrader.strategy.rule.IndicatorSeries;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.MacdParameters;
 import nl.jimkaplan.autotrader.strategy.rule.ParabolicSarParameters;
 import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
 import nl.jimkaplan.autotrader.strategy.rule.RuleGroup;
+import nl.jimkaplan.autotrader.strategy.rule.StrategyEvaluator;
+import nl.jimkaplan.autotrader.strategy.rule.StrategySignals;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,6 +118,80 @@ class BacktestSweepTest {
     }
 
     @Test
+    void ranksNeverTradingCombinationsLastEvenWhenTheirDrawdownIsZero() {
+        // On a strictly rising series the below-SAR rule never fires: its flat curve has 0%
+        // drawdown, while the trading rule dips below its peak by the entry fee — the flat result
+        // must still rank last
+        CandleSeries series = risingSeries(40);
+        SweepDefinition definition = definition(List.of(new MacdParameters(3, 5, 2)),
+                List.of(NEVER, TRADES), RankingMetric.MAX_DRAWDOWN);
+
+        SweepResult result = BacktestSweep.run(series, definition,
+                new BacktestConfig(1000.0, 100.0, 0.002, 0));
+
+        SweepEntry best = result.ranked().get(0);
+        assertEquals(TRADES, best.entryRules());
+        assertTrue(best.train().tradeCount() > 0);
+        assertTrue(best.train().maxDrawdownPercent() > 0);
+        SweepEntry last = result.ranked().get(1);
+        assertEquals(NEVER, last.entryRules());
+        assertEquals(0, last.train().tradeCount());
+        assertEquals(0.0, last.train().maxDrawdownPercent(), 1e-9);
+    }
+
+    @Test
+    void theCombinationCapCannotBeWrappedByOverflow() {
+        // Four lists of 300: the int product (8.1e9) used to wrap negative and slip past the guard
+        List<MacdParameters> macd = new ArrayList<>();
+        List<ParabolicSarParameters> sar = new ArrayList<>();
+        List<RuleGroup> entries = new ArrayList<>();
+        List<RuleGroup> exits = new ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            macd.add(new MacdParameters(1, 1, 1));
+            sar.add(ParabolicSarParameters.defaults());
+            entries.add(TRADES);
+            exits.add(NEVER);
+        }
+        SweepDefinition definition = new SweepDefinition(macd, sar, entries, exits, 0.7,
+                RankingMetric.TOTAL_RETURN);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> BacktestSweep.run(zigZagSeries(10), definition, CONFIG));
+    }
+
+    @Test
+    void theSplitBoundaryDecidesWhichBarsBelongToWhichSide() {
+        // Rises for the first 70% and falls afterwards: the train side profits, the validate side
+        // does not — and the exact boundary is pinned by rebuilding both slices independently
+        CandleSeries series = riseThenFallSeries(50);
+        MacdParameters macd = new MacdParameters(3, 5, 2);
+        SweepDefinition definition = new SweepDefinition(List.of(macd),
+                List.of(ParabolicSarParameters.defaults()), List.of(TRADES), List.of(NEVER),
+                0.7, RankingMetric.TOTAL_RETURN);
+
+        SweepResult result = BacktestSweep.run(series, definition, CONFIG);
+
+        SweepEntry entry = result.ranked().get(0);
+        assertTrue(entry.train().totalReturnPercent() > 0);
+        assertTrue(entry.validate().totalReturnPercent() <= 0);
+
+        int split = (int) Math.floor(series.length() * 0.7);
+        IndicatorSeries indicators = IndicatorSeries.of(series, macd, ParabolicSarParameters.defaults());
+        boolean[] entrySignals = StrategyEvaluator.evaluate(TRADES, series, indicators);
+        boolean[] exitSignals = StrategyEvaluator.evaluate(NEVER, series, indicators);
+        BacktestMetrics expectedTrain = BacktestEngine.run(slice(series, 0, split),
+                new StrategySignals(Arrays.copyOfRange(entrySignals, 0, split),
+                        Arrays.copyOfRange(exitSignals, 0, split)), CONFIG).metrics();
+        BacktestMetrics expectedValidate = BacktestEngine.run(slice(series, split, series.length()),
+                new StrategySignals(Arrays.copyOfRange(entrySignals, split, entrySignals.length),
+                        Arrays.copyOfRange(exitSignals, split, exitSignals.length)),
+                new BacktestConfig(1000, 100, 0.0, 0)).metrics();
+
+        assertEquals(expectedTrain, entry.train());
+        assertEquals(expectedValidate, entry.validate());
+    }
+
+    @Test
     void rejectsASplitThatLeavesNoBarsOnOneSide() {
         CandleSeries oneBar = risingSeries(1);
         SweepDefinition definition = definition(List.of(new MacdParameters(3, 5, 2)),
@@ -126,6 +204,31 @@ class BacktestSweepTest {
                                               RankingMetric metric) {
         return new SweepDefinition(macd, List.of(ParabolicSarParameters.defaults()), entries,
                 List.of(NEVER), 0.7, metric);
+    }
+
+    private static CandleSeries slice(CandleSeries series, int from, int to) {
+        return new CandleSeries(Arrays.copyOfRange(series.opens(), from, to),
+                Arrays.copyOfRange(series.highs(), from, to),
+                Arrays.copyOfRange(series.lows(), from, to),
+                Arrays.copyOfRange(series.closes(), from, to),
+                Arrays.copyOfRange(series.times(), from, to));
+    }
+
+    private static CandleSeries riseThenFallSeries(int length) {
+        double[] opens = new double[length];
+        double[] highs = new double[length];
+        double[] lows = new double[length];
+        double[] closes = new double[length];
+        long[] times = new long[length];
+        int peak = (int) Math.floor(length * 0.7);
+        for (int i = 0; i < length; i++) {
+            closes[i] = i < peak ? 100.0 + i : 100.0 + peak - (i - peak) * 3.0;
+            opens[i] = closes[i];
+            highs[i] = closes[i] + 0.5;
+            lows[i] = closes[i] - 0.5;
+            times[i] = i * 3_600_000L;
+        }
+        return new CandleSeries(opens, highs, lows, closes, times);
     }
 
     private static CandleSeries risingSeries(int length) {

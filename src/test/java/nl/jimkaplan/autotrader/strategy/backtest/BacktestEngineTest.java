@@ -103,8 +103,11 @@ class BacktestEngineTest {
         assertEquals(100.0, result.metrics().finalEquity(), 1e-9);
         assertEquals(2, result.skippedSignals().size());
         assertEquals(SkipReason.INSUFFICIENT_BALANCE, result.skippedSignals().get(0).reason());
-        assertEquals(1, result.skippedSignals().get(0).index());
-        assertEquals(3, result.skippedSignals().get(1).index());
+        // Recorded against the signal's own bar, not the bar the fill would have happened at
+        assertEquals(0, result.skippedSignals().get(0).index());
+        assertEquals(1_000L, result.skippedSignals().get(0).time());
+        assertEquals(2, result.skippedSignals().get(1).index());
+        assertEquals(3_000L, result.skippedSignals().get(1).time());
     }
 
     @Test
