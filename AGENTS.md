@@ -103,6 +103,7 @@ gitignored.
 docker compose -f docker-compose.local.yml up -d
 export SPRING_DATA_MONGODB_URI="mongodb://autotrader:<MONGO_APP_PASSWORD>@127.0.0.1:27017/autotrader"
 export MONGODB_SSL_ENABLED=false
+export ENCRYPTION_MASTER_KEY="$(grep -m1 '^ENCRYPTION_MASTER_KEY=' .env | cut -d= -f2-)"
 ```
 
 ### Local Docker development stack
@@ -117,10 +118,11 @@ docker compose -f docker-compose.dev.yml up -d --build
 ```
 
 It reads `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD` and `ENCRYPTION_MASTER_KEY` from the
-repo-root `.env`; it shares the key — and the database — with the `spring-boot:run` loop, so bots
-and exchange credentials stay readable through either path. The UI is served on
-`http://<host>:8081/autotrader/ui/backtests`. `./mvnw spring-boot:run` remains the faster
-edit/run loop (devtools restarts the app on recompiles); the container is the stable one.
+repo-root `.env`; nothing loads `.env` automatically, so the `spring-boot:run` loop shares the
+key and the database only while it exports that same value (as in the example above). With the
+same key on both sides, bots and exchange credentials stay readable through either path. The UI
+is served on `http://<host>:8081/autotrader/ui/backtests`. `./mvnw spring-boot:run` remains the
+faster edit/run loop (devtools restarts the app on recompiles); the container is the stable one.
 
 The `Dockerfile` is platform-agnostic: the target platform is chosen at build time — native for
 local builds, and `-Ddocker.platforms=linux/arm64` (buildx) in the deploy workflow for the arm64

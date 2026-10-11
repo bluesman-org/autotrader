@@ -23,6 +23,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up QEMU
+        # Registers binfmt emulation: the arm64 build runs the Dockerfile's apk step for another
+        # architecture, which the hosted runner cannot execute natively.
+        uses: docker/setup-qemu-action@v4
+
       - name: Build and push with Maven
         # The deployment host is arm64 while this runner is amd64, so the image is built with buildx
         # for arm64 (DOCKER_DEFAULT_PLATFORM would not reach the docker-maven-plugin).

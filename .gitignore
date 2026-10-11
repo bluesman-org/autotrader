@@ -32,7 +32,12 @@ build/
 !**/src/test/**/build/
 
 ### Logs ###
-logs/
+logs/*
+# The dev compose mounts logs/autotrader-dev; tracking a placeholder keeps that directory
+# (and therefore logs/) from being created root-owned by Docker on a fresh clone.
+!logs/autotrader-dev/
+logs/autotrader-dev/*
+!logs/autotrader-dev/.gitkeep
 
 ### VS Code ###
 .vscode/
