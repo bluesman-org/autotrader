@@ -27,12 +27,14 @@ import java.net.ConnectException;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -89,6 +91,50 @@ class BitvavoApiClientTest {
                 any(),
                 eq(Object.class)
         );
+    }
+
+    @Test
+    void testGetPublicRequest_doesNotAuthenticate() {
+        // Arrange
+        String endpoint = "/BTC-EUR/candles?interval=1h&limit=2";
+        String[][] candles = {{"1704067200000", "1.0", "2.0", "0.5", "1.5", "10.5"}};
+        when(restTemplate.exchange(
+                eq(apiUrl + endpoint),
+                eq(HttpMethod.GET),
+                any(),
+                eq(String[][].class)
+        )).thenReturn(ResponseEntity.ok(candles));
+
+        // Act
+        String[][] result = bitvavoApiClient.getPublic(endpoint, String[][].class);
+
+        // Assert
+        assertEquals(1, result.length);
+        assertArrayEquals(candles[0], result[0]);
+        verify(restTemplate).exchange(
+                eq(apiUrl + endpoint),
+                eq(HttpMethod.GET),
+                any(),
+                eq(String[][].class)
+        );
+        verifyNoInteractions(authenticationService);
+    }
+
+    @Test
+    void testGetPublicRequest_withHttpClientErrorException_propagatesException() {
+        // Arrange
+        String endpoint = "/BTC-EUR/candles?interval=1h&limit=2";
+        when(restTemplate.exchange(
+                anyString(),
+                eq(HttpMethod.GET),
+                any(),
+                eq(String[][].class)
+        )).thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST, "Bad Request"));
+
+        // Act & Assert
+        HttpClientErrorException exception = assertThrows(HttpClientErrorException.class,
+                () -> bitvavoApiClient.getPublic(endpoint, String[][].class));
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
     }
 
     @Test

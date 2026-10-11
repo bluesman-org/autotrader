@@ -65,6 +65,34 @@ public class BitvavoApiClient {
     }
 
     /**
+     * Sends an unauthenticated GET request to a public Bitvavo endpoint.
+     * Public endpoints (e.g. candlesticks) do not require API credentials.
+     *
+     * @param endpoint     API endpoint (e.g., "/BTC-EUR/candles?interval=1h")
+     * @param responseType Class of the expected response
+     * @return Response from the API
+     */
+    public <T> T getPublic(String endpoint, Class<T> responseType) {
+        log.debug("Sending public GET request to Bitvavo API: {}", endpoint);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Accept", "application/json");
+        HttpEntity<?> entity = new HttpEntity<>(headers);
+        String url = apiUrl + endpoint;
+
+        log.debug("Making request to: {}", url);
+        ResponseEntity<T> response = restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                responseType
+        );
+
+        log.debug("Received response from Bitvavo API: {} with status {}", endpoint, response.getStatusCode());
+        return response.getBody();
+    }
+
+    /**
      * Sends a POST request to the Bitvavo API.
      *
      * @param endpoint     API endpoint (e.g., "/order")
