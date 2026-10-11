@@ -6,6 +6,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.BitvavoAuthHeaders;
 import nl.jimkaplan.autotrader.bitvavo.service.BitvavoAuthenticationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -24,16 +25,19 @@ public class BitvavoApiClient {
     private static final Logger log = LoggerFactory.getLogger(BitvavoApiClient.class);
 
     private final RestTemplate restTemplate;
+    private final RestTemplate publicRestTemplate;
     private final BitvavoAuthenticationService authenticationService;
     private final ObjectMapper objectMapper;
 
     @Value("${bitvavo.api.url}")
     private String apiUrl;
 
-    public BitvavoApiClient(RestTemplate restTemplate,
+    public BitvavoApiClient(@Qualifier("restTemplate") RestTemplate restTemplate,
+                            @Qualifier("publicRestTemplate") RestTemplate publicRestTemplate,
                             BitvavoAuthenticationService authenticationService,
                             ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
+        this.publicRestTemplate = publicRestTemplate;
         this.authenticationService = authenticationService;
         this.objectMapper = objectMapper;
     }
@@ -81,7 +85,7 @@ public class BitvavoApiClient {
         String url = apiUrl + endpoint;
 
         log.debug("Making request to: {}", url);
-        ResponseEntity<T> response = restTemplate.exchange(
+        ResponseEntity<T> response = publicRestTemplate.exchange(
                 url,
                 HttpMethod.GET,
                 entity,

@@ -46,6 +46,9 @@ class BitvavoApiClientTest {
     @Mock
     private RestTemplate restTemplate;
 
+    @Mock
+    private RestTemplate publicRestTemplate;
+
     private BitvavoApiClient bitvavoApiClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String apiKey = "test-api-key";
@@ -54,7 +57,7 @@ class BitvavoApiClientTest {
 
     @BeforeEach
     void setUp() {
-        bitvavoApiClient = new BitvavoApiClient(restTemplate, authenticationService, objectMapper);
+        bitvavoApiClient = new BitvavoApiClient(restTemplate, publicRestTemplate, authenticationService, objectMapper);
         ReflectionTestUtils.setField(bitvavoApiClient, "apiUrl", apiUrl);
     }
 
@@ -98,7 +101,7 @@ class BitvavoApiClientTest {
         // Arrange
         String endpoint = "/BTC-EUR/candles?interval=1h&limit=2";
         String[][] candles = {{"1704067200000", "1.0", "2.0", "0.5", "1.5", "10.5"}};
-        when(restTemplate.exchange(
+        when(publicRestTemplate.exchange(
                 eq(apiUrl + endpoint),
                 eq(HttpMethod.GET),
                 any(),
@@ -111,20 +114,20 @@ class BitvavoApiClientTest {
         // Assert
         assertEquals(1, result.length);
         assertArrayEquals(candles[0], result[0]);
-        verify(restTemplate).exchange(
+        verify(publicRestTemplate).exchange(
                 eq(apiUrl + endpoint),
                 eq(HttpMethod.GET),
                 any(),
                 eq(String[][].class)
         );
-        verifyNoInteractions(authenticationService);
+        verifyNoInteractions(authenticationService, restTemplate);
     }
 
     @Test
     void testGetPublicRequest_withHttpClientErrorException_propagatesException() {
         // Arrange
         String endpoint = "/BTC-EUR/candles?interval=1h&limit=2";
-        when(restTemplate.exchange(
+        when(publicRestTemplate.exchange(
                 anyString(),
                 eq(HttpMethod.GET),
                 any(),

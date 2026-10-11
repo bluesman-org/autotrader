@@ -162,6 +162,13 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
       account data, including transaction history. Run it on a private network behind the host's
       firewall; the production compose uses host networking, so exposure is whatever the host allows.
 
+5. **Bitvavo HTTP clients**:
+    - `restTemplate` is used for signed trading calls and deliberately has no socket timeouts: a read
+      timeout on an order submission is not a safe failure (the order is recorded as `FAILED` while the
+      exchange may have accepted it, and a retried alert could duplicate it).
+    - `publicRestTemplate` serves public market data (candle backfills) with bounded connect and read
+      timeouts. Keep this split when adding new Bitvavo calls.
+
 ## Development Workflow
 
 1. **Setup**:
