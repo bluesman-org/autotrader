@@ -117,6 +117,16 @@ class TransactionHistoryControllerTest {
     }
 
     @Test
+    void getTransactions_withNegativeFromDate_throwsIllegalArgumentException() {
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> transactionHistoryController.getTransactions(BOT_ID, -1L, null, null, null, null));
+
+        assertEquals("fromDate must not be negative", exception.getMessage());
+        verifyNoInteractions(transactionHistoryService);
+    }
+
+    @Test
     void getTransactions_withNegativeToDate_throwsIllegalArgumentException() {
         // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,

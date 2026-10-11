@@ -23,12 +23,11 @@ class RestTemplateConfigTest {
 
         assertEquals(1, restTemplate.getInterceptors().size());
         assertNotSame(delegateOf(restTemplateConfig.publicRestTemplate()), delegateOf(restTemplate));
-        ClientHttpRequestFactory factory = delegateOf(restTemplate);
-        if (factory instanceof SimpleClientHttpRequestFactory simpleFactory) {
-            // No positive timeout is imposed on the signed client (Spring's own default applies)
-            assertTrue((Integer) ReflectionTestUtils.getField(simpleFactory, "connectTimeout") <= 0);
-            assertTrue((Integer) ReflectionTestUtils.getField(simpleFactory, "readTimeout") <= 0);
-        }
+        SimpleClientHttpRequestFactory simpleFactory = assertInstanceOf(SimpleClientHttpRequestFactory.class,
+                delegateOf(restTemplate));
+        // No positive timeout is imposed on the signed client (Spring's own default applies)
+        assertTrue((Integer) ReflectionTestUtils.getField(simpleFactory, "connectTimeout") <= 0);
+        assertTrue((Integer) ReflectionTestUtils.getField(simpleFactory, "readTimeout") <= 0);
     }
 
     @Test
