@@ -4,7 +4,9 @@ Tracking document for replacing TradingView with an in-app strategy engine, buil
 data and our own indicators. **Update this file with every PR**: check off completed steps,
 add new follow-ups, and keep the status line current.
 
-**Status (2026-10-11):** Phase 1 complete (PR #4). Coverage gate added; next: Phase 2.
+**Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5). Phase 2 in
+progress: MACD and Parabolic SAR implemented and pinned to frozen TA-Lib fixtures (PR #6);
+next: the rule model.
 
 ## Objective
 
@@ -50,14 +52,16 @@ add new follow-ups, and keep the status line current.
 - [x] Live verification: 100 days of BTC-EUR 1h backfilled and idempotent on re-run, index
       migration, boundary-inclusive time-range queries
 
-### Phase 2 — Indicators and rules (next)
+### Phase 2 — Indicators and rules (in progress)
 
-- [ ] MACD (published definition, TA-Lib-compatible bootstrap)
-- [ ] Parabolic SAR (published definition, TA-Lib-compatible bootstrap)
+- [x] MACD (published definition, TA-Lib-compatible bootstrap) — bit-exact against the frozen fixtures
+- [x] Parabolic SAR (published definition, TA-Lib-compatible bootstrap) — bit-exact against the
+      frozen fixtures
+- [x] Indicator verification: written spec (`docs/indicators.md`), hand-worked linear case,
+      degenerate cases (flat, oscillating, minimum length), frozen TA-Lib fixtures
+      (`src/test/resources/indicators/`)
 - [ ] Rule model: independent entry/exit condition sets per indicator, AND/OR combination
 - [ ] Parameter model shared by backtest, UI and live engine
-- [ ] Verification: written spec, hand-worked example, naive differential implementation,
-      invariants, frozen TA-Lib fixtures
 
 ### Phase 3 — Backtester and API
 
