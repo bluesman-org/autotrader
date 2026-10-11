@@ -28,16 +28,29 @@ public record CandleSeries(double[] highs, double[] lows, double[] closes) {
     /**
      * Extract the series from stored candles, oldest first.
      *
-     * @param candles The candles
+     * <p>The candles must be strictly ordered by open time: an inverted or duplicated series would
+     * silently invert every indicator window and signal, so it is rejected here.</p>
+     *
+     * @param candles The candles, oldest first, with no duplicate open times
      * @return The extracted series
+     * @throws IllegalArgumentException if the candles are not strictly ordered by open time or a
+     *                                  candle is missing its OHLC values
      */
     public static CandleSeries of(List<Candle> candles) {
         Objects.requireNonNull(candles, "candles must not be null");
         double[] highs = new double[candles.size()];
         double[] lows = new double[candles.size()];
         double[] closes = new double[candles.size()];
+        long previousOpenTime = Long.MIN_VALUE;
         for (int i = 0; i < candles.size(); i++) {
             Candle candle = candles.get(i);
+            if (candle.getOpenTime() <= previousOpenTime) {
+                throw new IllegalArgumentException("candles must be ordered oldest first (index " + i + ")");
+            }
+            if (candle.getHigh() == null || candle.getLow() == null || candle.getClose() == null) {
+                throw new IllegalArgumentException("candle at index " + i + " is missing OHLC values");
+            }
+            previousOpenTime = candle.getOpenTime();
             highs[i] = candle.getHigh().doubleValue();
             lows[i] = candle.getLow().doubleValue();
             closes[i] = candle.getClose().doubleValue();

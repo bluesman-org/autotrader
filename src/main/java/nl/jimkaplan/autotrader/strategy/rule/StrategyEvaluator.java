@@ -51,16 +51,24 @@ public final class StrategyEvaluator {
      *
      * @param rules      The rule group
      * @param series     The candle series
-     * @param indicators The indicator series
+     * @param indicators The indicator series, computed from the same {@code series}
      * @return The signals, aligned with the candles
+     * @throws IllegalArgumentException if the indicator series is not aligned with the candles
      */
     public static boolean[] evaluate(RuleGroup rules, CandleSeries series, IndicatorSeries indicators) {
+        if (series.length() != indicators.length()) {
+            throw new IllegalArgumentException("indicators must be computed from the given series");
+        }
+        boolean all = rules.operator() == LogicalOperator.ALL;
         boolean[] signals = new boolean[series.length()];
         for (int i = 0; i < signals.length; i++) {
-            boolean matches = rules.operator() == LogicalOperator.ALL;
+            boolean matches = all;
             for (RuleCondition condition : rules.conditions()) {
                 boolean holds = test(condition, i, series, indicators);
-                matches = (rules.operator() == LogicalOperator.ALL) ? matches && holds : matches || holds;
+                matches = all ? matches && holds : matches || holds;
+                if (matches != all) {
+                    break; // ALL settled false, ANY settled true
+                }
             }
             signals[i] = matches;
         }
@@ -80,8 +88,8 @@ public final class StrategyEvaluator {
             case HISTOGRAM_NEGATIVE -> negative(macd.histogram(), index);
             case PRICE_ABOVE_SAR -> greater(closes, sar, index);
             case PRICE_BELOW_SAR -> greater(sar, closes, index);
-            case SAR_BULLISH_CROSS -> crossUp(closes, sar, index);
-            case SAR_BEARISH_CROSS -> crossDown(closes, sar, index);
+            case SAR_BULLISH_CROSSOVER -> crossUp(closes, sar, index);
+            case SAR_BEARISH_CROSSOVER -> crossDown(closes, sar, index);
         };
     }
 

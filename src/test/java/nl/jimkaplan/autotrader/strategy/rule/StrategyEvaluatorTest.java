@@ -65,15 +65,15 @@ class StrategyEvaluatorTest {
         assertTrue(test(RuleCondition.PRICE_BELOW_SAR, 2, series, indicators));
         assertTrue(test(RuleCondition.PRICE_BELOW_SAR, 4, series, indicators));
 
-        assertFalse(test(RuleCondition.SAR_BULLISH_CROSS, 0, series, indicators));
-        assertFalse(test(RuleCondition.SAR_BULLISH_CROSS, 1, series, indicators));
-        assertFalse(test(RuleCondition.SAR_BULLISH_CROSS, 2, series, indicators));
-        assertTrue(test(RuleCondition.SAR_BULLISH_CROSS, 3, series, indicators));
-        assertFalse(test(RuleCondition.SAR_BULLISH_CROSS, 4, series, indicators));
+        assertFalse(test(RuleCondition.SAR_BULLISH_CROSSOVER, 0, series, indicators));
+        assertFalse(test(RuleCondition.SAR_BULLISH_CROSSOVER, 1, series, indicators));
+        assertFalse(test(RuleCondition.SAR_BULLISH_CROSSOVER, 2, series, indicators));
+        assertTrue(test(RuleCondition.SAR_BULLISH_CROSSOVER, 3, series, indicators));
+        assertFalse(test(RuleCondition.SAR_BULLISH_CROSSOVER, 4, series, indicators));
 
-        assertTrue(test(RuleCondition.SAR_BEARISH_CROSS, 2, series, indicators));
-        assertTrue(test(RuleCondition.SAR_BEARISH_CROSS, 4, series, indicators));
-        assertFalse(test(RuleCondition.SAR_BEARISH_CROSS, 3, series, indicators));
+        assertTrue(test(RuleCondition.SAR_BEARISH_CROSSOVER, 2, series, indicators));
+        assertTrue(test(RuleCondition.SAR_BEARISH_CROSSOVER, 4, series, indicators));
+        assertFalse(test(RuleCondition.SAR_BEARISH_CROSSOVER, 3, series, indicators));
     }
 
     @Test
@@ -206,6 +206,17 @@ class StrategyEvaluatorTest {
 
         assertEquals(0, signals.entry().length);
         assertEquals(0, signals.exit().length);
+    }
+
+    @Test
+    void evaluateRejectsIndicatorsThatDoNotMatchTheSeries() {
+        CandleSeries series = series(new double[]{10, 9, 8, 9});
+        IndicatorSeries indicators = new IndicatorSeries(
+                new MacdResult(new double[3], new double[3], new double[3]), new double[3]);
+
+        assertThrows(IllegalArgumentException.class, () -> StrategyEvaluator.evaluate(
+                new RuleGroup(LogicalOperator.ALL, List.of(RuleCondition.HISTOGRAM_POSITIVE)),
+                series, indicators));
     }
 
     private static boolean test(RuleCondition condition, int index, CandleSeries series,
