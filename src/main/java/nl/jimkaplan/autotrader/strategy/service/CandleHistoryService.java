@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -63,6 +64,8 @@ public class CandleHistoryService {
      * @param from     Start of the requested range
      * @param to       End of the requested range
      * @return Number of candles fetched and stored
+     * @throws CancellationException if the calling thread is interrupted before the range is complete;
+     *                               pages already stored remain, and a later run refills the rest
      */
     public int ensureRange(String market, CandleInterval interval, Instant from, Instant to) {
         String normalizedMarket = MarketFormat.toMarket(market);
@@ -135,6 +138,7 @@ public class CandleHistoryService {
             return 0;
         }
 
+        checkNotInterrupted();
         log.info("Fetching {} {} candles with open time from {} to {}", market, interval.getCode(), fromOpen, toOpen);
         int fetched = 0;
         // Bitvavo's 'end' parameter is exclusive, so the newest candle to include is the
@@ -169,11 +173,19 @@ public class CandleHistoryService {
             }
             endExclusive = oldestOpen;
             pauseBetweenRequests();
-            if (Thread.currentThread().isInterrupted()) {
-                break;
-            }
+            checkNotInterrupted();
         }
         return fetched;
+    }
+
+    /**
+     * A cancelled load must surface as a cancellation, not as a short result: the pages
+     * already stored stay in place for a later run to continue from.
+     */
+    private void checkNotInterrupted() {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new CancellationException("Candle load interrupted");
+        }
     }
 
     private List<Candle> toCandles(String market, CandleInterval interval, String[][] rows,

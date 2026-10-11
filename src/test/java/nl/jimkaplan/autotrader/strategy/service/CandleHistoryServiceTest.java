@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -233,6 +234,72 @@ class CandleHistoryServiceTest {
 
         assertEquals(stored, result);
         verify(candleRepository).findCandlesInRange(MARKET, INTERVAL_CODE, BASE, BASE + HOUR);
+    }
+
+    @Test
+    void ensureRange_withStoredBlockInTheMiddle_fetchesBothEnds() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.of(candle(BASE + 2 * HOUR)));
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeAsc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.of(candle(BASE + HOUR)));
+        when(bitvavoApiClient.getPublic(anyString(), eq(String[][].class)))
+                .thenReturn(new String[][]{row(BASE + 3 * HOUR)})
+                .thenReturn(new String[][]{row(BASE)});
+
+        int fetched = candleHistoryService.ensureRange(MARKET, INTERVAL,
+                Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + 4 * HOUR));
+
+        assertEquals(2, fetched);
+        ArgumentCaptor<String> endpointCaptor = ArgumentCaptor.forClass(String.class);
+        verify(bitvavoApiClient, times(2)).getPublic(endpointCaptor.capture(), eq(String[][].class));
+        List<String> endpoints = endpointCaptor.getAllValues();
+        // Head first: [BASE+3H, BASE+3H]; then tail: [BASE, BASE]
+        assertTrue(endpoints.get(0).contains("start=" + (BASE + 3 * HOUR)));
+        assertTrue(endpoints.get(0).contains("end=" + (BASE + 4 * HOUR)));
+        assertTrue(endpoints.get(1).contains("start=" + BASE));
+        assertTrue(endpoints.get(1).contains("end=" + (BASE + HOUR)));
+        List<List<Candle>> batches = captureSavedBatches(2);
+        assertEquals(List.of(BASE + 3 * HOUR), batches.get(0).stream().map(Candle::getOpenTime).toList());
+        assertEquals(List.of(BASE), batches.get(1).stream().map(Candle::getOpenTime).toList());
+    }
+
+    @Test
+    void ensureRange_whenInterruptedBeforeTheLoad_throwsAndDoesNotFetch() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.empty());
+
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(CancellationException.class, () -> candleHistoryService.ensureRange(MARKET, INTERVAL,
+                    Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + HOUR)));
+        } finally {
+            Thread.interrupted();
+        }
+
+        verifyNoInteractions(bitvavoApiClient);
+        verify(candleRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void ensureRange_whenInterruptedDuringTheLoad_throwsAfterSavingTheCurrentPage() {
+        when(candleRepository.findFirstByMarketAndIntervalOrderByOpenTimeDesc(MARKET, INTERVAL_CODE))
+                .thenReturn(Optional.empty());
+        // The page is full, so the load would continue; the interrupt is observed after it
+        when(bitvavoApiClient.getPublic(anyString(), eq(String[][].class)))
+                .thenAnswer(invocation -> {
+                    Thread.currentThread().interrupt();
+                    return rowsDescending(BASE + 1999 * HOUR, 1440);
+                });
+
+        try {
+            assertThrows(CancellationException.class, () -> candleHistoryService.ensureRange(MARKET, INTERVAL,
+                    Instant.ofEpochMilli(BASE), Instant.ofEpochMilli(BASE + 2000 * HOUR)));
+        } finally {
+            Thread.interrupted();
+        }
+
+        List<List<Candle>> batches = captureSavedBatches(1);
+        assertEquals(1440, batches.get(0).size());
     }
 
     private static String[] row(long openTime) {
