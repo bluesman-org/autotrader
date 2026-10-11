@@ -5,40 +5,51 @@
     "description": "API for automating trading strategies",
     "version": "1.0"
   },
-  "servers": [ {
-    "url": "http://localhost:8081/autotrader",
-    "description": "Generated server url"
-  } ],
-  "tags": [ {
-    "name": "TradingView Webhook",
-    "description": "API for receiving and processing TradingView alerts"
-  }, {
-    "name": "Backtests",
-    "description": "API for running strategy backtests over stored candles"
-  }, {
-    "name": "Bot Configuration",
-    "description": "API for managing trading bot configurations"
-  }, {
-    "name": "Transaction History",
-    "description": "API for viewing Bitvavo transaction history"
-  } ],
+  "servers": [
+    {
+      "url": "http://localhost:8081/autotrader",
+      "description": "Generated server url"
+    }
+  ],
+  "tags": [
+    {
+      "name": "TradingView Webhook",
+      "description": "API for receiving and processing TradingView alerts"
+    },
+    {
+      "name": "Backtests",
+      "description": "API for running strategy backtests over stored candles"
+    },
+    {
+      "name": "Bot Configuration",
+      "description": "API for managing trading bot configurations"
+    },
+    {
+      "name": "Transaction History",
+      "description": "API for viewing Bitvavo transaction history"
+    }
+  ],
   "paths": {
     "/webhook/tradingview": {
       "post": {
-        "tags": [ "TradingView Webhook" ],
+        "tags": [
+          "TradingView Webhook"
+        ],
         "summary": "Process TradingView alert",
         "description": "Receives and processes alerts from TradingView to execute trading actions. Validates the request based on IP address and API key before processing.",
         "operationId": "handleWebhook",
-        "parameters": [ {
-          "name": "X-API-KEY",
-          "in": "header",
-          "description": "API key for authentication",
-          "required": true,
-          "allowEmptyValue": true,
-          "schema": {
-            "type": "string"
+        "parameters": [
+          {
+            "name": "X-API-KEY",
+            "in": "header",
+            "description": "API key for authentication",
+            "required": true,
+            "allowEmptyValue": true,
+            "schema": {
+              "type": "string"
+            }
           }
-        } ],
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -95,19 +106,23 @@
     },
     "/api/bots/webhook-key/{botId}": {
       "post": {
-        "tags": [ "Bot Configuration" ],
+        "tags": [
+          "Bot Configuration"
+        ],
         "summary": "Generate a new webhook API key",
         "description": "Generates a new webhook API key for a specific bot configuration",
         "operationId": "generateWebhookApiKey",
-        "parameters": [ {
-          "name": "botId",
-          "in": "path",
-          "description": "ID of the bot configuration to generate a webhook API key for",
-          "required": true,
-          "schema": {
-            "type": "string"
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to generate a webhook API key for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Webhook API key generated successfully",
@@ -127,7 +142,9 @@
     },
     "/api/bots/create": {
       "post": {
-        "tags": [ "Bot Configuration" ],
+        "tags": [
+          "Bot Configuration"
+        ],
         "summary": "Create a new bot configuration",
         "description": "Creates a new trading bot configuration with the provided details",
         "operationId": "createBotConfiguration",
@@ -157,21 +174,25 @@
     },
     "/api/backtests": {
       "get": {
-        "tags": [ "Backtests" ],
+        "tags": [
+          "Backtests"
+        ],
         "summary": "List recent backtest runs",
         "description": "Returns the most recent runs, newest first. Stored entries are omitted from the list.",
         "operationId": "recent",
-        "parameters": [ {
-          "name": "limit",
-          "in": "query",
-          "description": "Maximum number of runs to return (1-100)",
-          "required": false,
-          "schema": {
-            "type": "integer",
-            "format": "int32",
-            "default": 20
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of runs to return (1-100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
           }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Runs returned",
@@ -185,9 +206,11 @@
         }
       },
       "post": {
-        "tags": [ "Backtests" ],
+        "tags": [
+          "Backtests"
+        ],
         "summary": "Run a backtest sweep",
-        "description": "Fetches the requested candles, sweeps the entry×exit rule matrices and the indicator parameter grids (at most 5000 combinations), optimises on the earlier part of the range and verifies on the held-out newer part, then stores the top ranked entries. Fields left out fall back to their defaults (1000 EUR capital, 100 EUR per buy, 0.20% fee per side, 200-candle warm-up, 0.7 split, TOTAL_RETURN ranking, 12/26/9 MACD, 0.02/0.2 SAR, a MACD bullish crossover entry and a bearish SAR crossover exit).",
+        "description": "Fetches the requested candles, sweeps the entry×exit rule matrices and the indicator parameter grids (at most 5000 combinations), optimises on the earlier part of the range and verifies on the held-out newer part, then stores the top ranked entries. Fields left out fall back to their defaults (1000 EUR capital, 100 EUR per buy, 0.20% fee per side, 200-candle warm-up, 0.7 split, TOTAL_RETURN ranking, 12/26/9 MACD, 0.02/0.2 SAR, a MACD bullish crossover entry and a bearish SAR crossover exit). Ranges covering more than 50,000 candles are rejected.",
         "operationId": "run",
         "requestBody": {
           "content": {
@@ -218,19 +241,23 @@
     },
     "/api/bots/deactivate/{botId}": {
       "patch": {
-        "tags": [ "Bot Configuration" ],
+        "tags": [
+          "Bot Configuration"
+        ],
         "summary": "Deactivate a bot configuration",
         "description": "Deactivates a specific bot configuration so it no longer processes trades",
         "operationId": "deactivateBotConfiguration",
-        "parameters": [ {
-          "name": "botId",
-          "in": "path",
-          "description": "ID of the bot configuration to deactivate",
-          "required": true,
-          "schema": {
-            "type": "string"
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to deactivate",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Bot configuration deactivated successfully",
@@ -250,19 +277,23 @@
     },
     "/api/bots/activate/{botId}": {
       "patch": {
-        "tags": [ "Bot Configuration" ],
+        "tags": [
+          "Bot Configuration"
+        ],
         "summary": "Activate a bot configuration",
         "description": "Activates a specific bot configuration so it can process trades",
         "operationId": "activateBotConfiguration",
-        "parameters": [ {
-          "name": "botId",
-          "in": "path",
-          "description": "ID of the bot configuration to activate",
-          "required": true,
-          "schema": {
-            "type": "string"
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to activate",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Bot configuration activated successfully",
@@ -282,20 +313,24 @@
     },
     "/api/bots": {
       "get": {
-        "tags": [ "Bot Configuration" ],
+        "tags": [
+          "Bot Configuration"
+        ],
         "summary": "Get all bot configurations",
         "description": "Retrieves a list of all bot configurations, optionally including inactive ones",
         "operationId": "getAllBotConfigurations",
-        "parameters": [ {
-          "name": "includeInactive",
-          "in": "query",
-          "description": "Whether to include inactive bot configurations",
-          "required": false,
-          "schema": {
-            "type": "boolean",
-            "default": false
+        "parameters": [
+          {
+            "name": "includeInactive",
+            "in": "query",
+            "description": "Whether to include inactive bot configurations",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Bot configurations retrieved successfully",
@@ -312,19 +347,23 @@
     },
     "/api/bots/{botId}": {
       "get": {
-        "tags": [ "Bot Configuration" ],
+        "tags": [
+          "Bot Configuration"
+        ],
         "summary": "Get a bot configuration by ID",
         "description": "Retrieves the details of a specific bot configuration",
         "operationId": "getBotConfiguration",
-        "parameters": [ {
-          "name": "botId",
-          "in": "path",
-          "description": "ID of the bot configuration to retrieve",
-          "required": true,
-          "schema": {
-            "type": "string"
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot configuration to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Bot configuration retrieved successfully",
@@ -347,63 +386,72 @@
     },
     "/api/bots/{botId}/transactions": {
       "get": {
-        "tags": [ "Transaction History" ],
+        "tags": [
+          "Transaction History"
+        ],
         "summary": "Get transaction history for a bot",
         "description": "Returns the Bitvavo transaction history for the account of the specified bot. The history is account-wide; the bot only provides the API credentials used for the request. Results can be filtered by date range and transaction type, and are paginated.",
         "operationId": "getTransactions",
-        "parameters": [ {
-          "name": "botId",
-          "in": "path",
-          "description": "ID of the bot whose credentials are used",
-          "required": true,
-          "schema": {
-            "type": "string"
+        "parameters": [
+          {
+            "name": "botId",
+            "in": "path",
+            "description": "ID of the bot whose credentials are used",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "Unix timestamp in milliseconds to return transactions from",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "Unix timestamp in milliseconds to return transactions up to",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "maxItems",
+            "in": "query",
+            "description": "Maximum number of items per page (1-100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Transaction type to filter by (e.g. buy, sell, deposit, withdrawal)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
-        }, {
-          "name": "fromDate",
-          "in": "query",
-          "description": "Unix timestamp in milliseconds to return transactions from",
-          "required": false,
-          "schema": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }, {
-          "name": "toDate",
-          "in": "query",
-          "description": "Unix timestamp in milliseconds to return transactions up to",
-          "required": false,
-          "schema": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }, {
-          "name": "page",
-          "in": "query",
-          "description": "Page number to return",
-          "required": false,
-          "schema": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }, {
-          "name": "maxItems",
-          "in": "query",
-          "description": "Maximum number of items per page (1-100)",
-          "required": false,
-          "schema": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }, {
-          "name": "type",
-          "in": "query",
-          "description": "Transaction type to filter by (e.g. buy, sell, deposit, withdrawal)",
-          "required": false,
-          "schema": {
-            "type": "string"
-          }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Transaction history retrieved successfully",
@@ -426,19 +474,23 @@
     },
     "/api/backtests/{id}": {
       "get": {
-        "tags": [ "Backtests" ],
+        "tags": [
+          "Backtests"
+        ],
         "summary": "Get a backtest run",
         "description": "Returns a stored backtest run and its ranked entries.",
         "operationId": "get",
-        "parameters": [ {
-          "name": "id",
-          "in": "path",
-          "description": "ID of the backtest run",
-          "required": true,
-          "schema": {
-            "type": "string"
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the backtest run",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
           }
-        } ],
+        ],
         "responses": {
           "200": {
             "description": "Run found",
@@ -583,7 +635,12 @@
           "rankingMetric": {
             "type": "string",
             "description": "Metric to rank by",
-            "enum": [ "TOTAL_RETURN", "PROFIT_FACTOR", "MAX_DRAWDOWN", "WIN_RATE" ],
+            "enum": [
+              "TOTAL_RETURN",
+              "PROFIT_FACTOR",
+              "MAX_DRAWDOWN",
+              "WIN_RATE"
+            ],
             "example": "TOTAL_RETURN"
           },
           "macdParameters": {
@@ -645,16 +702,32 @@
           "operator": {
             "type": "string",
             "description": "How the conditions combine",
-            "enum": [ "ALL", "ANY" ],
+            "enum": [
+              "ALL",
+              "ANY"
+            ],
             "example": "ALL"
           },
           "conditions": {
             "type": "array",
             "description": "The conditions",
-            "example": [ "MACD_BULLISH_CROSSOVER" ],
+            "example": [
+              "MACD_BULLISH_CROSSOVER"
+            ],
             "items": {
               "type": "string",
-              "enum": [ "MACD_BULLISH_CROSSOVER", "MACD_BEARISH_CROSSOVER", "MACD_ABOVE_SIGNAL", "MACD_BELOW_SIGNAL", "HISTOGRAM_POSITIVE", "HISTOGRAM_NEGATIVE", "PRICE_ABOVE_SAR", "PRICE_BELOW_SAR", "SAR_BULLISH_CROSSOVER", "SAR_BEARISH_CROSSOVER" ]
+              "enum": [
+                "MACD_BULLISH_CROSSOVER",
+                "MACD_BEARISH_CROSSOVER",
+                "MACD_ABOVE_SIGNAL",
+                "MACD_BELOW_SIGNAL",
+                "HISTOGRAM_POSITIVE",
+                "HISTOGRAM_NEGATIVE",
+                "PRICE_ABOVE_SAR",
+                "PRICE_BELOW_SAR",
+                "SAR_BULLISH_CROSSOVER",
+                "SAR_BEARISH_CROSSOVER"
+              ]
             }
           }
         }

@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.config;
 
+import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.core.util.Separators;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -91,7 +92,9 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
             Object jsonObject = jsonMapper.readValue(jsonSpec, Object.class);
             Separators separators = Separators.createDefaultInstance()
                     .withObjectFieldValueSpacing(Separators.Spacing.AFTER);
-            String prettyJson = jsonMapper.writer(new DefaultPrettyPrinter().withSeparators(separators))
+            String prettyJson = jsonMapper.writer(new DefaultPrettyPrinter()
+                            .withSeparators(separators)
+                            .withArrayIndenter(new DefaultIndenter("  ", DefaultIndenter.SYS_LF)))
                     .writeValueAsString(jsonObject);
             Files.writeString(jsonFilePath, prettyJson + System.lineSeparator());
             log.info("Exported OpenAPI specification to JSON file: {}", jsonFilePath);

@@ -62,9 +62,11 @@ class OpenApiConfigTest {
         Path yaml = exportDir.resolve("autotrader-openapi.yaml");
         assertTrue(Files.exists(json));
         assertTrue(Files.exists(yaml));
-        // The exports match the committed style: 2-space pretty JSON and indented YAML sequences
+        // The exports match the committed style: 2-space pretty JSON with indented arrays, and
+        // YAML with indented sequences
         String jsonSpec = Files.readString(json);
         assertTrue(jsonSpec.contains("\n  \"openapi\""));
+        assertTrue(jsonSpec.contains("\"tags\": [\n    {"));
         assertEquals(SPEC_JSON, jsonSpec.replaceAll("\\s+", ""));
         assertTrue(Files.readString(yaml).contains("\n  - "));
     }
