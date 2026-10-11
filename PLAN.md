@@ -24,7 +24,9 @@ models are in (PR #7); next: Phase 3, the backtester.
 - Built inside the existing Spring Boot app (Freqtrade evaluated and rejected)
 - Indicators implemented from the published definitions, with conventions matched to TA-Lib's
   documented bootstrap so frozen test vectors compare exactly (TA-Lib values in tests only)
-- Simulation contract: decisions on closed candles only; fills at next-candle open; 0.1% fee;
+- Simulation contract: decisions on closed candles only; fills at next-candle open; fee per side
+  configurable, defaulting to the account's **taker** rate for market orders (0.20% at the current
+  tier — live-verified via `GET /account/fees`; the 0.10% maker rate applies only to limit orders);
   fixed EUR amount per buy (minimum €5); one open position; 200-candle warm-up; skipped signals
   (insufficient balance) are recorded, not simulated; a persisted last-evaluated candle prevents
   double-trading on restart and stale replay after downtime; deterministic outputs; sweeps capped
