@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.BotConfigurationRepository;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -31,8 +32,13 @@ public class BotConfigurationService {
      *
      * @param config The bot configuration to save
      * @return The saved bot configuration
+     * @throws IllegalArgumentException if a bot configuration with the same bot ID already exists
      */
     public BotConfiguration saveBotConfiguration(BotConfiguration config) {
+        if (botConfigurationRepository.existsByBotId(config.getBotId())) {
+            throw new IllegalArgumentException("A bot with id '" + config.getBotId() + "' already exists");
+        }
+
         // Encrypt sensitive data
         String encryptedApiKey = encryptionService.encrypt(config.getApiKey());
         String encryptedApiSecret = encryptionService.encrypt(config.getApiSecret());
@@ -46,8 +52,12 @@ public class BotConfigurationService {
         config.setApiKey(null);
         config.setApiSecret(null);
 
-        // Save to database
-        return botConfigurationRepository.save(config);
+        // Save to database; the unique index backs up the check above against concurrent creates
+        try {
+            return botConfigurationRepository.save(config);
+        } catch (DuplicateKeyException e) {
+            throw new IllegalArgumentException("A bot with id '" + config.getBotId() + "' already exists", e);
+        }
     }
 
     /**
