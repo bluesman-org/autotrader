@@ -55,10 +55,10 @@ public enum RuleCondition {
     /**
      * The close crosses from at or below the SAR to above it.
      */
-    SAR_BULLISH_CROSS,
+    SAR_BULLISH_CROSSOVER,
 
     /**
      * The close crosses from at or above the SAR to below it.
      */
-    SAR_BEARISH_CROSS
+    SAR_BEARISH_CROSSOVER
 }

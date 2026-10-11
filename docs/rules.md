@@ -17,6 +17,13 @@ signal and exit on the other's (the requirement this engine was built for). The 
 records validate eagerly, so a configuration taken from the UI or stored in the database fails
 at construction rather than at calculation.
 
+**Both sets are required, and that is deliberate.** An exit that is not indicator-driven — a
+stop-loss, a bar limit — belongs to the position logic, which is a separate backtest/live
+setting combined with the indicator exit (Phase 3); it is not a rule set. Keeping the rule sets
+non-empty also means "never fires" and "always fires" can never happen by accident, which an
+empty or absent set would invite. If a strategy ever needs *no* indicator exit at all, that will
+be an explicit model change with every consumer updated deliberately, not an implicit empty set.
+
 The parameter records are the shared parameter model: the backtester sweeps them, the UI edits
 them and the live engine reads them.
 
@@ -35,8 +42,8 @@ at that bar.
 | `HISTOGRAM_NEGATIVE` | Histogram < 0 |
 | `PRICE_ABOVE_SAR` | Close > Sar (strictly) |
 | `PRICE_BELOW_SAR` | Close < Sar (strictly) |
-| `SAR_BULLISH_CROSS` | Close was at or below the SAR on the previous bar and is above it on this bar |
-| `SAR_BEARISH_CROSS` | Close was at or above the SAR on the previous bar and is below it on this bar |
+| `SAR_BULLISH_CROSSOVER` | Close was at or below the SAR on the previous bar and is above it on this bar |
+| `SAR_BEARISH_CROSSOVER` | Close was at or above the SAR on the previous bar and is below it on this bar |
 
 **Warm-up and unavailable inputs.** Any condition whose inputs are not available — the
 indicator is still in its warm-up on this or the previous bar, or there is no previous bar — is
@@ -67,6 +74,13 @@ logic — entering once, holding a single position, filling at the next candle's
 fees and recording skipped signals — belongs to the backtester and the live engine, which consume
 these series. Both run the same rules, so a strategy is validated on exactly the behaviour it
 will execute.
+
+**Input discipline.** `CandleSeries.of` requires candles strictly ordered by open time and
+rejects duplicates and missing OHLC values: an inverted series would silently invert every
+indicator window and signal. `IndicatorSeries` requires all four of its series to be aligned, and
+the sweep-facing `evaluate(RuleGroup, CandleSeries, IndicatorSeries)` rejects an indicator series
+whose length does not match the candles, so a mismatched pairing fails loudly instead of
+producing signals from the wrong bars.
 
 ## Worked example
 
