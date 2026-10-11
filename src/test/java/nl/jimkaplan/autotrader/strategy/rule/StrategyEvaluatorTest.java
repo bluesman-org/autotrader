@@ -18,7 +18,8 @@ class StrategyEvaluatorTest {
                 new double[]{Double.NaN, 1.0, 2.0, 3.0, 1.5},
                 new double[]{Double.NaN, 0.5, 2.0, 2.0, 2.0},
                 new double[]{Double.NaN, 0.5, 0.0, 1.0, -0.5});
-        CandleSeries series = new CandleSeries(new double[5], new double[5], new double[5]);
+        CandleSeries series = new CandleSeries(new double[5], new double[5], new double[5], new double[5],
+                new long[5]);
         IndicatorSeries indicators = new IndicatorSeries(macd, new double[5]);
 
         assertFalse(test(RuleCondition.MACD_BULLISH_CROSSOVER, 0, series, indicators));
@@ -51,8 +52,8 @@ class StrategyEvaluatorTest {
     @Test
     void sarConditions_holdWhereTheSeriesSaySo() {
         MacdResult macd = new MacdResult(new double[5], new double[5], new double[5]);
-        CandleSeries series = new CandleSeries(new double[5], new double[5],
-                new double[]{10.0, 10.0, 10.0, 10.0, 10.0});
+        CandleSeries series = new CandleSeries(new double[5], new double[5], new double[5],
+                new double[]{10.0, 10.0, 10.0, 10.0, 10.0}, new long[5]);
         IndicatorSeries indicators = new IndicatorSeries(macd,
                 new double[]{Double.NaN, 9.0, 11.0, 9.0, 12.0});
 
@@ -82,7 +83,8 @@ class StrategyEvaluatorTest {
                 new double[]{1.0, 1.0, 1.0, 1.0},
                 new double[]{0.0, 2.0, 2.0, 0.0},
                 new double[]{1.0, -1.0, -1.0, 1.0});
-        CandleSeries series = new CandleSeries(new double[4], new double[4], new double[4]);
+        CandleSeries series = new CandleSeries(new double[4], new double[4], new double[4], new double[4],
+                new long[4]);
         IndicatorSeries indicators = new IndicatorSeries(macd, new double[4]);
 
         // Mutually exclusive pair: ALL can never hold, ANY holds on every bar where either does
@@ -202,7 +204,7 @@ class StrategyEvaluatorTest {
                 new RuleGroup(LogicalOperator.ALL, List.of(RuleCondition.HISTOGRAM_NEGATIVE)));
 
         StrategySignals signals = StrategyEvaluator.evaluate(new CandleSeries(new double[0],
-                new double[0], new double[0]), strategy);
+                new double[0], new double[0], new double[0], new long[0]), strategy);
 
         assertEquals(0, signals.entry().length);
         assertEquals(0, signals.exit().length);
@@ -225,13 +227,17 @@ class StrategyEvaluatorTest {
     }
 
     private static CandleSeries series(double[] closes) {
+        double[] opens = new double[closes.length];
         double[] highs = new double[closes.length];
         double[] lows = new double[closes.length];
+        long[] times = new long[closes.length];
         for (int i = 0; i < closes.length; i++) {
+            opens[i] = closes[i];
             highs[i] = closes[i] + 1;
             lows[i] = closes[i] - 1;
+            times[i] = i * 3_600_000L;
         }
-        return new CandleSeries(highs, lows, closes);
+        return new CandleSeries(opens, highs, lows, closes, times);
     }
 
     private static int firstTrue(boolean[] values) {

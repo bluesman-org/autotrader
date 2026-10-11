@@ -15,22 +15,24 @@ class CandleSeriesTest {
     @Test
     void of_extractsTheSeriesFromCandles() {
         List<Candle> candles = List.of(
-                candle(1_000L, "10", "9", "9.5"),
-                candle(2_000L, "11", "9.5", "10.5"));
+                candle(1_000L, "9.5", "10", "9", "9.5"),
+                candle(2_000L, "10.5", "11", "9.5", "10.5"));
 
         CandleSeries series = CandleSeries.of(candles);
 
         assertEquals(2, series.length());
+        assertArrayEquals(new double[]{9.5, 10.5}, series.opens(), 0.0);
         assertArrayEquals(new double[]{10.0, 11.0}, series.highs(), 0.0);
         assertArrayEquals(new double[]{9.0, 9.5}, series.lows(), 0.0);
         assertArrayEquals(new double[]{9.5, 10.5}, series.closes(), 0.0);
+        assertArrayEquals(new long[]{1_000L, 2_000L}, series.times());
     }
 
     @Test
     void of_rejectsCandlesNotOrderedOldestFirst() {
         List<Candle> reversed = List.of(
-                candle(2_000L, "11", "9.5", "10.5"),
-                candle(1_000L, "10", "9", "9.5"));
+                candle(2_000L, "10.5", "11", "9.5", "10.5"),
+                candle(1_000L, "9.5", "10", "9", "9.5"));
 
         assertThrows(IllegalArgumentException.class, () -> CandleSeries.of(reversed));
     }
@@ -38,8 +40,8 @@ class CandleSeriesTest {
     @Test
     void of_rejectsDuplicateOpenTimes() {
         List<Candle> duplicated = List.of(
-                candle(1_000L, "10", "9", "9.5"),
-                candle(1_000L, "11", "9.5", "10.5"));
+                candle(1_000L, "9.5", "10", "9", "9.5"),
+                candle(1_000L, "10.5", "11", "9.5", "10.5"));
 
         assertThrows(IllegalArgumentException.class, () -> CandleSeries.of(duplicated));
     }
@@ -53,17 +55,31 @@ class CandleSeriesTest {
 
     @Test
     void rejectsMismatchedLengths() {
+        double[] one = new double[1];
+        double[] two = new double[2];
+
         assertThrows(IllegalArgumentException.class,
-                () -> new CandleSeries(new double[2], new double[2], new double[3]));
+                () -> new CandleSeries(two, two, two, two, new long[1]));
         assertThrows(IllegalArgumentException.class,
-                () -> new CandleSeries(new double[2], new double[3], new double[2]));
+                () -> new CandleSeries(one, two, one, one, new long[1]));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CandleSeries(one, one, two, one, new long[1]));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CandleSeries(one, one, one, two, new long[1]));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CandleSeries(one, one, one, one, new long[2]));
     }
 
     @Test
     void rejectsNullArrays() {
-        assertThrows(NullPointerException.class, () -> new CandleSeries(null, new double[1], new double[1]));
-        assertThrows(NullPointerException.class, () -> new CandleSeries(new double[1], null, new double[1]));
-        assertThrows(NullPointerException.class, () -> new CandleSeries(new double[1], new double[1], null));
+        double[] one = new double[1];
+        long[] times = new long[1];
+
+        assertThrows(NullPointerException.class, () -> new CandleSeries(null, one, one, one, times));
+        assertThrows(NullPointerException.class, () -> new CandleSeries(one, null, one, one, times));
+        assertThrows(NullPointerException.class, () -> new CandleSeries(one, one, null, one, times));
+        assertThrows(NullPointerException.class, () -> new CandleSeries(one, one, one, null, times));
+        assertThrows(NullPointerException.class, () -> new CandleSeries(one, one, one, one, null));
     }
 
     @Test
@@ -71,9 +87,10 @@ class CandleSeriesTest {
         assertThrows(NullPointerException.class, () -> CandleSeries.of(null));
     }
 
-    private static Candle candle(long openTime, String high, String low, String close) {
+    private static Candle candle(long openTime, String open, String high, String low, String close) {
         return Candle.builder()
                 .openTime(openTime)
+                .open(new BigDecimal(open))
                 .high(new BigDecimal(high))
                 .low(new BigDecimal(low))
                 .close(new BigDecimal(close))
