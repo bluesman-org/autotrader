@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
@@ -215,7 +216,7 @@ public class TradingService {
 
             // Create market buy order
             CreateOrderRequest orderRequest = CreateOrderRequest.builder()
-                    .market(toBitvavoMarket(request.getTicker()))
+                    .market(MarketFormat.toMarket(request.getTicker()))
                     .side("buy")
                     .orderType("market")
                     .amountQuote(amountQuote)
@@ -284,7 +285,7 @@ public class TradingService {
         try {
             // Normalise the ticker once (e.g. "BTCEUR" or "BTC-EUR" to "BTC-EUR") and derive
             // the asset symbol (e.g. "BTC") for the balance check
-            String market = toBitvavoMarket(request.getTicker());
+            String market = MarketFormat.toMarket(request.getTicker());
             String asset = market.replace("-EUR", "");
 
             // Check asset balance
@@ -442,25 +443,10 @@ public class TradingService {
      * @return The market information, or null if Bitvavo returned none
      */
     private GetMarketResponse getMarketInfo(BotConfiguration botConfig) {
-        String market = toBitvavoMarket(botConfig.getTradingPair());
+        String market = MarketFormat.toMarket(botConfig.getTradingPair());
         return bitvavoApiClient.get(
                 "/markets?market=" + market, GetMarketResponse.class,
                 botConfig.getApiKey(), botConfig.getApiSecret());
-    }
-
-    /**
-     * Convert a ticker to Bitvavo's market format (e.g. "BTCEUR" or "BTC-EUR" to "BTC-EUR").
-     * Bitvavo rejects market parameters without the dash (errorCode 205).
-     *
-     * @param ticker The ticker or trading pair
-     * @return The market in Bitvavo's format
-     */
-    private String toBitvavoMarket(String ticker) {
-        String market = ticker.replace("-", "");
-        if (market.endsWith("EUR")) {
-            market = market.substring(0, market.length() - "EUR".length()) + "-EUR";
-        }
-        return market;
     }
 
     /**

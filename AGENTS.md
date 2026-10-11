@@ -41,6 +41,9 @@ autotrader/
 │   │   │   ├── model/                      # Common data models
 │   │   │   ├── repository/                 # Data repositories
 │   │   │   ├── service/                    # Business logic services
+│   │   │   ├── strategy/                   # In-app strategy engine
+│   │   │   │   ├── model/                  # Candle intervals and documents
+│   │   │   │   └── service/                # Candle history loader
 │   │   │   └── tradingview/                # TradingView integration
 │   │   │       ├── controller/             # TradingView REST controllers
 │   │   │       ├── model/                  # TradingView data models
@@ -89,6 +92,26 @@ autotrader/
 
 3. The application will be available at `http://localhost:8080`
 
+### Local MongoDB
+
+For local development, `docker-compose.local.yml` starts a MongoDB in Docker. It reads
+`MONGO_ROOT_PASSWORD` and `MONGO_APP_PASSWORD` from the repo-root `.env` file, which is
+gitignored.
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+export SPRING_DATA_MONGODB_URI="mongodb://autotrader:<MONGO_APP_PASSWORD>@127.0.0.1:27017/autotrader"
+export MONGODB_SSL_ENABLED=false
+```
+
+Historical candles are cached in this database. They are excluded from
+`scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo. Indexes are created
+at startup by `MongoIndexInitializer`, explicitly, so that the duplicate-`botId` check runs
+before the unique index and reports an actionable error. `MongoConfig` honors
+`spring.data.mongodb.auto-index-creation`; it is off by default (and not set in
+`application.yml`) — enabling it creates the annotation-declared indexes during repository
+setup instead, before that check can run.
+
 ## Testing
 
 1. Test Environment Setup:
@@ -132,7 +155,8 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Follow the existing test patterns (Arrange-Act-Assert)
     - Use mocks for external dependencies
     - Test both happy paths and error cases
-    - Aim for having 100% line coverage. If not possible, do not go below 90%
+    - Minimum 90% line coverage and 100% method coverage, except POJOs and similar classes.
+      All LLM assistants must follow this rule.
 
 4. **Security**:
     - Never commit API keys or secrets to version control
@@ -141,6 +165,13 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - The REST API is not authenticated: anyone who can reach the app can manage bots and read
       account data, including transaction history. Run it on a private network behind the host's
       firewall; the production compose uses host networking, so exposure is whatever the host allows.
+
+5. **Bitvavo HTTP clients**:
+    - `restTemplate` is used for signed trading calls and deliberately has no socket timeouts: a read
+      timeout on an order submission is not a safe failure (the order is recorded as `FAILED` while the
+      exchange may have accepted it, and a retried alert could duplicate it).
+    - `publicRestTemplate` serves public market data (candle backfills) with bounded connect and read
+      timeouts. Keep this split when adding new Bitvavo calls.
 
 ## Development Workflow
 

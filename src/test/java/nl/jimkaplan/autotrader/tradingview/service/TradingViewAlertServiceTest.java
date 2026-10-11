@@ -120,7 +120,7 @@ class TradingViewAlertServiceTest {
         List<TradingViewAlert> alerts = Collections.singletonList(testAlert);
         Instant startTime = Instant.parse("2023-01-01T00:00:00Z");
         Instant endTime = Instant.parse("2023-01-02T00:00:00Z");
-        when(tradingViewAlertRepository.findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime)).thenReturn(alerts);
+        when(tradingViewAlertRepository.findByBotIdAndTimestampRange(TEST_BOT_ID, startTime, endTime)).thenReturn(alerts);
 
         // Act
         List<TradingViewAlert> result = tradingViewAlertService.getAlertsByBotIdAndTimeRange(TEST_BOT_ID, startTime, endTime);
@@ -130,7 +130,7 @@ class TradingViewAlertServiceTest {
         assertEquals(TEST_ALERT_ID, result.getFirst().getId());
         assertEquals(TEST_BOT_ID, result.getFirst().getBotId());
         assertEquals(TEST_TIMESTAMP, result.getFirst().getTimestamp());
-        verify(tradingViewAlertRepository).findByBotIdAndTimestampBetween(TEST_BOT_ID, startTime, endTime);
+        verify(tradingViewAlertRepository).findByBotIdAndTimestampRange(TEST_BOT_ID, startTime, endTime);
     }
 
     @Test

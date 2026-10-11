@@ -1,0 +1,36 @@
+# Local MongoDB for the autotrader app and its candle store.
+#
+# Start:  docker compose -f docker-compose.local.yml up -d
+# Stop:   docker compose -f docker-compose.local.yml down
+#
+# Credentials are read from the repo-root .env file (gitignored):
+#   MONGO_ROOT_PASSWORD=...   (admin user)
+#   MONGO_APP_PASSWORD=...    (application user "autotrader")
+#
+# The app connects with:
+#   mongodb://autotrader:<MONGO_APP_PASSWORD>@127.0.0.1:27017/autotrader
+# and mongodb.ssl.enabled=false.
+services:
+  mongo:
+    image: mongo:8.0
+    container_name: autotrader-mongo
+    restart: unless-stopped
+    ports:
+      # Localhost only: never expose the database to the network.
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}
+    command: ["--wiredTigerCacheSizeGB", "1"]
+    volumes:
+      - mongo-data:/data/db
+      - ./deploy/mongo:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo-data:

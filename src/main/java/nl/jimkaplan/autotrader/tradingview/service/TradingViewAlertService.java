@@ -74,7 +74,7 @@ public class TradingViewAlertService {
      * @return List of alerts for the specified bot and time range
      */
     public List<TradingViewAlert> getAlertsByBotIdAndTimeRange(String botId, Instant startTime, Instant endTime) {
-        return tradingViewAlertRepository.findByBotIdAndTimestampBetween(botId, startTime, endTime);
+        return tradingViewAlertRepository.findByBotIdAndTimestampRange(botId, startTime, endTime);
     }
 
     /**

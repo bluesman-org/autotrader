@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.lang.reflect.Method;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,6 +33,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -84,9 +87,39 @@ class BotConfigurationServiceTest {
         assertNull(savedConfig.getApiSecret()); // Transient fields should be cleared
         assertEquals(1, savedConfig.getKeyVersion()); // Initial key version
 
+        verify(botConfigurationRepository).existsByBotId(TEST_BOT_ID);
         verify(encryptionService).encrypt(TEST_API_KEY);
         verify(encryptionService).encrypt(TEST_API_SECRET);
         verify(botConfigurationRepository).save(any(BotConfiguration.class));
+    }
+
+    @Test
+    void saveBotConfiguration_withExistingBotId_shouldFailWithClearError() {
+        // Arrange
+        when(botConfigurationRepository.existsByBotId(TEST_BOT_ID)).thenReturn(true);
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> botConfigurationService.saveBotConfiguration(testBotConfig));
+        assertTrue(exception.getMessage().contains(TEST_BOT_ID));
+        verifyNoInteractions(encryptionService);
+        verify(botConfigurationRepository, never()).save(any(BotConfiguration.class));
+    }
+
+    @Test
+    void saveBotConfiguration_whenSaveHitsTheUniqueIndex_shouldFailWithTheSameClearError() {
+        // Arrange: the pre-check can lose a race against a concurrent create, and the unique index
+        // turns that case into the same duplicate-key error
+        when(botConfigurationRepository.existsByBotId(TEST_BOT_ID)).thenReturn(false);
+        when(encryptionService.encrypt(TEST_API_KEY)).thenReturn(ENCRYPTED_API_KEY);
+        when(encryptionService.encrypt(TEST_API_SECRET)).thenReturn(ENCRYPTED_API_SECRET);
+        when(botConfigurationRepository.save(any(BotConfiguration.class)))
+                .thenThrow(new DuplicateKeyException("duplicate key"));
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> botConfigurationService.saveBotConfiguration(testBotConfig));
+        assertTrue(exception.getMessage().contains(TEST_BOT_ID));
     }
 
     @Test
