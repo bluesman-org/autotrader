@@ -6,8 +6,9 @@ add new follow-ups, and keep the status line current.
 
 **Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5), indicators
 pinned to the reference fixtures (PR #6), rules in (PR #7), backtest engine and sweep in (PR #8),
-REST API in (PR #9), in-app UI in (PR #10). Phase 4.5 in progress: the Docker development stack
-is in PR #11 (under review); next: Phase 5, the live engine.
+REST API in (PR #9), in-app UI in (PR #10), Docker development stack in (PR #11). Phase 5 is
+built (live engine, dry-run by default, replay gate) and waits for its PR slot; next: Phase 6,
+retiring TradingView.
 
 ## Objective
 
@@ -93,12 +94,16 @@ is in PR #11 (under review); next: Phase 5, the live engine.
 - [x] All Dockerfiles multi-platform (the image no longer pins `linux/arm64`; the platform is
       chosen at build time — native locally, `linux/arm64` in the deploy workflow)
 
-### Phase 5 — Live engine
+### Phase 5 — Live engine (built; PR pending, review queue)
 
-- [ ] Bitvavo WebSocket candles (own keepalive/reconnect policy)
-- [ ] Evaluate rules on closed candles; dry-run by default
-- [ ] Persisted last-evaluated candle: no double-trade on restart, no stale replay
-- [ ] Replay gate: dry-run signals must replay identically on the same history
+- [x] Bitvavo WebSocket candles (own keepalive/reconnect policy: `getTime` every 30 s, exponential
+      backoff to 60 s, boundary-only reporting with the candle store as the authoritative source)
+- [x] Evaluate rules on closed candles; dry-run by default (same rules, params and sizing as the
+      backtester; live orders need an active bot configuration; failures are recorded, not thrown)
+- [x] Persisted last-evaluated candle: no double-trade on restart, no stale replay (persisted
+      before the order so a crash costs a trade, never duplicates one; the seed is never traded)
+- [x] Replay gate: dry-run signals must replay identically on the same history
+      (`LiveSignalReplayTest` asserts bar-by-bar equality of signals and indicator values)
 
 ### Phase 6 — Retire TradingView
 
@@ -113,6 +118,8 @@ is in PR #11 (under review); next: Phase 5, the live engine.
       `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
       handler is next touched)
 - [ ] UI improvements (TBD)
+- [ ] Reconcile open orders after a crash between an order submission and its record (`live_orders`
+      recorded what was sent; the exchange's order history is the source of truth)
 - [ ] Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
       run where half the entries were skipped currently looks identical to one with none, and that
       matters more once Phase 5 trades live
