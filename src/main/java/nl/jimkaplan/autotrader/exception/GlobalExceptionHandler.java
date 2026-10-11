@@ -160,9 +160,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, WebRequest request) {
-        log.error("Unexpected error occurred. Message: {}. Cause: {}. ",
-                ex.getMessage(),
-                ex.getCause().getClass() + ex.getCause().getMessage());
+        // Pass the exception itself, so the stack trace is logged; building it from ex.getCause()
+        // broke the handler for cause-less exceptions (most NPEs) and logged no trace.
+        log.error("Unexpected error occurred. Message: {}.", ex.getMessage(), ex);
 
         String path = getRequestPath(request);
         ErrorResponse errorResponse = ErrorResponse.of(
