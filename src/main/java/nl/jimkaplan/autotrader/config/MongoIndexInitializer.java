@@ -11,6 +11,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.index.Index;
+import org.springframework.data.mongodb.core.index.IndexInfo;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Component;
 
@@ -34,6 +35,12 @@ public class MongoIndexInitializer implements ApplicationRunner {
      * not unique yet, so at most this many offending values are reported.
      */
     private static final int MAX_REPORTED_DUPLICATES = 20;
+
+    /**
+     * Index name used by the {@code @Indexed} annotation on {@code BotConfiguration.botId};
+     * keeping the explicit creation consistent lets both index-creation paths coexist.
+     */
+    static final String BOT_ID_INDEX_NAME = "botId";
 
     private final MongoTemplate mongoTemplate;
 
@@ -59,9 +66,32 @@ public class MongoIndexInitializer implements ApplicationRunner {
                     + "duplicate botId values exist " + duplicateBotIds
                     + ". Remove the duplicates and restart the application.");
         }
+        dropLegacyBotIdIndex();
         ensureIndex(BotConfiguration.class, new Index()
                 .on("botId", Sort.Direction.ASC)
-                .unique());
+                .unique()
+                .named(BOT_ID_INDEX_NAME));
+    }
+
+    /**
+     * The {@code @Indexed} annotation (active when {@code spring.data.mongodb.auto-index-creation}
+     * is enabled) derives the name 'botId', while earlier versions of this initializer let the
+     * server generate 'botId_1'. MongoDB refuses two indexes with the same key but different
+     * names, so a legacy index is dropped and recreated under the canonical name.
+     */
+    private void dropLegacyBotIdIndex() {
+        if (!mongoTemplate.collectionExists(BotConfiguration.class)) {
+            return;
+        }
+        for (IndexInfo indexInfo : mongoTemplate.indexOps(BotConfiguration.class).getIndexInfo()) {
+            boolean sameKey = indexInfo.getIndexFields().size() == 1
+                    && "botId".equals(indexInfo.getIndexFields().getFirst().getKey());
+            if (sameKey && !BOT_ID_INDEX_NAME.equals(indexInfo.getName())) {
+                log.info("Recreating index '{}' on bot_configurations.botId as '{}'",
+                        indexInfo.getName(), BOT_ID_INDEX_NAME);
+                mongoTemplate.indexOps(BotConfiguration.class).dropIndex(indexInfo.getName());
+            }
+        }
     }
 
     private List<String> findDuplicateBotIds() {

@@ -12,7 +12,6 @@ spring:
     mongodb:
       uri: mongodb+srv://${MONGODB_AUTOTRADER_USER}:${MONGODB_AUTOTRADER_PASSWORD}@${MONGODB_AUTOTRADER_URI}
       database: autotrader
-      auto-index-creation: true
 
 management:
   endpoints:

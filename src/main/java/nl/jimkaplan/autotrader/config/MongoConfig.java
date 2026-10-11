@@ -31,6 +31,9 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
     @Value("${mongodb.ssl.enabled:true}")
     private boolean sslEnabled;
 
+    @Value("${spring.data.mongodb.auto-index-creation:false}")
+    private boolean autoIndexCreation;
+
     @NonNull
     @Override
     public String getDatabaseName() {
@@ -59,5 +62,19 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
                 .build();
 
         return MongoClients.create(settings);
+    }
+
+    /**
+     * Honor Spring Boot's {@code spring.data.mongodb.auto-index-creation} property, which the
+     * custom configuration would otherwise ignore. It stays off by default: indexes are created
+     * explicitly by {@link MongoIndexInitializer}, so that the duplicate-{@code botId} check runs
+     * before the unique index and reports an actionable error, and so the definitions are unit
+     * tested. Enabling the property creates the annotation-declared ({@code @Indexed}) indexes
+     * during repository setup instead — earlier than that check, so a database that still contains
+     * duplicate bot ids would fail there with the raw duplicate-key error.
+     */
+    @Override
+    protected boolean autoIndexCreation() {
+        return autoIndexCreation;
     }
 }
