@@ -6,22 +6,27 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The parallel series the indicators and rules evaluate on, aligned with the candles, oldest
- * first.
+ * The parallel series the indicators, rules and the backtester evaluate on, aligned with the
+ * candles, oldest first.
  *
+ * @param opens  Bar opens
  * @param highs  Bar highs
  * @param lows   Bar lows
  * @param closes Bar closes
- * @throws IllegalArgumentException if the arrays differ in length
+ * @param times  Bar open times, epoch milliseconds
+ * @throws IllegalArgumentException if the series differ in length
  */
-public record CandleSeries(double[] highs, double[] lows, double[] closes) {
+public record CandleSeries(double[] opens, double[] highs, double[] lows, double[] closes, long[] times) {
 
     public CandleSeries {
+        Objects.requireNonNull(opens, "opens must not be null");
         Objects.requireNonNull(highs, "highs must not be null");
         Objects.requireNonNull(lows, "lows must not be null");
         Objects.requireNonNull(closes, "closes must not be null");
-        if (highs.length != lows.length || highs.length != closes.length) {
-            throw new IllegalArgumentException("highs, lows and closes must have the same length");
+        Objects.requireNonNull(times, "times must not be null");
+        if (opens.length != highs.length || opens.length != lows.length
+                || opens.length != closes.length || opens.length != times.length) {
+            throw new IllegalArgumentException("all series must have the same length");
         }
     }
 
@@ -38,24 +43,30 @@ public record CandleSeries(double[] highs, double[] lows, double[] closes) {
      */
     public static CandleSeries of(List<Candle> candles) {
         Objects.requireNonNull(candles, "candles must not be null");
-        double[] highs = new double[candles.size()];
-        double[] lows = new double[candles.size()];
-        double[] closes = new double[candles.size()];
+        int length = candles.size();
+        double[] opens = new double[length];
+        double[] highs = new double[length];
+        double[] lows = new double[length];
+        double[] closes = new double[length];
+        long[] times = new long[length];
         long previousOpenTime = Long.MIN_VALUE;
-        for (int i = 0; i < candles.size(); i++) {
+        for (int i = 0; i < length; i++) {
             Candle candle = candles.get(i);
             if (candle.getOpenTime() <= previousOpenTime) {
                 throw new IllegalArgumentException("candles must be ordered oldest first (index " + i + ")");
             }
-            if (candle.getHigh() == null || candle.getLow() == null || candle.getClose() == null) {
+            if (candle.getOpen() == null || candle.getHigh() == null
+                    || candle.getLow() == null || candle.getClose() == null) {
                 throw new IllegalArgumentException("candle at index " + i + " is missing OHLC values");
             }
             previousOpenTime = candle.getOpenTime();
+            opens[i] = candle.getOpen().doubleValue();
             highs[i] = candle.getHigh().doubleValue();
             lows[i] = candle.getLow().doubleValue();
             closes[i] = candle.getClose().doubleValue();
+            times[i] = candle.getOpenTime();
         }
-        return new CandleSeries(highs, lows, closes);
+        return new CandleSeries(opens, highs, lows, closes, times);
     }
 
     /**

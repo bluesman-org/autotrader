@@ -61,7 +61,7 @@ public class BitvavoAuthenticationService {
      * @param method    HTTP method (GET, POST, PUT, DELETE)
      * @param path      API endpoint path
      * @param body      Request body (for POST/PUT requests)
-     * @return Base64 encoded HMAC-SHA256 signature
+     * @return Hex-encoded HMAC-SHA256 signature
      */
     private String createSignature(long timestamp, String method, String path, String body, String apiSecret) {
         log.debug("Creating signature for {} request to {} at timestamp {}", method, path, timestamp);
