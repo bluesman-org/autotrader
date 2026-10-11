@@ -90,7 +90,8 @@ autotrader/
    ./mvnw spring-boot:run
    ```
 
-3. The application will be available at `http://localhost:8080`
+3. The application will be available at `http://localhost:8081/autotrader` — the UI at
+   `/autotrader/ui/backtests` and the API docs at `/autotrader/swagger-ui.html`
 
 ### Local MongoDB
 
@@ -115,14 +116,15 @@ build the jar first:
 docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-It reads `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD` and `DEV_ENCRYPTION_MASTER_KEY` from the
-repo-root `.env`; the encryption key is a throwaway for development, so bots or exchange keys
-configured through this stack are not portable to another key. The UI is served on
+It reads `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD` and `ENCRYPTION_MASTER_KEY` from the
+repo-root `.env`; it shares the key — and the database — with the `spring-boot:run` loop, so bots
+and exchange credentials stay readable through either path. The UI is served on
 `http://<host>:8081/autotrader/ui/backtests`. `./mvnw spring-boot:run` remains the faster
 edit/run loop (devtools restarts the app on recompiles); the container is the stable one.
 
-The `Dockerfile` is platform-agnostic: the target platform is chosen at build time — native by
-default, `linux/arm64` in the deploy workflow for the arm64 deployment host.
+The `Dockerfile` is platform-agnostic: the target platform is chosen at build time — native for
+local builds, and `-Ddocker.platforms=linux/arm64` (buildx) in the deploy workflow for the arm64
+deployment host.
 
 Historical candles are cached in this database. They are excluded from
 `scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo. Indexes are created
