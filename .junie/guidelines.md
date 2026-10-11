@@ -41,6 +41,9 @@ autotrader/
 │   │   │   ├── model/                      # Common data models
 │   │   │   ├── repository/                 # Data repositories
 │   │   │   ├── service/                    # Business logic services
+│   │   │   ├── strategy/                   # In-app strategy engine
+│   │   │   │   ├── model/                  # Candle intervals and documents
+│   │   │   │   └── service/                # Candle history loader
 │   │   │   └── tradingview/                # TradingView integration
 │   │   │       ├── controller/             # TradingView REST controllers
 │   │   │       ├── model/                  # TradingView data models
@@ -88,6 +91,23 @@ autotrader/
    ```
 
 3. The application will be available at `http://localhost:8080`
+
+### Local MongoDB
+
+For local development, `docker-compose.local.yml` starts a MongoDB in Docker. It reads
+`MONGO_ROOT_PASSWORD` and `MONGO_APP_PASSWORD` from the repo-root `.env` file, which is
+gitignored.
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+export SPRING_DATA_MONGODB_URI="mongodb://autotrader:<MONGO_APP_PASSWORD>@127.0.0.1:27017/autotrader"
+export MONGODB_SSL_ENABLED=false
+```
+
+Historical candles are cached in this database. They are excluded from
+`scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo. The application
+creates the indexes it needs at startup (`MongoIndexInitializer`);
+`spring.data.mongodb.auto-index-creation` has no effect with the custom `MongoConfig`.
 
 ## Testing
 
