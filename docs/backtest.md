@@ -65,3 +65,29 @@ A sweep is the Cartesian product of the candidate entry rule sets, exit rule set
 parameters and Parabolic SAR parameters. The product must not exceed **5000 combinations**; a
 larger request is rejected rather than silently truncated. The cap exists because every
 combination is simulated over every bar — the bound keeps a sweep interactive.
+
+## API
+
+`POST /api/backtests` runs a sweep and stores the outcome. Only the market, interval and range
+are required; everything else falls back to the documented defaults:
+
+| Field | Default |
+| --- | --- |
+| `initialCapital` | 1000 EUR |
+| `amountPerBuy` | 100 EUR |
+| `feeRate` | 0.002 (the account's taker rate) |
+| `warmUpCandles` | 200 |
+| `trainRatio` | 0.7 |
+| `rankingMetric` | `TOTAL_RETURN` |
+| `macdParameters` | `[{12, 26, 9}]` |
+| `sarParameters` | `[{0.02, 0.2}]` |
+| `entryRules` | `ALL [MACD_BULLISH_CROSSOVER]` |
+| `exitRules` | `ALL [SAR_BEARISH_CROSSOVER]` |
+
+The run is synchronous and fetches any missing candles from Bitvavo first, so a request over a
+large range takes longer; two ceilings bound it: the 5,000-combination cap on the sweep and a
+**50,000-candle maximum range** (a wider range is rejected with a 400 before anything is
+fetched). Only the best 50 entries are stored. `GET /api/backtests/{id}` reads a run back,
+`GET /api/backtests?limit=20` lists the most recent runs **without their entries** (the list is
+projected, so payloads stay small). A `profitFactor` of infinity is serialized as the JSON
+string `"Infinity"` (Jackson's standard handling of non-finite numbers).

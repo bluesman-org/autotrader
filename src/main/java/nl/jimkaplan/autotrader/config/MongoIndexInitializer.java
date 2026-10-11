@@ -3,6 +3,7 @@ package nl.jimkaplan.autotrader.config;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import org.bson.Document;
 import org.springframework.boot.ApplicationArguments;
@@ -53,6 +54,8 @@ public class MongoIndexInitializer implements ApplicationRunner {
                 .on("openTime", Sort.Direction.ASC)
                 .unique());
         ensureBotIdIndex();
+        ensureIndex(BacktestRun.class, new Index()
+                .on("runAt", Sort.Direction.DESC));
     }
 
     /**

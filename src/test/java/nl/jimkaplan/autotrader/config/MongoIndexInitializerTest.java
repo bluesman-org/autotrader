@@ -1,6 +1,7 @@
 package nl.jimkaplan.autotrader.config;
 
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
@@ -45,19 +46,20 @@ class MongoIndexInitializerTest {
     private MongoIndexInitializer mongoIndexInitializer;
 
     @Test
-    void createsUniqueIndexesForCandlesAndBotConfigurations() {
+    void createsTheExpectedIndexes() {
         when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
                 .thenReturn(aggregationResults());
         when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(true);
         when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(BacktestRun.class)).thenReturn(indexOperations);
         when(indexOperations.getIndexInfo()).thenReturn(List.of());
         when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
 
         mongoIndexInitializer.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<Index> indexCaptor = ArgumentCaptor.forClass(Index.class);
-        verify(indexOperations, times(2)).ensureIndex(indexCaptor.capture());
+        verify(indexOperations, times(3)).ensureIndex(indexCaptor.capture());
         List<Index> indexes = indexCaptor.getAllValues();
 
         Index candleIndex = indexes.get(0);
@@ -72,6 +74,11 @@ class MongoIndexInitializerTest {
         assertEquals(1, botConfigurationIndex.getIndexKeys().get("botId"));
         assertEquals(Boolean.TRUE, botConfigurationIndex.getIndexOptions().get("unique"));
         assertEquals(BOT_ID_INDEX_NAME, botConfigurationIndex.getIndexOptions().get("name"));
+
+        Index backtestRunIndex = indexes.get(2);
+        assertEquals(1, backtestRunIndex.getIndexKeys().size());
+        assertEquals(-1, backtestRunIndex.getIndexKeys().get("runAt"));
+        assertEquals(null, backtestRunIndex.getIndexOptions().get("unique"));
     }
 
     @Test
@@ -81,6 +88,7 @@ class MongoIndexInitializerTest {
         when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(true);
         when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(BacktestRun.class)).thenReturn(indexOperations);
         when(indexOperations.getIndexInfo()).thenReturn(List.of(new IndexInfo(
                 List.of(IndexField.create("botId", Sort.Direction.ASC)), "botId_1", true, false, null)));
         when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
@@ -89,8 +97,24 @@ class MongoIndexInitializerTest {
 
         verify(indexOperations).dropIndex("botId_1");
         ArgumentCaptor<Index> indexCaptor = ArgumentCaptor.forClass(Index.class);
-        verify(indexOperations, times(2)).ensureIndex(indexCaptor.capture());
+        verify(indexOperations, times(3)).ensureIndex(indexCaptor.capture());
         assertEquals(BOT_ID_INDEX_NAME, indexCaptor.getAllValues().get(1).getIndexOptions().get("name"));
+    }
+
+    @Test
+    void withMissingCollection_skipsTheLegacyIndexCheck() {
+        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
+                .thenReturn(aggregationResults());
+        when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(false);
+        when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(BacktestRun.class)).thenReturn(indexOperations);
+        when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
+
+        mongoIndexInitializer.run(new DefaultApplicationArguments());
+
+        verify(indexOperations, never()).getIndexInfo();
+        verify(indexOperations, times(3)).ensureIndex(any(Index.class));
     }
 
     @Test
@@ -106,21 +130,6 @@ class MongoIndexInitializerTest {
         assertTrue(exception.getMessage().contains("duplicate-bot"));
         assertTrue(exception.getMessage().contains("bot_configurations.botId"));
         verify(mongoTemplate, never()).indexOps(BotConfiguration.class);
-    }
-
-    @Test
-    void withMissingCollection_skipsTheLegacyIndexCheck() {
-        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
-                .thenReturn(aggregationResults());
-        when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(false);
-        when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
-        when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
-        when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
-
-        mongoIndexInitializer.run(new DefaultApplicationArguments());
-
-        verify(indexOperations, never()).getIndexInfo();
-        verify(indexOperations, times(2)).ensureIndex(any(Index.class));
     }
 
     private static AggregationResults<Document> aggregationResults(Document... results) {

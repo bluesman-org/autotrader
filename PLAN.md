@@ -5,8 +5,8 @@ data and our own indicators. **Update this file with every PR**: check off compl
 add new follow-ups, and keep the status line current.
 
 **Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5), indicators
-pinned to the reference fixtures (PR #6), rules in (PR #7). Phase 3 in progress: the simulation
-engine and the sweep are in (PR #8); next: the REST API for running backtests.
+pinned to the reference fixtures (PR #6), rules in (PR #7), backtest engine and sweep in (PR #8).
+Phase 3 complete pending review: the REST API is in (PR #9); next: Phase 4, the in-app UI.
 
 ## Objective
 
@@ -67,7 +67,7 @@ engine and the sweep are in (PR #8); next: the REST API for running backtests.
 - [x] Parameter model shared by backtest, UI and live engine (`MacdParameters`,
       `ParabolicSarParameters`, eager validation)
 
-### Phase 3 — Backtester and API (in progress)
+### Phase 3 — Backtester and API ✅ (PRs #8–#9)
 
 - [x] Deterministic simulation engine: closed-candle decisions, next-open fills, fixed EUR per
       buy, fee per side (default 0.20% taker — live-verified), skipped-signal records, forced
@@ -75,7 +75,8 @@ engine and the sweep are in (PR #8); next: the REST API for running backtests.
 - [x] Entry×exit matrix sweep plus numeric parameter grids, ~5,000-combination cap
 - [x] Train/validate split ranking (optimise on the earlier portion, verify on the held-out newer
       portion), selectable ranking metric, deterministic outputs
-- [ ] REST API for running backtests and reading ranked results
+- [x] REST API for running backtests and reading ranked results (`POST /api/backtests`,
+      `GET /api/backtests/{id}`, `GET /api/backtests`; runs stored in `backtest_runs`)
 
 ### Phase 4 — In-app UI (Thymeleaf)
 
