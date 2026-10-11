@@ -79,7 +79,15 @@ def main():
               [oscillating_high, oscillating_low,
                talib.SAR(oscillating_high, oscillating_low, acceleration=0.02, maximum=0.2)])
 
-    print(f"fixtures written to {fixture_dir}")
+    descending_high = np.array([5.0, 4.0, 3.0, 2.0, 1.0])
+    descending_low = np.array([4.5, 3.5, 2.5, 1.5, 0.5])
+    write_csv(fixture_dir / "sar_descending.csv", ["high", "low", "sar"],
+              [descending_high, descending_low,
+               talib.SAR(descending_high, descending_low, acceleration=0.02, maximum=0.2)])
+
+    print(f"fixtures written to {fixture_dir} with "
+          f"ta-lib {talib.__version__} (C {talib.__ta_version__.decode('utf-8')}), "
+          f"numpy {np.__version__}")
 
 
 if __name__ == "__main__":

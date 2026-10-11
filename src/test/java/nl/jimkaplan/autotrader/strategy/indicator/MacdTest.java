@@ -99,6 +99,26 @@ class MacdTest {
         assertThrows(IllegalArgumentException.class, () -> Macd.calculate(closes, 12, 26, 0));
     }
 
+    @Test
+    void rejectsPeriodsAboveTheMaximum() {
+        double[] closes = {1.0, 2.0, 3.0};
+
+        assertThrows(IllegalArgumentException.class,
+                () -> Macd.calculate(closes, Macd.MAX_PERIOD + 1, Macd.MAX_PERIOD + 1, 9));
+        assertThrows(IllegalArgumentException.class,
+                () -> Macd.calculate(closes, 12, 26, Macd.MAX_PERIOD + 1));
+        // Regression: a huge slow period used to wrap the minimum-length sum and read past the input
+        assertThrows(IllegalArgumentException.class,
+                () -> Macd.calculate(closes, 12, 2_147_483_640, 9));
+    }
+
+    @Test
+    void withTheMaximumPeriodOnAShortInput_returnsAllNaN() {
+        MacdResult result = Macd.calculate(new double[]{1.0, 2.0, 3.0}, 12, Macd.MAX_PERIOD, 9);
+
+        assertAllNaN(result.macd(), result.signal(), result.histogram());
+    }
+
     private static void assertAllNaN(double[]... series) {
         for (double[] values : series) {
             for (double value : values) {

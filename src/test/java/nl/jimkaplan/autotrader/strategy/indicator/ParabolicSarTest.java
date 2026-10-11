@@ -41,6 +41,16 @@ class ParabolicSarTest {
     }
 
     @Test
+    void matchesTheFrozenDescendingFixture() {
+        // Descending data starts the series short: the first value is the first bar's high
+        List<String[]> rows = IndicatorFixtures.rows("sar_descending.csv");
+
+        assertArrayEquals(IndicatorFixtures.column(rows, 2),
+                ParabolicSar.calculate(IndicatorFixtures.column(rows, 0),
+                        IndicatorFixtures.column(rows, 1), 0.02, 0.2), 0.0);
+    }
+
+    @Test
     void withASingleBar_returnsAllNaN() {
         double[] result = ParabolicSar.calculate(new double[]{5.0}, new double[]{4.0}, 0.02, 0.2);
 
@@ -76,5 +86,11 @@ class ParabolicSarTest {
                 () -> ParabolicSar.calculate(values, new double[]{1.0}, 0.02, 0.2));
         assertThrows(IllegalArgumentException.class, () -> ParabolicSar.calculate(values, values, -0.01, 0.2));
         assertThrows(IllegalArgumentException.class, () -> ParabolicSar.calculate(values, values, 0.02, -0.01));
+        assertThrows(IllegalArgumentException.class,
+                () -> ParabolicSar.calculate(values, values, Double.NaN, 0.2));
+        assertThrows(IllegalArgumentException.class,
+                () -> ParabolicSar.calculate(values, values, 0.02, Double.NaN));
+        assertThrows(IllegalArgumentException.class,
+                () -> ParabolicSar.calculate(values, values, Double.POSITIVE_INFINITY, 0.2));
     }
 }

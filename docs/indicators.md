@@ -79,6 +79,11 @@ override sits outside the current bar's range.
 
 `btc_eur_1h_ohlc.csv` is the first 500 BTC-EUR 1-hour candles from the local candle store
 (exported 2026-10-11). `macd_btc_eur_1h_12_26_9.csv` and `sar_btc_eur_1h.csv` contain the
-reference outputs for those bars, generated with TA-Lib 0.8.1 (the Python wheel wrapping the
-C library) via `scripts/generate-indicator-fixtures.py`. TA-Lib is test-fixture provenance
-only and is not a runtime or build dependency of the application.
+reference outputs for those bars; `macd_linear_3_5_2.csv`, `sar_flat.csv`,
+`sar_oscillating.csv` and `sar_descending.csv` cover the crafted edge cases. All of them were
+generated with `scripts/generate-indicator-fixtures.py`, which prints the exact toolchain it
+ran with — **the frozen values pin that build** (TA-Lib 0.8.1, the build that fuses the EMA
+kernel as shown above). Bit-exactness is build-sensitive: another TA-Lib version, or a build
+whose compiler contracts differently, can legitimately differ in the last bit, and the tests
+compare against the committed values with zero tolerance. TA-Lib is fixture provenance only
+and is not a runtime or build dependency of the application.
