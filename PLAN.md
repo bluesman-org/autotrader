@@ -5,8 +5,9 @@ data and our own indicators. **Update this file with every PR**: check off compl
 add new follow-ups, and keep the status line current.
 
 **Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5), indicators
-pinned to the reference fixtures (PR #6), rules in (PR #7), backtest engine and sweep in (PR #8).
-Phase 3 complete pending review: the REST API is in (PR #9); next: Phase 4, the in-app UI.
+pinned to the reference fixtures (PR #6), rules in (PR #7), backtest engine and sweep in (PR #8),
+REST API in (PR #9). Phase 4 in progress: the in-app UI is in PR #10 (under review); next:
+Phase 5, the live engine.
 
 ## Objective
 
@@ -78,10 +79,12 @@ Phase 3 complete pending review: the REST API is in (PR #9); next: Phase 4, the 
 - [x] REST API for running backtests and reading ranked results (`POST /api/backtests`,
       `GET /api/backtests/{id}`, `GET /api/backtests`; runs stored in `backtest_runs`)
 
-### Phase 4 — In-app UI (Thymeleaf)
+### Phase 4 — In-app UI (Thymeleaf) (PR #10, in review)
 
-- [ ] Configure strategies and parameters
-- [ ] Run backtests and browse ranked results
+- [x] Configure strategies and parameters (`/ui/backtests`: market, interval, UTC range, simulation
+      settings, indicator candidate grids, entry and exit rule sets with ALL/ANY)
+- [x] Run backtests and browse ranked results (synchronous run with inline validation errors, the
+      ranked table with train and validate metrics side by side, recent runs, welcome-page link)
 
 ### Phase 5 — Live engine
 
@@ -99,6 +102,12 @@ Phase 3 complete pending review: the REST API is in (PR #9); next: Phase 4, the 
 - [x] **Coverage** — raised to the AGENTS.md rule (90% line / 100% method, POJOs and bootstrap
       classes excluded) and enforced in CI on every PR (`.github/workflows/coverage.yml`,
       `./mvnw verify -Ddocker.skip=true`); includes the `GlobalExceptionHandler` null-cause fix
+- [ ] 405 responses should carry the `Allow` header that Spring's default resolver sets from
+      `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
+      handler is next touched)
+- [ ] Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
+      run where half the entries were skipped currently looks identical to one with none, and that
+      matters more once Phase 5 trades live
 - [ ] Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
 - [ ] Optionally move the remaining `.junie/` design docs under `docs/`
 - [x] Duplicate `botId` on create returns a clear 400 (PR #4)

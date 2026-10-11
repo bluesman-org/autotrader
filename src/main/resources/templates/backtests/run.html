@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="|Backtest ${run.market} ${run.interval} · Autotrader|">Backtest · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <p><a th:href="@{/ui/backtests}">← All backtests</a></p>
+    <h1 th:text="|Backtest ${run.market} ${run.interval}|">Backtest BTC-EUR 1h</h1>
+
+    <div class="card">
+        <div class="stat-row">
+            <div class="stat"><b th:text="${runAtText}">2026-10-11 17:40</b>Run (UTC)</div>
+            <div class="stat"><b th:text="${rangeText}">2026-07-03 → 2026-10-11</b>Range (UTC)</div>
+            <div class="stat"><b th:text="${run.candleCount}">2399</b>Bars</div>
+            <div class="stat"><b th:text="${run.combinationsEvaluated}">1</b>Combinations</div>
+            <div class="stat"><b th:text="${#strings.replace(run.rankingMetric, '_', ' ')}">TOTAL RETURN</b>Ranking</div>
+            <div class="stat"><b th:text="${#numbers.formatDecimal(run.initialCapital, 1, 0) + ' EUR'}">1000 EUR</b>Initial capital</div>
+            <div class="stat"><b th:text="${#numbers.formatDecimal(run.amountPerBuy, 1, 0) + ' EUR'}">100 EUR</b>Per buy</div>
+            <div class="stat"><b th:text="${#numbers.formatDecimal(run.feeRate * 100, 1, 2) + '%'}">0.20%</b>Fee per side</div>
+            <div class="stat"><b th:text="${run.warmUpCandles}">200</b>Warm-up</div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(run.trainRatio * 100, 1, 0) + '% / '
+                        + #numbers.formatDecimal((1 - run.trainRatio) * 100, 1, 0) + '%'}">70% / 30%</b>Train / validate
+            </div>
+        </div>
+    </div>
+
+    <h2>Ranked combinations</h2>
+    <p class="muted">
+        Ranked by <span th:text="${#strings.replace(run.rankingMetric, '_', ' ')}">TOTAL RETURN</span> on the
+        train side; only the best 50 combinations are stored per run.
+    </p>
+    <p class="muted" th:if="${#lists.isEmpty(run.entries)}">No ranked combinations were stored for this run.</p>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(run.entries)}">
+        <table class="ranked">
+            <thead>
+            <tr>
+                <th rowspan="2">#</th>
+                <th rowspan="2" class="left">MACD<br><span class="muted">fast/slow/signal</span></th>
+                <th rowspan="2" class="left">SAR<br><span class="muted">accel/max</span></th>
+                <th rowspan="2" class="left">Entry rules</th>
+                <th rowspan="2" class="left">Exit rules</th>
+                <th colspan="5" class="group-train">Train — earlier part (optimised on)</th>
+                <th colspan="5" class="group-validate">Validate — held out</th>
+            </tr>
+            <tr>
+                <th>Trades</th>
+                <th>Return %</th>
+                <th>Max DD %</th>
+                <th>Win %</th>
+                <th>PF</th>
+                <th>Trades</th>
+                <th>Return %</th>
+                <th>Max DD %</th>
+                <th>Win %</th>
+                <th>PF</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="entry, iter : ${run.entries}">
+                <td th:text="${iter.count}">1</td>
+                <td class="left" th:text="${entry.fastPeriod + '/' + entry.slowPeriod + '/' + entry.signalPeriod}">12/26/9</td>
+                <td class="left" th:text="${entry.acceleration + '/' + entry.maximum}">0.02/0.2</td>
+                <td class="left">
+                    <span class="pill" th:text="${entry.entryOperator}">ALL</span>
+                    <span th:text="${#strings.replace(#strings.listJoin(entry.entryConditions, ', '), '_', ' ')}">MACD BULLISH CROSSOVER</span>
+                </td>
+                <td class="left">
+                    <span class="pill" th:text="${entry.exitOperator}">ALL</span>
+                    <span th:text="${#strings.replace(#strings.listJoin(entry.exitConditions, ', '), '_', ' ')}">SAR BEARISH CROSSOVER</span>
+                </td>
+                <td th:text="${entry.train.tradeCount}">0</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.totalReturnPercent, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.maxDrawdownPercent, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.winRatePercent, 1, 1)}">0.0</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.profitFactor, 1, 2)}">0.00</td>
+                <td th:text="${entry.validate.tradeCount}">0</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.totalReturnPercent, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.maxDrawdownPercent, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.winRatePercent, 1, 1)}">0.0</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.profitFactor, 1, 2)}">0.00</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="muted">
+        A trade is a round trip; PF is the profit factor (gross profit over gross loss, ∞ when nothing was lost);
+        returns are on the initial capital with the fee applied per side.
+    </p>
+</main>
+</body>
+</html>

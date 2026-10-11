@@ -212,6 +212,18 @@ You can explore the API documentation using the Swagger UI at:
 http://localhost:8081/autotrader/swagger-ui.html
 ```
 
+### Strategy backtest UI
+
+The in-app Thymeleaf UI for configuring and ranking strategies is at:
+
+```
+http://localhost:8081/autotrader/ui/backtests
+```
+
+It drives the same backtest API (`POST /api/backtests`): set the market, interval and range, the
+simulation settings, the indicator candidate grids and the entry/exit rule sets, then browse the
+ranked train/validate results and the recent runs.
+
 ### Postman Integration
 
 The application automatically generates OpenAPI specification files that can be imported into Postman:

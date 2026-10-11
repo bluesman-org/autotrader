@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backtests · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1>Strategy backtests</h1>
+    <p class="muted">
+        Sweeps the entry × exit rule sets and the indicator parameter candidates over stored candles,
+        optimises on the earlier part of the range and verifies on the held-out newer part. The top
+        ranked combinations are kept; missing candles are fetched from Bitvavo first.
+    </p>
+
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+
+    <form method="post" th:action="@{/ui/backtests}" th:object="${form}" class="card">
+        <fieldset>
+            <legend>Data</legend>
+            <div class="grid">
+                <label>Market
+                    <input type="text" th:field="*{market}" required>
+                </label>
+                <label>Interval
+                    <select th:field="*{interval}">
+                        <option th:each="i : ${intervals}" th:value="${i.code}" th:text="${i.code}">1h</option>
+                    </select>
+                </label>
+                <label>From (UTC)
+                    <input type="date" th:field="*{fromDate}" required>
+                </label>
+                <label>To (UTC, inclusive)
+                    <input type="date" th:field="*{toDate}" required>
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Simulation</legend>
+            <div class="grid">
+                <label>Initial capital (EUR)
+                    <input type="text" th:field="*{initialCapital}">
+                </label>
+                <label>Amount per buy (EUR)
+                    <input type="text" th:field="*{amountPerBuy}">
+                </label>
+                <label>Fee per side (fraction)
+                    <input type="text" th:field="*{feeRate}">
+                </label>
+                <label>Warm-up candles
+                    <input type="text" th:field="*{warmUpCandles}">
+                </label>
+                <label>Train ratio
+                    <input type="text" th:field="*{trainRatio}">
+                </label>
+                <label>Ranking metric
+                    <select th:field="*{rankingMetric}">
+                        <option th:each="m : ${rankingMetrics}" th:value="${m.name()}"
+                                th:text="${#strings.replace(m.name(), '_', ' ')}">TOTAL RETURN</option>
+                    </select>
+                </label>
+            </div>
+            <p class="muted">Max drawdown ranks ascending (smaller is better); the other metrics rank descending.
+                Blank optional fields take the documented defaults.</p>
+        </fieldset>
+
+        <fieldset>
+            <legend>Indicator candidates</legend>
+            <div class="grid">
+                <label>MACD fast/slow/signal — comma-separate for a grid
+                    <input type="text" th:field="*{macdCandidates}" placeholder="12/26/9">
+                </label>
+                <label>Parabolic SAR acceleration/maximum — comma-separate for a grid
+                    <input type="text" th:field="*{sarCandidates}" placeholder="0.02/0.2">
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Entry rules</legend>
+            <label>Conditions combine with
+                <select th:field="*{entryOperator}">
+                    <option th:each="op : ${operators}" th:value="${op.name()}" th:text="${op.name()}">ALL</option>
+                </select>
+            </label>
+            <div class="checks">
+                <label th:each="c : ${conditions}">
+                    <input type="checkbox" th:field="*{entryConditions}" th:value="${c.name()}">
+                    <span th:text="${#strings.replace(c.name(), '_', ' ')}">MACD BULLISH CROSSOVER</span>
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Exit rules</legend>
+            <label>Conditions combine with
+                <select th:field="*{exitOperator}">
+                    <option th:each="op : ${operators}" th:value="${op.name()}" th:text="${op.name()}">ALL</option>
+                </select>
+            </label>
+            <div class="checks">
+                <label th:each="c : ${conditions}">
+                    <input type="checkbox" th:field="*{exitConditions}" th:value="${c.name()}">
+                    <span th:text="${#strings.replace(c.name(), '_', ' ')}">SAR BEARISH CROSSOVER</span>
+                </label>
+            </div>
+        </fieldset>
+
+        <div class="actions">
+            <button type="submit" class="primary">Run sweep</button>
+            <span class="muted">Runs synchronously: a wide range or a large grid takes longer.</span>
+        </div>
+    </form>
+
+    <h2>Recent runs</h2>
+    <p class="muted" th:if="${#lists.isEmpty(runs)}">No backtest runs yet.</p>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(runs)}">
+        <table>
+            <thead>
+            <tr>
+                <th class="left">Run (UTC)</th>
+                <th class="left">Market</th>
+                <th class="left">Range (UTC)</th>
+                <th>Bars</th>
+                <th>Combinations</th>
+                <th class="left">Ranking</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="row : ${runs}">
+                <td class="left" th:text="${row.runAt}">2026-10-11 17:40</td>
+                <td class="left" th:text="${row.run.market + ' ' + row.run.interval}">BTC-EUR 1h</td>
+                <td class="left" th:text="${row.range}">2026-07-03 → 2026-10-11</td>
+                <td th:text="${row.run.candleCount}">2399</td>
+                <td th:text="${row.run.combinationsEvaluated}">1</td>
+                <td class="left" th:text="${#strings.replace(row.run.rankingMetric, '_', ' ')}">TOTAL RETURN</td>
+                <td><a th:href="@{/ui/backtests/{id}(id=${row.run.id})}">Open</a></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>
