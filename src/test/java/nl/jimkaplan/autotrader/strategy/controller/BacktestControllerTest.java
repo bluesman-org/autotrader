@@ -1,5 +1,7 @@
 package nl.jimkaplan.autotrader.strategy.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.junit.jupiter.api.Test;
@@ -15,8 +17,10 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -72,6 +76,19 @@ class BacktestControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals(1, response.getBody().size());
+    }
+
+    @Test
+    void recentResponse_omitsTheNullEntriesOfSummaries() throws JsonProcessingException {
+        BacktestRun summary = BacktestRun.builder().build();
+        summary.setId("run-1");
+        when(backtestService.recent(5)).thenReturn(List.of(summary));
+
+        ResponseEntity<List<BacktestRun>> response = backtestController.recent(5);
+        String json = new ObjectMapper().writeValueAsString(response.getBody());
+
+        assertFalse(json.contains("entries"));
+        assertTrue(json.contains("\"id\":\"run-1\""));
     }
 
     @Test

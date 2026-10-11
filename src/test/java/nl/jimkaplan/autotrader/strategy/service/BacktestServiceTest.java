@@ -18,7 +18,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
@@ -34,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -208,17 +208,27 @@ class BacktestServiceTest {
     }
 
     @Test
-    void recent_returnsTheNewestFirstPage() {
-        BacktestRun run = BacktestRun.builder().build();
-        run.setId("run-1");
-        when(backtestRunRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(run)));
+    void recent_returnsTheNewestFirstPageWithoutEntries() {
+        BacktestRun summary = BacktestRun.builder().build();
+        summary.setId("run-1");
+        when(backtestRunRepository.findSummaries(any(Pageable.class))).thenReturn(List.of(summary));
 
-        assertEquals(List.of(run), backtestService.recent(20));
+        assertEquals(List.of(summary), backtestService.recent(20));
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(backtestRunRepository).findAll(captor.capture());
+        verify(backtestRunRepository).findSummaries(captor.capture());
         assertEquals(20, captor.getValue().getPageSize());
         assertEquals(Sort.by(Sort.Direction.DESC, "runAt"), captor.getValue().getSort());
+    }
+
+    @Test
+    void run_rejectsRangesAboveTheCandleCeiling() {
+        BacktestRunRequest request = minimalRequest();
+        request.setToDate(FROM + (BacktestService.MAX_CANDLES + 1) * HOUR);
+
+        // The ceiling is checked before anything is fetched
+        assertThrows(IllegalArgumentException.class, () -> backtestService.run(request));
+        verifyNoInteractions(candleHistoryService);
     }
 
     private static BacktestRunRequest minimalRequest() {

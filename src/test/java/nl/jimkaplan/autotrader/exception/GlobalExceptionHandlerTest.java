@@ -4,6 +4,7 @@ import nl.jimkaplan.autotrader.model.ErrorResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
@@ -103,6 +104,14 @@ class GlobalExceptionHandlerTest {
                 new IllegalStateException("outer", new RuntimeException("inner")), request());
 
         assertError(response, HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+    }
+
+    @Test
+    void handleMessageNotReadableException_returnsBadRequest() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleMessageNotReadableException(
+                new HttpMessageNotReadableException("unknown enum value"), request());
+
+        assertError(response, HttpStatus.BAD_REQUEST, "Malformed request body");
     }
 
     @Test

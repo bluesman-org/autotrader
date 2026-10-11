@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.model.document;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -88,8 +89,10 @@ public class BacktestRun extends BaseDocument {
     private int combinationsEvaluated;
 
     /**
-     * The best entries, in rank order; the full ranked list is not stored.
+     * The best entries, in rank order; the full ranked list is not stored. Null in the projected
+     * list form, and left out of the JSON then.
      */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Field("entries")
     private List<BacktestRunEntry> entries;
 }

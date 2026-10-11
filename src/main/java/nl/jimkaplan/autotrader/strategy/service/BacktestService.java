@@ -50,6 +50,12 @@ public class BacktestService {
      */
     static final int STORED_ENTRIES = 50;
 
+    /**
+     * Upper bound for the bars one request may cover: the sweep's cost scales with the range as
+     * well as with the combination count, so a synchronous run needs a ceiling on both.
+     */
+    static final long MAX_CANDLES = 50_000;
+
     private static final double DEFAULT_INITIAL_CAPITAL = 1000.0;
     private static final double DEFAULT_AMOUNT_PER_BUY = 100.0;
     private static final double DEFAULT_FEE_RATE = 0.002;
@@ -78,6 +84,11 @@ public class BacktestService {
         long to = required("toDate", request.getToDate());
         if (from >= to) {
             throw new IllegalArgumentException("fromDate must be before toDate");
+        }
+        long estimatedCandles = (to - from) / interval.getMillis() + 1;
+        if (estimatedCandles > MAX_CANDLES) {
+            throw new IllegalArgumentException("the range holds about " + estimatedCandles
+                    + " candles; the maximum is " + MAX_CANDLES);
         }
         BacktestConfig config = config(request);
         SweepDefinition definition = definition(request);
@@ -125,14 +136,14 @@ public class BacktestService {
     }
 
     /**
-     * The most recent runs, newest first.
+     * The most recent runs, newest first, without their ranked entries.
      *
      * @param limit Maximum number of runs to return
      * @return The runs
      */
     public List<BacktestRun> recent(int limit) {
-        return backtestRunRepository.findAll(PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "runAt")))
-                .getContent();
+        return backtestRunRepository.findSummaries(
+                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "runAt")));
     }
 
     private static BacktestConfig config(BacktestRunRequest request) {

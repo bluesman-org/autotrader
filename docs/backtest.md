@@ -85,7 +85,9 @@ are required; everything else falls back to the documented defaults:
 | `exitRules` | `ALL [SAR_BEARISH_CROSSOVER]` |
 
 The run is synchronous and fetches any missing candles from Bitvavo first, so a request over a
-large range takes longer; the combination cap bounds the sweep itself. Only the best 50 entries
-are stored. `GET /api/backtests/{id}` reads a run back, `GET /api/backtests?limit=20` lists the
-most recent runs (entries omitted from the list). A `profitFactor` of infinity is serialized as
-the JSON string `"Infinity"` (Jackson's standard handling of non-finite numbers).
+large range takes longer; two ceilings bound it: the 5,000-combination cap on the sweep and a
+**50,000-candle maximum range** (a wider range is rejected with a 400 before anything is
+fetched). Only the best 50 entries are stored. `GET /api/backtests/{id}` reads a run back,
+`GET /api/backtests?limit=20` lists the most recent runs **without their entries** (the list is
+projected, so payloads stay small). A `profitFactor` of infinity is serialized as the JSON
+string `"Infinity"` (Jackson's standard handling of non-finite numbers).

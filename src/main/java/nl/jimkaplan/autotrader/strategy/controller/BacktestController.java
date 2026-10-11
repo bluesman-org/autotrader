@@ -52,7 +52,8 @@ public class BacktestController {
                           "ranked entries. Fields left out fall back to their defaults (1000 EUR capital, " +
                           "100 EUR per buy, 0.20% fee per side, 200-candle warm-up, 0.7 split, " +
                           "TOTAL_RETURN ranking, 12/26/9 MACD, 0.02/0.2 SAR, a MACD bullish crossover entry " +
-                          "and a bearish SAR crossover exit)."
+                          "and a bearish SAR crossover exit). Ranges covering more than 50,000 candles are " +
+                          "rejected."
     )
     @ApiResponses(value = {
             @ApiResponse(
