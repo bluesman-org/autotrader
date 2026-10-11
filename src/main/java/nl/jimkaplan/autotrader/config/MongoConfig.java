@@ -43,7 +43,16 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
     @NonNull
     @Override
     public MongoClient mongoClient() {
-        MongoClientSettings settings = MongoClientSettings.builder()
+        return MongoClients.create(mongoClientSettings());
+    }
+
+    /**
+     * The client settings, overriding the framework hook so that they can also be asserted
+     * by tests without connecting anywhere.
+     */
+    @Override
+    protected MongoClientSettings mongoClientSettings() {
+        return MongoClientSettings.builder()
                 .applyConnectionString(new ConnectionString(mongoUri))
                 .applyToClusterSettings(builder ->
                         builder.serverSelectionTimeout(10, TimeUnit.SECONDS))
@@ -60,8 +69,6 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
                 .writeConcern(WriteConcern.MAJORITY)
                 .applyToSslSettings(builder -> builder.enabled(sslEnabled))
                 .build();
-
-        return MongoClients.create(settings);
     }
 
     /**
