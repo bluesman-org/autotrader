@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -109,7 +110,7 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
             log.info("Exported OpenAPI specification to YAML file: {}", yamlFilePath);
 
             log.info("OpenAPI specification export completed successfully");
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             log.error("Failed to export OpenAPI specification", e);
         }
     }
@@ -127,8 +128,9 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
                 // Wait a bit to ensure the server is fully started
                 Thread.sleep(exportStartupDelayMs);
                 exportOpenApiSpecification();
-            } catch (Exception e) {
-                log.error("Failed to export OpenAPI specification", e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("OpenAPI specification export was interrupted", e);
             }
         };
     }

@@ -1,0 +1,46 @@
+name: Docker image
+
+# The image build is not covered by the coverage workflow (it skips Docker) and only the deploy
+# workflow builds it, on dispatch. This job builds it for the native platform whenever the pieces
+# that shape it change, and validates the compose files.
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose*.yml'
+      - 'pom.xml'
+      - '.github/workflows/docker.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose*.yml'
+      - 'pom.xml'
+      - '.github/workflows/docker.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+      - name: Build the jar the image copies
+        run: ./mvnw -B package -DskipTests -Ddocker.skip=true
+      - name: Build the image for this runner's platform
+        run: docker build -t autotrader:ci .
+      - name: Validate the compose files
+        env:
+          MONGO_ROOT_PASSWORD: ci-root
+          MONGO_APP_PASSWORD: ci-app
+          ENCRYPTION_MASTER_KEY: ci-key
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.dev.yml config -q
+          docker compose -f docker-compose.local.yml config -q

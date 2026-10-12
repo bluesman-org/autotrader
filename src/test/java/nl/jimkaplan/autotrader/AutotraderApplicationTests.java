@@ -1,0 +1,37 @@
+package nl.jimkaplan.autotrader;
+
+import nl.jimkaplan.autotrader.config.MongoIndexInitializer;
+import nl.jimkaplan.autotrader.strategy.live.LiveStrategyStarter;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+/**
+ * Boots the full application context. A per-class unit test cannot see a bean that fails to wire —
+ * a component with two constructors, a missing qualifier — and that is a class of failure this
+ * project has hit; one context start catches it.
+ *
+ * <p>No database is needed: the two startup runners are replaced by mocks, nothing touches Mongo
+ * before the first request, and the OpenAPI export is pointed at the build directory (with the
+ * mock web environment it does not run at all). The property overrides stand in for the environment
+ * variables the application.yml placeholders expect.</p>
+ */
+@SpringBootTest(properties = {
+        "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-context-test",
+        "bitvavo.api.url=http://localhost:9999",
+        "encryption.master-key=dGVzdC1rZXk=",
+        "openapi.export-dir=target/context-test-openapi"
+})
+class AutotraderApplicationTests {
+
+    @MockitoBean
+    private MongoIndexInitializer mongoIndexInitializer;
+
+    @MockitoBean
+    private LiveStrategyStarter liveStrategyStarter;
+
+    @Test
+    void contextLoads() {
+        // The context starting is the assertion.
+    }
+}

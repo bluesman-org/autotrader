@@ -111,9 +111,13 @@ retiring TradingView.
 
 ## Follow-ups
 
-- [x] **Coverage** — raised to the AGENTS.md rule (90% line / 100% method, POJOs and bootstrap
-      classes excluded) and enforced in CI on every PR (`.github/workflows/coverage.yml`,
-      `./mvnw verify -Ddocker.skip=true`); includes the `GlobalExceptionHandler` null-cause fix
+- [x] **Coverage** — raised to the AGENTS.md rule (95% line / 100% method / 85% branch, POJOs and
+      bootstrap classes excluded) and enforced in CI on every PR and main push
+      (`.github/workflows/coverage.yml`, `./mvnw verify -Ddocker.skip=true`); includes the
+      `GlobalExceptionHandler` null-cause fix
+- [x] **Quality gates hardened** — boot-context test (`AutotraderApplicationTests`), SpotBugs with
+      FindSecBugs at `verify` (accepted findings reasoned in `config/spotbugs-exclude.xml`),
+      Dependabot for Maven/actions/Docker, and a Docker image + compose validation workflow
 - [ ] 405 responses should carry the `Allow` header that Spring's default resolver sets from
       `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
       handler is next touched)

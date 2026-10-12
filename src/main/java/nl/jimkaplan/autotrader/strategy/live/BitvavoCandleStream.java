@@ -167,7 +167,7 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
     }
 
     @Override
-    public void onOpen(WebSocketConnector.WebSocketSession opened) {
+    public synchronized void onOpen(WebSocketConnector.WebSocketSession opened) {
         session = opened;
         reconnectAttempt = 0;
         reconnectScheduled = false;

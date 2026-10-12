@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!--
+      Findings this project accepts, each with a reason, kept as short as possible. Everything else
+      SpotBugs (with FindSecBugs) reports must be fixed.
+    -->
+
+    <!-- Internal records and Spring beans hand around their own collectors, services and arrays:
+         nothing crosses a trust boundary, the web layer serializes copies, and defensive copying of
+         the indicator arrays would allocate per bar in the hot path. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+    </Match>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!-- Logs go to a local file on a private network; the arguments are ids and markets, and
+         sanitizing every argument would be disproportionate to the risk. -->
+    <Match>
+        <Bug pattern="CRLF_INJECTION_LOGS"/>
+    </Match>
+
+    <!-- The APIs return the stored backtest-run and live-strategy documents by design, which is the
+         contract the UI consumes. Neither holds credentials: a live strategy references a bot by
+         id, and bot configuration credentials are transient, never serialized. -->
+    <Match>
+        <Bug pattern="ENTITY_LEAK"/>
+    </Match>
+
+    <!-- openapi.export-dir is an operator-set property, not user input. -->
+    <Match>
+        <Bug pattern="PATH_TRAVERSAL_IN"/>
+    </Match>
+</FindBugsFilter>
