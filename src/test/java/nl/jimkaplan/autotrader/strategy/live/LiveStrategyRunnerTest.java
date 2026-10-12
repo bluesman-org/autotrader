@@ -110,6 +110,7 @@ class LiveStrategyRunnerTest {
         seedWith(candles(300, 0));
         long first = START + 300 * HOUR;
         stubResolved(first, candle(300));
+        stubNoCandleAt(first + HOUR);
         LiveDecision decision = new LiveDecision("BUY", "entry ALL [TEST]", first);
         when(liveTradingService.decide(any(), any())).thenReturn(decision);
         runner.start();
@@ -118,6 +119,47 @@ class LiveStrategyRunnerTest {
 
         // The order goes out at the moment of the decision, so its price is the market price.
         verify(liveTradingService).fill(eq(strategy), eq(decision), eq(62.5));
+    }
+
+    @Test
+    void aGapBatchFillsOlderBoundariesAtTheirStoredNextOpen() {
+        seedWith(candles(300, 0));
+        long older = START + 300 * HOUR;
+        long newest = older + 2 * HOUR;
+        stubResolved(older, candle(300));
+        stubResolved(newest, candle(302));
+        // The candle after the older boundary has closed and is in the store (it also has to be
+        // backfilled into the series): its open is the exact next-open price, not the price the
+        // newest frame arrived at.
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(older + HOUR)), eq(at(older + 2 * HOUR))))
+                .thenReturn(List.of(openCandle(301, 61.8)));
+        stubNoCandleAt(newest + HOUR);
+        LiveDecision first = new LiveDecision("BUY", "entry ALL [TEST]", older);
+        LiveDecision second = new LiveDecision("BUY", "entry ALL [TEST]", newest);
+        when(liveTradingService.decide(any(), any())).thenReturn(first, second);
+        runner.start();
+
+        listenerCaptor.getValue().onCandleClosed(older, 62.5);
+        listenerCaptor.getValue().onCandleClosed(newest, 62.5);
+
+        verify(liveTradingService).fill(eq(strategy), eq(first), eq(61.8));
+        verify(liveTradingService).fill(eq(strategy), eq(second), eq(62.5));
+    }
+
+    @Test
+    void aFrameWithoutAnOpenFallsBackToTheClosedCandlesClose() {
+        seedWith(candles(300, 0));
+        long closed = START + 300 * HOUR;
+        stubResolved(closed, candle(300));
+        stubNoCandleAt(closed + HOUR);
+        LiveDecision decision = new LiveDecision("BUY", "entry ALL [TEST]", closed);
+        when(liveTradingService.decide(any(), any())).thenReturn(decision);
+        runner.start();
+
+        listenerCaptor.getValue().onCandleClosed(closed, 0);
+
+        verify(liveTradingService).fill(eq(strategy), eq(decision), eq(400.5));
     }
 
     @Test
@@ -217,6 +259,15 @@ class LiveStrategyRunnerTest {
                 eq(at(openTime)), eq(at(openTime + HOUR)))).thenReturn(List.of(candle));
     }
 
+    /**
+     * The candle after the given open time is not in the store yet (it is still forming), so a
+     * fill there has to fall back to the frame's open.
+     */
+    private void stubNoCandleAt(long openTime) {
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(openTime)), eq(at(openTime + HOUR)))).thenReturn(List.of());
+    }
+
     private static Instant at(long openTime) {
         return Instant.ofEpochMilli(openTime);
     }
@@ -254,15 +305,18 @@ class LiveStrategyRunnerTest {
     }
 
     private static Candle candle(int index) {
-        double close = 100 + index;
+        return openCandle(index, 100 + index);
+    }
+
+    private static Candle openCandle(int index, double open) {
         return Candle.builder()
                 .market("BTC-EUR")
                 .interval("1h")
                 .openTime(START + index * HOUR)
-                .open(BigDecimal.valueOf(close))
-                .high(BigDecimal.valueOf(close + 1))
-                .low(BigDecimal.valueOf(close - 1))
-                .close(BigDecimal.valueOf(close))
+                .open(BigDecimal.valueOf(open))
+                .high(BigDecimal.valueOf(open + 1))
+                .low(BigDecimal.valueOf(open - 1))
+                .close(BigDecimal.valueOf(open + 0.5))
                 .volume(BigDecimal.ONE)
                 .build();
     }

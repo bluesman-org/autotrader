@@ -136,12 +136,28 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
 
         LiveDecision decision = liveTradingService.decide(strategy, series);
         if (decision != null) {
-            // Filled right away at the arriving candle's open: the price the exchange is trading at
-            // while the decision is made, the backtester's next-open fill point. If the frame did
-            // not carry an open, the closed candle's close is the closest price available.
-            double price = nextOpen > 0 ? nextOpen : candle.getClose().doubleValue();
-            liveTradingService.fill(strategy, decision, price);
+            liveTradingService.fill(strategy, decision, fillPrice(openTime, nextOpen, candle));
         }
+    }
+
+    /**
+     * The price a decision made on this candle is filled at: the open of the candle that followed
+     * it. That candle has already closed and is in the store for any boundary older than the frame
+     * that revealed it (a reconnect gap), which keeps those fills at the backtester's price. For
+     * the candle still forming, the frame's open is the market price; the closed candle's close is
+     * the last resort.
+     */
+    private double fillPrice(long openTime, double nextOpen, Candle closedCandle) {
+        long nextOpenTime = openTime + interval.getMillis();
+        List<Candle> next = candleHistoryService.getCandles(strategy.getMarket(), interval,
+                Instant.ofEpochMilli(nextOpenTime), Instant.ofEpochMilli(nextOpenTime + interval.getMillis()));
+        if (!next.isEmpty()) {
+            return next.get(0).getOpen().doubleValue();
+        }
+        if (nextOpen > 0) {
+            return nextOpen;
+        }
+        return closedCandle.getClose().doubleValue();
     }
 
     private Candle resolve(long openTime) {
@@ -211,6 +227,10 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
     }
 
     int windowLength() {
+        return windowLength(strategy, convergenceMarginCandles);
+    }
+
+    static int windowLength(LiveStrategy strategy, int convergenceMarginCandles) {
         return strategy.getWarmUpCandles() + strategy.getMacdSlowPeriod() + strategy.getMacdSignalPeriod()
                 + convergenceMarginCandles;
     }

@@ -44,8 +44,10 @@ candle channel of its market and interval. Our own policies:
 - **Fills**: a signal on a closed candle is filled immediately, at the open of the candle that just
   started — the price the exchange is trading at while the decision is made, which is the same
   next-open fill the backtester simulates. A live order goes out at that moment, so it and the
-  price it records coincide; a dry-run fill records that open. (When a frame arrives without an
-  open price, the closed candle's close is used as the closest available price.)
+  price it records coincide; a dry-run fill records that open. When a boundary is announced late —
+  a candle that closed during a stream outage — the fill price is the open of the candle that
+  followed it, read from the store, so those fills keep the backtester's price too; a frame without
+  a usable open falls back to the closed candle's close.
 - One position at a time: entry signals are ignored while a position is open, exit signals while
   flat.
 - **Sizing**: a fixed EUR amount per buy (`amountPerBuy`, default 100, minimum 5 EUR), rounded down

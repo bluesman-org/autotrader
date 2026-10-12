@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.strategy.live;
 
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
+import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.rule.CandleSeries;
 import nl.jimkaplan.autotrader.strategy.rule.IndicatorSeries;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
@@ -81,8 +82,12 @@ class LiveSignalReplayTest {
         IndicatorSeries fullIndicators = StrategyEvaluator.indicators(full, definition);
 
         MacdParameters macd = MacdParameters.defaults();
-        int window = BacktestDefaults.WARM_UP_CANDLES + macd.slowPeriod() + macd.signalPeriod()
-                + LiveStrategyRunner.CONVERGENCE_MARGIN_CANDLES;
+        LiveStrategy strategy = LiveStrategy.builder()
+                .warmUpCandles(BacktestDefaults.WARM_UP_CANDLES)
+                .macdSlowPeriod(macd.slowPeriod())
+                .macdSignalPeriod(macd.signalPeriod())
+                .build();
+        int window = LiveStrategyRunner.windowLength(strategy, LiveStrategyRunner.CONVERGENCE_MARGIN_CANDLES);
 
         int checked = 0;
         for (int i = window - 1; i < candles.size(); i++) {

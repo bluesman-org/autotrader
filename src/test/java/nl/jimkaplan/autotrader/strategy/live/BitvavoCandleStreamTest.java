@@ -116,6 +116,26 @@ class BitvavoCandleStreamTest {
     }
 
     @Test
+    void toleratesAFrameWithoutAnOpen() {
+        BitvavoCandleStream stream = stream();
+        stream.start();
+        awaitSession(0);
+        WebSocketConnector.SessionListener listener = connector.listener;
+
+        // A frame carrying only the open time is accepted; the boundary it reveals goes out with
+        // no price, and the runner falls back to the closed candle's close.
+        listener.onText("{\"event\":\"candle\",\"market\":\"BTC-EUR\",\"interval\":\"1m\",\"candle\":[["
+                + 1_000 * HOUR + "]]}");
+        listener.onText("{\"event\":\"candle\",\"market\":\"BTC-EUR\",\"interval\":\"1m\",\"candle\":[["
+                + 1_001 * HOUR + "]]}");
+
+        await(() -> closed.size() == 1, 3_000);
+        assertEquals(List.of(1_000 * HOUR), closed);
+        assertEquals(List.of(0.0), nextOpens);
+        stream.stop();
+    }
+
+    @Test
     void announcesEveryBoundaryAfterAQuietGap() {
         BitvavoCandleStream stream = stream();
         stream.start();

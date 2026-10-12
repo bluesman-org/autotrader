@@ -325,18 +325,21 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
             throw new IllegalArgumentException("candle event without a candle row");
         }
         JsonNode row = rows.get(rows.size() - 1);
-        if (!row.isArray() || row.size() < 2) {
-            throw new IllegalArgumentException("candle event with a short candle row");
+        if (!row.isArray() || row.isEmpty()) {
+            throw new IllegalArgumentException("candle event with an empty candle row");
         }
+        long openTime = Long.parseLong(row.get(0).asText());
         double open = 0;
-        try {
-            open = Double.parseDouble(row.get(1).asText());
-        } catch (NumberFormatException ex) {
-            // The open is the frame's best-effort market price; a missing one is tolerated.
-            log.debug("Candle frame without a usable open on the {} {} stream: {}", market, interval,
-                    row.get(1).asText());
+        if (row.size() >= 2) {
+            try {
+                open = Double.parseDouble(row.get(1).asText());
+            } catch (NumberFormatException ex) {
+                // The open is the frame's best-effort market price; a missing one is tolerated.
+                log.debug("Candle frame without a usable open on the {} {} stream: {}", market, interval,
+                        row.get(1).asText());
+            }
         }
-        return new CandleFrame(Long.parseLong(row.get(0).asText()), open);
+        return new CandleFrame(openTime, open);
     }
 
     private String subscribeMessage() {
