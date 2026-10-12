@@ -23,3 +23,8 @@ updates:
       interval: "cron"
       cronjob: "0 3 1,15 * *"
     open-pull-requests-limit: 2
+    ignore:
+      # The JDK only moves with a Spring Boot upgrade that supports it (issue #18). The whole
+      # image is ignored rather than majors only: update-types filtering is unreliable for
+      # Docker (dependabot-core#12112), and every suggestion for this tag was a major jump.
+      - dependency-name: "eclipse-temurin"
