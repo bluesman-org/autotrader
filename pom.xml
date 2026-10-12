@@ -135,8 +135,12 @@
                         </goals>
                         <configuration>
                             <target>
+                                <!-- overwrite: the reproducible-build timestamp makes the freshly built jar look
+                                     older than a previous copy, and Ant's copy would then skip it, leaving
+                                     target/autotrader.jar stale for the Docker image builds -->
                                 <copy file="${project.build.directory}/${project.build.finalName}.${project.packaging}"
-                                      tofile="${project.build.directory}/${package.final.name}.${project.packaging}"/>
+                                      tofile="${project.build.directory}/${package.final.name}.${project.packaging}"
+                                      overwrite="true"/>
                             </target>
                         </configuration>
                     </execution>

@@ -145,3 +145,6 @@ follow-ups.
       with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17) was closed
 - [x] Duplicate `botId` on create returns a clear 400 (PR #4)
 - [x] Inclusive boundary records for order/alert time-range queries (PR #4)
+- [x] `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites (Ant
+      skipped it because reproducible-build timestamps made every fresh jar look older than the
+      previous copy, silently shipping stale code into the Docker image) (PR #20)
