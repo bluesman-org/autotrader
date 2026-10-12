@@ -158,6 +158,6 @@ public class LiveStrategyController {
         LiveStrategy strategy = liveStrategyService.get(id)
                 .orElseThrow(() -> new NoSuchElementException("Live strategy not found: " + id));
         return new LiveStrategyView(strategy, liveStrategyService.isRunning(id),
-                liveStrategyService.isConnected(id));
+                liveStrategyService.isConnected(id), liveStrategyService.lastError(id));
     }
 }

@@ -9,6 +9,7 @@ import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
@@ -29,7 +30,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -63,70 +66,110 @@ class LiveTradingServiceTest {
     private LiveTradingService liveTradingService;
 
     @Test
-    void dryRunBuy_recordsTheOrderAndOpensThePosition() {
+    void decide_returnsABuyWhenTheEntrySignalFires() {
         List<Candle> series = vUpToCrossover();
         LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
 
-        liveTradingService.evaluateAndTrade(strategy, series);
+        LiveDecision decision = liveTradingService.decide(strategy, series);
 
-        double price = series.get(series.size() - 1).getClose().doubleValue();
+        assertNotNull(decision);
+        assertEquals("BUY", decision.side());
+        assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
+        assertTrue(decision.reason().contains("MACD_BULLISH_CROSSOVER"));
+        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, botConfigurationService);
+    }
+
+    @Test
+    void decide_returnsNullWithoutASignal() {
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_BELOW_SAR);
+
+        assertNull(liveTradingService.decide(strategy, rising(60)));
+
+        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, botConfigurationService);
+    }
+
+    @Test
+    void decide_respectsTheWarmUp() {
+        LiveStrategy strategy = strategy(true, 200, RuleCondition.SAR_BEARISH_CROSSOVER);
+
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
+    }
+
+    @Test
+    void decide_returnsASellWhenAnExitSignalFiresWithAnOpenPosition() {
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
+
+        List<Candle> series = rising(60);
+        LiveDecision decision = liveTradingService.decide(strategy, series);
+
+        assertNotNull(decision);
+        assertEquals("SELL", decision.side());
+        assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
+        assertTrue(decision.reason().contains("PRICE_ABOVE_SAR"));
+        verifyNoInteractions(liveOrderRepository);
+    }
+
+    @Test
+    void decide_ignoresEntrySignalsWhileAPositionIsOpen() {
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.MACD_BEARISH_CROSSOVER);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
+
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
+    }
+
+    @Test
+    void decide_ignoresExitSignalsWhileFlat() {
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
+
+        assertNull(liveTradingService.decide(strategy, rising(60)));
+    }
+
+    @Test
+    void fill_buysAtTheNextCandlesOpenInDryRun() {
+        List<Candle> series = vUpToCrossover();
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        LiveDecision decision = liveTradingService.decide(strategy, series);
+        Candle fillCandle = nextCandle(series, 62.0);
+
+        liveTradingService.fill(strategy, fillCandle, decision);
+
         ArgumentCaptor<LiveOrder> orderCaptor = ArgumentCaptor.forClass(LiveOrder.class);
         verify(liveOrderRepository).save(orderCaptor.capture());
         LiveOrder order = orderCaptor.getValue();
-        assertEquals(STRATEGY_ID, order.getStrategyId());
-        assertEquals("BTC-EUR", order.getMarket());
         assertEquals("BUY", order.getSide());
         assertEquals("DRY_RUN", order.getStatus());
         assertTrue(order.isDryRun());
-        assertEquals(series.get(series.size() - 1).getOpenTime(), order.getSignalOpenTime());
-        assertTrue(order.getReason().contains("MACD_BULLISH_CROSSOVER"));
+        assertEquals(decision.signalOpenTime(), order.getSignalOpenTime());
         assertEquals(100.0, order.getAmountQuote(), 1e-9);
-        assertEquals(100.0 / price, order.getQuantity(), 1e-9);
-        assertEquals(price, order.getPrice(), 1e-9);
+        assertEquals(62.0, order.getPrice(), 1e-9);
+        assertEquals(100.0 / 62.0, order.getQuantity(), 1e-9);
         assertEquals(0.2, order.getFee(), 1e-9);
 
         ArgumentCaptor<LivePosition> positionCaptor = ArgumentCaptor.forClass(LivePosition.class);
         verify(livePositionRepository).save(positionCaptor.capture());
         LivePosition position = positionCaptor.getValue();
         assertEquals("OPEN", position.getStatus());
-        assertEquals(100.0 / price, position.getQuantity(), 1e-9);
-        assertEquals(price, position.getEntryPrice(), 1e-9);
-        assertEquals(0.2, position.getEntryFee(), 1e-9);
-        assertTrue(position.isDryRun());
+        assertEquals(62.0, position.getEntryPrice(), 1e-9);
+        assertEquals(decision.signalOpenTime(), position.getEntryTime());
         verifyNoInteractions(bitvavoApiClient, botConfigurationService);
     }
 
     @Test
-    void withoutASignal_nothingIsRecorded() {
-        LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_BELOW_SAR);
-
-        liveTradingService.evaluateAndTrade(strategy, rising(60));
-
-        verify(livePositionRepository, never()).save(any());
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, botConfigurationService);
-    }
-
-    @Test
-    void insideTheWarmUp_theSignalIsIgnored() {
-        LiveStrategy strategy = strategy(true, 200, RuleCondition.SAR_BEARISH_CROSSOVER);
-
-        liveTradingService.evaluateAndTrade(strategy, vUpToCrossover());
-
-        verify(livePositionRepository, never()).save(any());
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, botConfigurationService);
-    }
-
-    @Test
-    void dryRunExit_closesThePositionWithTheRealisedProfit() {
+    void fill_sellsAtTheNextCandlesOpenInDryRun() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
 
         List<Candle> series = rising(60);
-        liveTradingService.evaluateAndTrade(strategy, series);
+        LiveDecision decision = liveTradingService.decide(strategy, series);
+        Candle fillCandle = nextCandle(series, 160.0);
 
-        double price = series.get(series.size() - 1).getClose().doubleValue();
-        double proceeds = 0.5 * price;
+        liveTradingService.fill(strategy, fillCandle, decision);
+
+        double proceeds = 0.5 * 160.0;
         double fee = proceeds * 0.002;
         double profit = proceeds - 0.5 * 200.0 - fee - 0.1;
 
@@ -135,49 +178,39 @@ class LiveTradingServiceTest {
         LiveOrder order = orderCaptor.getValue();
         assertEquals("SELL", order.getSide());
         assertEquals("DRY_RUN", order.getStatus());
-        assertEquals(proceeds, order.getAmountQuote(), 1e-9);
-        assertEquals(0.5, order.getQuantity(), 1e-9);
-        assertEquals(price, order.getPrice(), 1e-9);
-        assertEquals(fee, order.getFee(), 1e-9);
+        assertEquals(160.0, order.getPrice(), 1e-9);
+        assertEquals(decision.signalOpenTime(), order.getSignalOpenTime());
 
         ArgumentCaptor<LivePosition> positionCaptor = ArgumentCaptor.forClass(LivePosition.class);
         verify(livePositionRepository).save(positionCaptor.capture());
         LivePosition position = positionCaptor.getValue();
         assertEquals("CLOSED", position.getStatus());
-        assertEquals(price, position.getExitPrice(), 1e-9);
-        assertEquals(series.get(series.size() - 1).getOpenTime(), position.getExitTime());
+        assertEquals(160.0, position.getExitPrice(), 1e-9);
+        assertEquals(decision.signalOpenTime(), position.getExitTime());
         assertEquals(profit, position.getProfit(), 1e-9);
     }
 
     @Test
-    void entrySignalsAreIgnoredWhileAPositionIsOpen() {
-        LiveStrategy strategy = strategy(true, 0, RuleCondition.MACD_BEARISH_CROSSOVER);
-        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
-                .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
+    void recordSkippedCandle_isVisibleInTheOrders() {
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
 
-        liveTradingService.evaluateAndTrade(strategy, vUpToCrossover());
+        liveTradingService.recordSkippedCandle(strategy, START);
 
-        verify(liveOrderRepository, never()).save(any());
-        verify(livePositionRepository, never()).save(any());
-        verifyNoInteractions(bitvavoApiClient, botConfigurationService);
+        ArgumentCaptor<LiveOrder> orderCaptor = ArgumentCaptor.forClass(LiveOrder.class);
+        verify(liveOrderRepository).save(orderCaptor.capture());
+        LiveOrder order = orderCaptor.getValue();
+        assertEquals("SKIP", order.getSide());
+        assertEquals("SKIPPED", order.getStatus());
+        assertEquals(START, order.getSignalOpenTime());
+        assertTrue(order.getReason().contains("not evaluated"));
     }
 
     @Test
-    void exitSignalsAreIgnoredWhileFlat() {
-        LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
-
-        liveTradingService.evaluateAndTrade(strategy, rising(60));
-
-        verify(liveOrderRepository, never()).save(any());
-        verify(livePositionRepository, never()).save(any());
-    }
-
-    @Test
-    void liveBuy_withoutAnActiveBot_recordsAFailure() {
+    void fill_liveBuyWithoutAnActiveBot_recordsAFailure() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.empty());
 
-        liveTradingService.evaluateAndTrade(strategy, vUpToCrossover());
+        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
 
         LiveOrder order = captureSingleOrder();
         assertEquals("BUY", order.getSide());
@@ -188,13 +221,13 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void liveBuy_withInsufficientBalance_recordsAFailure() {
+    void fill_liveBuyWithInsufficientBalance_recordsAFailure() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1.0)});
 
-        liveTradingService.evaluateAndTrade(strategy, vUpToCrossover());
+        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
@@ -203,7 +236,7 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void liveBuy_placesAMarketOrderAndTracksTheFill() {
+    void fill_liveBuyPlacesAMarketOrderAndTracksTheFill() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
@@ -220,7 +253,8 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
-        liveTradingService.evaluateAndTrade(strategy, vUpToCrossover());
+        LiveDecision decision = decision("BUY");
+        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision);
 
         ArgumentCaptor<CreateOrderRequest> requestCaptor = ArgumentCaptor.forClass(CreateOrderRequest.class);
         verify(bitvavoApiClient).post(eq("/order"), requestCaptor.capture(),
@@ -238,7 +272,8 @@ class LiveTradingServiceTest {
         assertEquals(0.001, order.getQuantity(), 1e-12);
         assertEquals(100000.0, order.getPrice(), 1e-9);
         assertEquals(0.2, order.getFee(), 1e-9);
-        assertTrue(!order.isDryRun());
+        assertFalse(order.isDryRun());
+        assertEquals(decision.signalOpenTime(), order.getSignalOpenTime());
 
         ArgumentCaptor<LivePosition> positionCaptor = ArgumentCaptor.forClass(LivePosition.class);
         verify(livePositionRepository).save(positionCaptor.capture());
@@ -247,10 +282,11 @@ class LiveTradingServiceTest {
         assertEquals(0.001, position.getQuantity(), 1e-12);
         assertEquals(100000.0, position.getEntryPrice(), 1e-9);
         assertEquals(0.2, position.getEntryFee(), 1e-9);
+        assertEquals(decision.signalOpenTime(), position.getEntryTime());
     }
 
     @Test
-    void liveBuy_belowTheMarketMinimum_recordsAFailure() {
+    void fill_liveBuyBelowTheMarketMinimum_recordsAFailure() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
@@ -258,7 +294,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(1000.0, 2, 8));
 
-        liveTradingService.evaluateAndTrade(strategy, vUpToCrossover());
+        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
@@ -268,13 +304,13 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void liveBuy_whenTheExchangeFails_recordsAFailure() {
+    void fill_liveBuyWhenTheExchangeFails_recordsAFailure() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenThrow(new ResourceAccessException("connect timed out"));
 
-        liveTradingService.evaluateAndTrade(strategy, vUpToCrossover());
+        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
@@ -283,7 +319,7 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void liveSell_placesAMarketOrderAndRealisesTheProfit() {
+    void fill_liveSellPlacesAMarketOrderAndRealisesTheProfit() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         LivePosition position = openPosition(0.001, 100000.0, 0.2);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
@@ -299,7 +335,8 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
-        liveTradingService.evaluateAndTrade(strategy, rising(60));
+        LiveDecision decision = decision("SELL");
+        liveTradingService.fill(strategy, nextCandle(rising(60), 160.0), decision);
 
         ArgumentCaptor<CreateOrderRequest> requestCaptor = ArgumentCaptor.forClass(CreateOrderRequest.class);
         verify(bitvavoApiClient).post(eq("/order"), requestCaptor.capture(),
@@ -313,16 +350,18 @@ class LiveTradingServiceTest {
         assertEquals("FILLED", order.getStatus());
         assertEquals(110.0, order.getAmountQuote(), 1e-9);
         assertEquals(110000.0, order.getPrice(), 1e-9);
+        assertEquals(decision.signalOpenTime(), order.getSignalOpenTime());
 
         ArgumentCaptor<LivePosition> positionCaptor = ArgumentCaptor.forClass(LivePosition.class);
         verify(livePositionRepository).save(positionCaptor.capture());
         LivePosition closed = positionCaptor.getValue();
         assertEquals("CLOSED", closed.getStatus());
         assertEquals(110.0 - 100.0 - 0.22 - 0.2, closed.getProfit(), 1e-9);
+        assertEquals(decision.signalOpenTime(), closed.getExitTime());
     }
 
     @Test
-    void liveSell_whenTheQuantityRoundsToZero_recordsAFailure() {
+    void fill_liveSellWhenTheQuantityRoundsToZero_recordsAFailure() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.000_000_001, 100000.0, 0.2)));
@@ -330,13 +369,29 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 4));
 
-        liveTradingService.evaluateAndTrade(strategy, rising(60));
+        liveTradingService.fill(strategy, nextCandle(rising(60), 160.0), decision("SELL"));
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
         assertTrue(order.getErrorMessage().contains("rounds to zero"));
         verify(bitvavoApiClient, never()).post(any(), any(), any(), any(), any());
         verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_doesNothingWhenThePositionVanishedBeforeTheExitFill() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        liveTradingService.fill(strategy, nextCandle(rising(60), 160.0), decision("SELL"));
+
+        verify(liveOrderRepository, never()).save(any());
+        verifyNoInteractions(bitvavoApiClient, botConfigurationService);
+    }
+
+    private static LiveDecision decision(String side) {
+        return new LiveDecision(side, side.toLowerCase() + " ALL [TEST]", START);
     }
 
     private LiveOrder captureSingleOrder() {
@@ -431,6 +486,23 @@ class LiveTradingServiceTest {
             candles.add(candle(i, 100.0 + i));
         }
         return candles;
+    }
+
+    /**
+     * The candle that follows the series: it opens exactly where the fill should happen.
+     */
+    private static Candle nextCandle(List<Candle> series, double open) {
+        long openTime = series.get(series.size() - 1).getOpenTime() + HOUR;
+        return Candle.builder()
+                .market("BTC-EUR")
+                .interval("1h")
+                .openTime(openTime)
+                .open(BigDecimal.valueOf(open))
+                .high(BigDecimal.valueOf(open + 1))
+                .low(BigDecimal.valueOf(open - 1))
+                .close(BigDecimal.valueOf(open + 0.5))
+                .volume(BigDecimal.ONE)
+                .build();
     }
 
     private static Candle candle(int index, double close) {

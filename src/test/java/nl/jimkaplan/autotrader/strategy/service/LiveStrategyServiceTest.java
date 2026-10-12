@@ -28,11 +28,13 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -143,6 +145,10 @@ class LiveStrategyServiceTest {
         unknownInterval.setInterval("1y");
         assertMessage("Unsupported interval: 1y", unknownInterval);
 
+        LiveStrategyRequest nonEurMarket = request();
+        nonEurMarket.setMarket("BTCUSDT");
+        assertMessage("only EUR-quoted markets are supported: BTCUSDT", nonEurMarket);
+
         LiveStrategyRequest tinyAmount = request();
         tinyAmount.setAmountPerBuy(1.0);
         assertMessage("the amount per buy must be at least 5.0 EUR", tinyAmount);
@@ -176,8 +182,11 @@ class LiveStrategyServiceTest {
 
         assertTrue(strategy.isEnabled());
         assertTrue(liveStrategyService.isRunning("strategy-1"));
+        verify(liveStrategyRepository).updateEnabled("strategy-1", true);
         verify(streamFactory, times(1)).create(any(), any(), anyLong(), any());
         verify(stream).start();
+        // Only the enabled flag is written; a full save would clobber concurrent evaluation state.
+        verify(liveStrategyRepository, never()).save(any());
     }
 
     @Test
@@ -205,6 +214,7 @@ class LiveStrategyServiceTest {
         assertFalse(stopped.isEnabled());
         assertFalse(liveStrategyService.isRunning("strategy-1"));
         verify(stream).stop();
+        verify(liveStrategyRepository).updateEnabled("strategy-1", false);
     }
 
     @Test
@@ -241,13 +251,26 @@ class LiveStrategyServiceTest {
     }
 
     @Test
+    void lastError_reflectsTheRunningStream() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        stubRunnerConstruction();
+        when(stream.getLastError()).thenReturn("errorCode 205: Invalid market");
+
+        assertNull(liveStrategyService.lastError("strategy-1"));
+
+        liveStrategyService.start("strategy-1");
+
+        assertEquals("errorCode 205: Invalid market", liveStrategyService.lastError("strategy-1"));
+    }
+
+    @Test
     void startEnabled_startsWhatIsEnabledAndSurvivesFailures() {
         LiveStrategy good = stored("strategy-1", "BTC-EUR");
         LiveStrategy bad = stored("strategy-2", "ETH-EUR");
         when(liveStrategyRepository.findByEnabledTrue()).thenReturn(List.of(good, bad));
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(good));
         when(liveStrategyRepository.findById("strategy-2")).thenReturn(Optional.of(bad));
-        when(liveStrategyRepository.save(any(LiveStrategy.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(candleHistoryService.getCandles(any(), any(), any(), any())).thenReturn(List.of());
         when(streamFactory.create(eq("BTC-EUR"), any(), anyLong(), any())).thenReturn(stream);
         when(streamFactory.create(eq("ETH-EUR"), any(), anyLong(), any()))
@@ -257,10 +280,11 @@ class LiveStrategyServiceTest {
 
         assertTrue(liveStrategyService.isRunning("strategy-1"));
         assertFalse(liveStrategyService.isRunning("strategy-2"));
+        verify(liveStrategyRepository).updateEnabled("strategy-1", true);
+        verify(liveStrategyRepository, never()).updateEnabled("strategy-2", true);
     }
 
     private void stubRunnerConstruction() {
-        when(liveStrategyRepository.save(any(LiveStrategy.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(candleHistoryService.getCandles(any(), any(), any(), any())).thenReturn(List.of());
         when(streamFactory.create(any(), any(), anyLong(), any())).thenReturn(stream);
     }

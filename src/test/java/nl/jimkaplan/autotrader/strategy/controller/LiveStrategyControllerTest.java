@@ -59,6 +59,7 @@ class LiveStrategyControllerTest {
         when(liveStrategyService.get("strategy-1")).thenReturn(Optional.of(strategy));
         when(liveStrategyService.isRunning("strategy-1")).thenReturn(true);
         when(liveStrategyService.isConnected("strategy-1")).thenReturn(true);
+        when(liveStrategyService.lastError("strategy-1")).thenReturn("errorCode 205: Invalid market");
 
         ResponseEntity<LiveStrategyView> response = liveStrategyController.get("strategy-1");
 
@@ -66,6 +67,7 @@ class LiveStrategyControllerTest {
         assertEquals(strategy, response.getBody().strategy());
         assertTrue(response.getBody().running());
         assertTrue(response.getBody().connected());
+        assertEquals("errorCode 205: Invalid market", response.getBody().lastError());
     }
 
     @Test

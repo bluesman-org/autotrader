@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
+import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
+import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import org.bson.Document;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -56,6 +58,12 @@ public class MongoIndexInitializer implements ApplicationRunner {
         ensureBotIdIndex();
         ensureIndex(BacktestRun.class, new Index()
                 .on("runAt", Sort.Direction.DESC));
+        ensureIndex(LiveOrder.class, new Index()
+                .on("strategyId", Sort.Direction.ASC)
+                .on("createdTime", Sort.Direction.DESC));
+        ensureIndex(LivePosition.class, new Index()
+                .on("strategyId", Sort.Direction.ASC)
+                .on("status", Sort.Direction.ASC));
     }
 
     /**

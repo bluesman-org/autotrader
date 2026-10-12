@@ -6,7 +6,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -55,10 +59,12 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
     private final ObjectMapper objectMapper;
     private final CandleListener listener;
     private final ScheduledExecutorService scheduler;
+    private final ExecutorService listenerExecutor;
 
     private volatile WebSocketConnector.WebSocketSession session;
     private volatile boolean stopped;
     private volatile boolean reconnectScheduled;
+    private volatile String lastError;
     private int reconnectAttempt;
     private long requestId;
     private long lastSeenOpenTime = Long.MIN_VALUE;
@@ -94,6 +100,11 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
             thread.setDaemon(true);
             return thread;
         });
+        this.listenerExecutor = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "candle-listener-" + market + "-" + interval);
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     /**
@@ -111,7 +122,8 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
     }
 
     /**
-     * Disconnect and shut the stream down for good.
+     * Disconnect and shut the stream down for good. Deliveries already in flight finish; no new
+     * boundary is announced.
      */
     public synchronized void stop() {
         stopped = true;
@@ -129,6 +141,7 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
             }
         }
         scheduler.shutdownNow();
+        listenerExecutor.shutdown();
     }
 
     /**
@@ -140,11 +153,22 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
         return session != null;
     }
 
+    /**
+     * Bitvavo can reject a subscription or report a failure as an error event; the connection stays
+     * up in that case, so the message is surfaced through the API instead of hidden in the log.
+     *
+     * @return The last error message, or null when there is none
+     */
+    public String getLastError() {
+        return lastError;
+    }
+
     @Override
     public void onOpen(WebSocketConnector.WebSocketSession opened) {
         session = opened;
         reconnectAttempt = 0;
         reconnectScheduled = false;
+        lastError = null;
         send(subscribeMessage());
         scheduleKeepalive();
         log.info("Subscribed to {} {} candles", market, interval);
@@ -154,9 +178,16 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
     public void onText(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);
+            String event = node.path("event").asText();
+            if ("error".equals(event)) {
+                int errorCode = node.path("errorCode").asInt(-1);
+                String error = node.path("error").asText(message);
+                lastError = errorCode >= 0 ? "errorCode " + errorCode + ": " + error : error;
+                log.warn("{} {} candle stream reported an error: {}", market, interval, lastError);
+                return;
+            }
             // The live API names the event "candle" (singular) while the AsyncAPI example shows
             // "candles"; both spellings are accepted.
-            String event = node.path("event").asText();
             if (!"candle".equals(event) && !"candles".equals(event)) {
                 log.debug("Ignoring {} event on the {} {} candle stream",
                         node.path("event").asText("unknown"), market, interval);
@@ -217,6 +248,7 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
     }
 
     private void handleCandleEvent(long openTime) {
+        List<Long> boundaries = new ArrayList<>();
         synchronized (this) {
             if (openTime <= lastSeenOpenTime) {
                 // The same candle again, or an out-of-order frame.
@@ -243,20 +275,34 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
             for (long closed = firstClosed; closed <= lastClosed; closed += intervalMillis) {
                 if (closed > lastAnnouncedOpenTime) {
                     lastAnnouncedOpenTime = closed;
-                    announceClosed(closed);
+                    boundaries.add(closed);
                 }
             }
+        }
+        // Announced outside the monitor: the consumer may read the store, place orders or retry.
+        for (long boundary : boundaries) {
+            announceClosed(boundary);
         }
     }
 
     private void announceClosed(long openTime) {
         log.debug("{} {} candle closed at open time {}", market, interval, openTime);
+        if (stopped) {
+            return;
+        }
         try {
-            listener.onCandleClosed(openTime);
-        } catch (RuntimeException ex) {
-            // Keep the subscription alive even if the consumer failed on this candle.
-            log.error("Handling the closed {} {} candle at {} failed: {}",
-                    market, interval, openTime, ex.getMessage(), ex);
+            listenerExecutor.execute(() -> {
+                try {
+                    listener.onCandleClosed(openTime);
+                } catch (RuntimeException ex) {
+                    // Keep the subscription alive even if the consumer failed on this candle.
+                    log.error("Handling the closed {} {} candle at {} failed: {}",
+                            market, interval, openTime, ex.getMessage(), ex);
+                }
+            });
+        } catch (RejectedExecutionException ex) {
+            log.debug("Dropping the closed {} {} candle at {}: the stream is stopping",
+                    market, interval, openTime);
         }
     }
 

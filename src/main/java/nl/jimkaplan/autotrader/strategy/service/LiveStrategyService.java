@@ -59,6 +59,9 @@ public class LiveStrategyService {
     public LiveStrategy create(LiveStrategyRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         String market = MarketFormat.toMarket(required("market", request.getMarket()));
+        if (!market.endsWith("-EUR")) {
+            throw new IllegalArgumentException("only EUR-quoted markets are supported: " + market);
+        }
         CandleInterval interval = CandleInterval.fromCode(required("interval", request.getInterval()));
         double amountPerBuy = request.getAmountPerBuy() == null
                 ? BacktestDefaults.AMOUNT_PER_BUY
@@ -135,27 +138,32 @@ public class LiveStrategyService {
     }
 
     /**
-     * Start (or keep) a strategy running.
+     * Start (or keep) a strategy running. Lifecycle transitions are serialized: two concurrent
+     * starts must never create two runners for one strategy, both of which would trade it. The
+     * runner's start seeds the history with blocking I/O, so another strategy's start or stop waits
+     * for that moment — acceptable for the handful of strategies this engine runs.
      *
      * @param id The strategy ID
      * @return The stored strategy with {@code enabled} set
      * @throws NoSuchElementException if the strategy does not exist
      */
-    public LiveStrategy start(String id) {
+    public synchronized LiveStrategy start(String id) {
         LiveStrategy strategy = require(id);
         if (runners.containsKey(id)) {
             return strategy;
         }
         CandleInterval interval = CandleInterval.fromCode(strategy.getInterval());
-        strategy.setEnabled(true);
-        LiveStrategy stored = liveStrategyRepository.save(strategy);
-        LiveStrategyRunner runner = new LiveStrategyRunner(stored, interval, candleHistoryService,
+        LiveStrategyRunner runner = new LiveStrategyRunner(strategy, interval, candleHistoryService,
                 liveTradingService, liveStrategyRepository, candleStreamFactory);
+        // Only touch enabled once the runner exists, and only this field, so a concurrent
+        // last-evaluated update or stop can never be clobbered by a stale copy.
+        liveStrategyRepository.updateEnabled(id, true);
+        strategy.setEnabled(true);
         runners.put(id, runner);
         runner.start();
-        log.info("Live strategy {} started ({} {}, dry-run={})", id, stored.getMarket(),
-                stored.getInterval(), stored.isDryRun());
-        return stored;
+        log.info("Live strategy {} started ({} {}, dry-run={})", id, strategy.getMarket(),
+                strategy.getInterval(), strategy.isDryRun());
+        return strategy;
     }
 
     /**
@@ -165,16 +173,16 @@ public class LiveStrategyService {
      * @return The stored strategy with {@code enabled} cleared
      * @throws NoSuchElementException if the strategy does not exist
      */
-    public LiveStrategy stop(String id) {
+    public synchronized LiveStrategy stop(String id) {
         LiveStrategy strategy = require(id);
-        strategy.setEnabled(false);
-        LiveStrategy stored = liveStrategyRepository.save(strategy);
         LiveStrategyRunner runner = runners.remove(id);
         if (runner != null) {
             runner.stop();
         }
+        liveStrategyRepository.updateEnabled(id, false);
+        strategy.setEnabled(false);
         log.info("Live strategy {} stopped", id);
-        return stored;
+        return strategy;
     }
 
     /**
@@ -192,6 +200,15 @@ public class LiveStrategyService {
     public boolean isConnected(String id) {
         LiveStrategyRunner runner = runners.get(id);
         return runner != null && runner.isConnected();
+    }
+
+    /**
+     * @param id The strategy ID
+     * @return The stream's last error message, or null when there is none
+     */
+    public String lastError(String id) {
+        LiveStrategyRunner runner = runners.get(id);
+        return runner == null ? null : runner.getLastError();
     }
 
     /**

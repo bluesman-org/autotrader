@@ -12,6 +12,7 @@ import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
+import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
@@ -33,15 +34,16 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Evaluates a live strategy on every closed candle with the same rules, parameters and fill model
- * a backtest uses, and records (dry-run, the default) or places (live) the resulting orders.
+ * Evaluates a live strategy on closed candles with the same rules and parameters as the backtester,
+ * and fills the resulting decisions — dry-run by default, recorded either way.
  *
- * <p>The series it receives is the strategy's full history, which keeps the signals identical to a
- * backtest over that history: the indicators are causal, so evaluating bar by bar can never
- * disagree with evaluating the whole series at once (the replay gate).</p>
+ * <p>Decisions and fills are separate, mirroring {@code BacktestEngine}: a signal on the closed
+ * candle is <em>decided</em> here and carried to the next boundary by the runner, which calls
+ * {@link #fill} with that candle so the fill price is the next candle's open, exactly the
+ * backtester's fill point. Live fills use what the exchange reports; dry-run fills use that open.</p>
  *
- * <p>One position at a time: entry signals are only acted on while flat, exit signals only while
- * an entry is open. Live orders are priced and rounded from the exchange's market metadata; a
+ * <p>One position at a time: entry signals are only decided while flat, exit signals only while a
+ * position is open. Live orders are priced and rounded from the exchange's market metadata; a
  * failed or skipped order is recorded, never thrown, so a running strategy survives it.</p>
  */
 @Slf4j
@@ -57,14 +59,15 @@ public class LiveTradingService {
     private final LivePositionRepository livePositionRepository;
 
     /**
-     * Evaluate the last candle of the series and trade its signals.
+     * Decide what the last closed candle of the series asks for.
      *
      * @param strategy The live strategy
-     * @param series   The strategy's full candle history, oldest first, ending in the closed candle
+     * @param series   The strategy's candle window, oldest first, ending in the closed candle
+     * @return The decision to fill at the next candle's open, or null when no signal fired
      */
-    public void evaluateAndTrade(LiveStrategy strategy, List<Candle> series) {
+    public LiveDecision decide(LiveStrategy strategy, List<Candle> series) {
         if (series.isEmpty()) {
-            return;
+            return null;
         }
         CandleSeries candleSeries = CandleSeries.of(series);
         StrategyDefinition definition = definition(strategy);
@@ -73,26 +76,61 @@ public class LiveTradingService {
         if (index < strategy.getWarmUpCandles()) {
             log.debug("{} has {} bars; still inside the {}-candle warm-up",
                     strategy.getId(), candleSeries.length(), strategy.getWarmUpCandles());
-            return;
+            return null;
         }
         Candle candle = series.get(series.size() - 1);
         boolean open = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN").isPresent();
         if (open) {
-            if (signals.exit()[index]) {
-                close(strategy, candle, definition.exitRules());
-            }
-        } else if (signals.entry()[index]) {
-            buy(strategy, candle, definition.entryRules());
+            return signals.exit()[index]
+                    ? new LiveDecision("SELL", reason("exit", definition.exitRules()), candle.getOpenTime())
+                    : null;
+        }
+        return signals.entry()[index]
+                ? new LiveDecision("BUY", reason("entry", definition.entryRules()), candle.getOpenTime())
+                : null;
+    }
+
+    /**
+     * Fill a decision at the given candle's open.
+     *
+     * @param strategy The live strategy
+     * @param candle   The candle that just opened (the boundary that followed the signal)
+     * @param decision The decision taken on the previous candle
+     */
+    public void fill(LiveStrategy strategy, Candle candle, LiveDecision decision) {
+        if ("SELL".equals(decision.side())) {
+            sell(strategy, candle, decision);
+        } else {
+            buy(strategy, candle, decision);
         }
     }
 
-    private void buy(LiveStrategy strategy, Candle candle, RuleGroup rules) {
-        double price = candle.getClose().doubleValue();
-        String reason = reason("entry", rules);
+    /**
+     * Record that a closed candle could not be evaluated, so the gap is visible in the strategy's
+     * orders instead of only in the log.
+     *
+     * @param strategy The live strategy
+     * @param openTime The skipped candle's open time
+     */
+    public void recordSkippedCandle(LiveStrategy strategy, long openTime) {
+        liveOrderRepository.save(LiveOrder.builder()
+                .strategyId(strategy.getId())
+                .market(strategy.getMarket())
+                .side("SKIP")
+                .status("SKIPPED")
+                .dryRun(strategy.isDryRun())
+                .signalOpenTime(openTime)
+                .reason("candle unavailable within the retry window; its signal was not evaluated")
+                .createdTime(Instant.now())
+                .build());
+    }
+
+    private void buy(LiveStrategy strategy, Candle candle, LiveDecision decision) {
+        double price = candle.getOpen().doubleValue();
         if (strategy.isDryRun()) {
             double quantity = strategy.getAmountPerBuy() / price;
             double fee = strategy.getAmountPerBuy() * BacktestDefaults.FEE_RATE;
-            recordOrder(strategy, candle, "BUY", "DRY_RUN", reason,
+            recordOrder(strategy, decision.signalOpenTime(), "BUY", "DRY_RUN", decision.reason(),
                     strategy.getAmountPerBuy(), quantity, price, fee, null, null);
             livePositionRepository.save(LivePosition.builder()
                     .strategyId(strategy.getId())
@@ -101,26 +139,26 @@ public class LiveTradingService {
                     .quantity(quantity)
                     .entryPrice(price)
                     .entryFee(fee)
-                    .entryTime(candle.getOpenTime())
+                    .entryTime(decision.signalOpenTime())
                     .dryRun(true)
                     .createdTime(Instant.now())
                     .build());
-            log.info("[dry-run] {} bought {} at {} for {} EUR", strategy.getMarket(), quantity, price,
-                    strategy.getAmountPerBuy());
+            log.info("[dry-run] {} bought {} at {} (next candle open) for {} EUR", strategy.getMarket(),
+                    quantity, price, strategy.getAmountPerBuy());
             return;
         }
 
         BotConfiguration bot = activeBot(strategy);
         if (bot == null) {
-            recordOrder(strategy, candle, "BUY", "FAILED", reason, null, null, null, null, null,
-                    "No active bot configuration for " + strategy.getBotId());
+            recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                    null, null, null, "No active bot configuration for " + strategy.getBotId());
             return;
         }
         try {
             double eur = eurBalance(bot);
             if (eur < strategy.getAmountPerBuy() || eur < MINIMUM_ORDER_EUR) {
-                recordOrder(strategy, candle, "BUY", "FAILED", reason, null, null, null, null, null,
-                        "Insufficient EUR balance: " + eur);
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                        null, null, null, "Insufficient EUR balance: " + eur);
                 return;
             }
             GetMarketResponse market = bitvavoApiClient.get("/markets?market=" + strategy.getMarket(),
@@ -130,8 +168,8 @@ public class LiveTradingService {
                     .setScale(notionalDecimals, RoundingMode.DOWN);
             if (market.getMinOrderInQuoteAsset() != null
                     && amountQuote.compareTo(market.getMinOrderInQuoteAsset()) < 0) {
-                recordOrder(strategy, candle, "BUY", "FAILED", reason, null, null, null, null, null,
-                        "Below the market minimum of " + market.getMinOrderInQuoteAsset() + " EUR");
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                        null, null, null, "Below the market minimum of " + market.getMinOrderInQuoteAsset() + " EUR");
                 return;
             }
             CreateOrderRequest request = CreateOrderRequest.builder()
@@ -146,10 +184,11 @@ public class LiveTradingService {
             double quantity = filled(baseValue(response.getFilledAmount(), response.getAmount()),
                     amountQuote.doubleValue() / price);
             double fillPrice = filled(ratio(baseValue(response.getFilledAmountQuote(), null), quantity), price);
-            double fee = filled(baseValue(response.getFeePaid(), null), amountQuote.doubleValue()
-                    * BacktestDefaults.FEE_RATE);
-            recordOrder(strategy, candle, "BUY", "FILLED", reason, amountQuote.doubleValue(),
-                    quantity, fillPrice, fee, String.valueOf(response.getOrderId()), null);
+            double fee = filled(baseValue(response.getFeePaid(), null),
+                    amountQuote.doubleValue() * BacktestDefaults.FEE_RATE);
+            recordOrder(strategy, decision.signalOpenTime(), "BUY", "FILLED", decision.reason(),
+                    amountQuote.doubleValue(), quantity, fillPrice, fee,
+                    String.valueOf(response.getOrderId()), null);
             livePositionRepository.save(LivePosition.builder()
                     .strategyId(strategy.getId())
                     .market(strategy.getMarket())
@@ -157,7 +196,7 @@ public class LiveTradingService {
                     .quantity(quantity)
                     .entryPrice(fillPrice)
                     .entryFee(fee)
-                    .entryTime(candle.getOpenTime())
+                    .entryTime(decision.signalOpenTime())
                     .dryRun(false)
                     .createdTime(Instant.now())
                     .build());
@@ -166,37 +205,36 @@ public class LiveTradingService {
         } catch (RuntimeException ex) {
             log.warn("Buying {} for strategy {} failed: {}", strategy.getMarket(), strategy.getId(),
                     ex.getMessage());
-            recordOrder(strategy, candle, "BUY", "FAILED", reason, null, null, null, null, null,
-                    ex.getMessage());
+            recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                    null, null, null, ex.getMessage());
         }
     }
 
-    private void close(LiveStrategy strategy, Candle candle, RuleGroup rules) {
+    private void sell(LiveStrategy strategy, Candle candle, LiveDecision decision) {
         LivePosition position = livePositionRepository
                 .findByStrategyIdAndStatus(strategy.getId(), "OPEN")
                 .orElse(null);
         if (position == null) {
             return;
         }
-        double price = candle.getClose().doubleValue();
-        String reason = reason("exit", rules);
+        double price = candle.getOpen().doubleValue();
         if (strategy.isDryRun()) {
             double proceeds = position.getQuantity() * price;
             double fee = proceeds * BacktestDefaults.FEE_RATE;
             double profit = proceeds - position.getQuantity() * position.getEntryPrice() - fee
                     - zeroIfNull(position.getEntryFee());
-            recordOrder(strategy, candle, "SELL", "DRY_RUN", reason, proceeds, position.getQuantity(),
-                    price, fee, null, null);
-            closePosition(position, candle, price, profit);
-            log.info("[dry-run] {} sold {} at {}: profit {} EUR", strategy.getMarket(),
+            recordOrder(strategy, decision.signalOpenTime(), "SELL", "DRY_RUN", decision.reason(), proceeds,
+                    position.getQuantity(), price, fee, null, null);
+            closePosition(position, decision.signalOpenTime(), price, profit);
+            log.info("[dry-run] {} sold {} at {} (next candle open): profit {} EUR", strategy.getMarket(),
                     position.getQuantity(), price, profit);
             return;
         }
 
         BotConfiguration bot = activeBot(strategy);
         if (bot == null) {
-            recordOrder(strategy, candle, "SELL", "FAILED", reason, null, null, null, null, null,
-                    "No active bot configuration for " + strategy.getBotId());
+            recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+                    null, null, null, "No active bot configuration for " + strategy.getBotId());
             return;
         }
         try {
@@ -206,7 +244,8 @@ public class LiveTradingService {
             BigDecimal amount = BigDecimal.valueOf(position.getQuantity())
                     .setScale(quantityDecimals, RoundingMode.DOWN);
             if (amount.signum() <= 0) {
-                recordOrder(strategy, candle, "SELL", "FAILED", reason, null, null, null, null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+                        null, null, null,
                         "Position quantity rounds to zero at " + quantityDecimals + " decimals");
                 return;
             }
@@ -225,24 +264,25 @@ public class LiveTradingService {
                     proceeds * BacktestDefaults.FEE_RATE);
             double profit = proceeds - position.getQuantity() * position.getEntryPrice() - fee
                     - zeroIfNull(position.getEntryFee());
-            recordOrder(strategy, candle, "SELL", "FILLED", reason, proceeds, amount.doubleValue(),
-                    filled(ratio(baseValue(response.getFilledAmountQuote(), null),
-                            amount.doubleValue()), price), fee, String.valueOf(response.getOrderId()), null);
-            closePosition(position, candle, price, profit);
+            recordOrder(strategy, decision.signalOpenTime(), "SELL", "FILLED", decision.reason(), proceeds,
+                    amount.doubleValue(),
+                    filled(ratio(baseValue(response.getFilledAmountQuote(), null), amount.doubleValue()), price),
+                    fee, String.valueOf(response.getOrderId()), null);
+            closePosition(position, decision.signalOpenTime(), price, profit);
             log.info("{} sold {} at {}: profit {} EUR (order {})", strategy.getMarket(),
                     amount.doubleValue(), price, profit, response.getOrderId());
         } catch (RuntimeException ex) {
             log.warn("Selling {} for strategy {} failed: {}", strategy.getMarket(), strategy.getId(),
                     ex.getMessage());
-            recordOrder(strategy, candle, "SELL", "FAILED", reason, null, null, null, null, null,
-                    ex.getMessage());
+            recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+                    null, null, null, ex.getMessage());
         }
     }
 
-    private void closePosition(LivePosition position, Candle candle, double price, double profit) {
+    private void closePosition(LivePosition position, long exitOpenTime, double price, double profit) {
         position.setStatus("CLOSED");
         position.setExitPrice(price);
-        position.setExitTime(candle.getOpenTime());
+        position.setExitTime(exitOpenTime);
         position.setProfit(profit);
         livePositionRepository.save(position);
     }
@@ -268,7 +308,7 @@ public class LiveTradingService {
         return 0;
     }
 
-    private void recordOrder(LiveStrategy strategy, Candle candle, String side, String status,
+    private void recordOrder(LiveStrategy strategy, long signalOpenTime, String side, String status,
                              String reason, Double amountQuote, Double quantity, Double price,
                              Double fee, String orderId, String errorMessage) {
         liveOrderRepository.save(LiveOrder.builder()
@@ -277,7 +317,7 @@ public class LiveTradingService {
                 .side(side)
                 .status(status)
                 .dryRun(strategy.isDryRun())
-                .signalOpenTime(candle.getOpenTime())
+                .signalOpenTime(signalOpenTime)
                 .reason(reason)
                 .amountQuote(amountQuote)
                 .quantity(quantity)

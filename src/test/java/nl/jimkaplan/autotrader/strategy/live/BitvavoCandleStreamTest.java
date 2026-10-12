@@ -58,12 +58,15 @@ class BitvavoCandleStreamTest {
 
         // The first frame is the candle in progress: nothing has closed yet.
         listener.onText(candleEvent(1_000 * HOUR));
+        sleep(60);
         assertTrue(closed.isEmpty());
 
         listener.onText(candleEvent(1_001 * HOUR));
+        await(() -> closed.size() == 1, 3_000);
         assertEquals(List.of(1_000 * HOUR), closed);
 
         listener.onText(candleEvent(1_002 * HOUR));
+        await(() -> closed.size() == 2, 3_000);
         assertEquals(List.of(1_000 * HOUR, 1_001 * HOUR), closed);
 
         // Out-of-order, malformed and non-candle frames change nothing.
@@ -71,6 +74,7 @@ class BitvavoCandleStreamTest {
         listener.onText("not json at all");
         listener.onText("{\"event\":\"subscribed\"}");
         listener.onText("{\"event\":\"candles\",\"market\":\"BTC-EUR\",\"interval\":\"1h\",\"candle\":[]}");
+        sleep(80);
         assertEquals(2, closed.size());
         stream.stop();
     }
@@ -85,7 +89,23 @@ class BitvavoCandleStreamTest {
         listener.onText(liveCandleEvent(1_000 * HOUR));
         listener.onText(liveCandleEvent(1_001 * HOUR));
 
+        await(() -> closed.size() == 1, 3_000);
         assertEquals(List.of(1_000 * HOUR), closed);
+        stream.stop();
+    }
+
+    @Test
+    void recordsErrorEventsAndKeepsThemVisible() {
+        BitvavoCandleStream stream = stream();
+        stream.start();
+        awaitSession(0);
+
+        connector.listener.onText(
+                "{\"event\":\"error\",\"errorCode\":205,\"error\":\"Invalid market\"}");
+
+        assertEquals("errorCode 205: Invalid market", stream.getLastError());
+        // A rejected subscription leaves the connection up; the operator sees why through the API
+        assertTrue(stream.isConnected());
         stream.stop();
     }
 
@@ -99,6 +119,7 @@ class BitvavoCandleStreamTest {
         listener.onText(candleEvent(1_000 * HOUR));
         listener.onText(candleEvent(1_003 * HOUR));
 
+        await(() -> closed.size() == 3, 3_000);
         assertEquals(List.of(1_000 * HOUR, 1_001 * HOUR, 1_002 * HOUR), closed);
         stream.stop();
     }

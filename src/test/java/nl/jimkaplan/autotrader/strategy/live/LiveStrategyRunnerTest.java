@@ -68,7 +68,7 @@ class LiveStrategyRunnerTest {
     }
 
     @Test
-    void start_seedsTheSeriesAndStartsTheStream() {
+    void start_seedsTheWindowAndStartsTheStream() {
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(candles(300, 0));
 
@@ -80,33 +80,118 @@ class LiveStrategyRunnerTest {
     }
 
     @Test
-    void aClosedCandleIsResolvedAppendedAndEvaluatedAfterPersistingTheState() {
-        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
-                .thenReturn(candles(300, 0));
+    void aClosedCandleIsResolvedAppendedAndPersistedBeforeDeciding() {
+        seedWith(candles(300, 0));
         long closed = START + 300 * HOUR;
-        Instant at = Instant.ofEpochMilli(closed);
-        Instant next = Instant.ofEpochMilli(closed + HOUR);
-        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), eq(at), eq(next)))
-                .thenReturn(List.of(candle(300)));
+        stubResolved(closed, candle(300));
         runner.start();
-
         listenerCaptor.getValue().onCandleClosed(closed);
 
-        verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), eq(at), eq(next));
-        ArgumentCaptor<LiveStrategy> strategyCaptor = ArgumentCaptor.forClass(LiveStrategy.class);
-        verify(liveStrategyRepository).save(strategyCaptor.capture());
-        assertEquals(closed, strategyCaptor.getValue().getLastEvaluatedOpenTime());
+        verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(closed)), eq(at(closed + HOUR)));
+        verify(liveStrategyRepository).updateLastEvaluatedOpenTime(STRATEGY_ID, closed);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(liveTradingService).evaluateAndTrade(eq(strategy), seriesCaptor.capture());
+        verify(liveTradingService).decide(eq(strategy), seriesCaptor.capture());
         assertEquals(301, seriesCaptor.getValue().size());
         assertEquals(closed, seriesCaptor.getValue().get(300).getOpenTime());
+        verify(liveTradingService, never()).fill(any(), any(), any());
 
-        // The evaluated point is persisted before acting, so a crash costs a trade, not a duplicate.
+        // The evaluated point is persisted before any action, so a crash costs a trade, not a duplicate.
         InOrder inOrder = inOrder(liveStrategyRepository, liveTradingService);
-        inOrder.verify(liveStrategyRepository).save(any(LiveStrategy.class));
-        inOrder.verify(liveTradingService).evaluateAndTrade(eq(strategy), any());
+        inOrder.verify(liveStrategyRepository).updateLastEvaluatedOpenTime(STRATEGY_ID, closed);
+        inOrder.verify(liveTradingService).decide(eq(strategy), any());
+    }
+
+    @Test
+    void aDecisionIsFilledAtTheNextCandlesOpen() {
+        seedWith(candles(300, 0));
+        long first = START + 300 * HOUR;
+        long second = first + HOUR;
+        stubResolved(first, candle(300));
+        stubResolved(second, candle(301));
+        LiveDecision decision = new LiveDecision("BUY", "entry ALL [TEST]", first);
+        when(liveTradingService.decide(any(), any())).thenReturn(decision, null);
+        runner.start();
+
+        listenerCaptor.getValue().onCandleClosed(first);
+        verify(liveTradingService, never()).fill(any(), any(), any());
+
+        listenerCaptor.getValue().onCandleClosed(second);
+
+        ArgumentCaptor<Candle> fillCandleCaptor = ArgumentCaptor.forClass(Candle.class);
+        verify(liveTradingService).fill(eq(strategy), fillCandleCaptor.capture(), eq(decision));
+        assertEquals(second, fillCandleCaptor.getValue().getOpenTime());
+    }
+
+    @Test
+    void aDecisionIsDroppedWhenItsBoundaryCouldNotBeResolved() {
+        seedWith(candles(300, 0));
+        long first = START + 300 * HOUR;
+        long second = first + HOUR;
+        stubResolved(first, candle(300));
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(second)), eq(at(second + HOUR)))).thenReturn(List.of());
+        ReflectionTestUtils.setField(runner, "resolveRetryMillis", 0L);
+        when(liveTradingService.decide(any(), any()))
+                .thenReturn(new LiveDecision("BUY", "entry ALL [TEST]", first));
+        runner.start();
+
+        listenerCaptor.getValue().onCandleClosed(first);
+        listenerCaptor.getValue().onCandleClosed(second);
+
+        verify(liveTradingService).recordSkippedCandle(strategy, second);
+        verify(liveStrategyRepository, never()).updateLastEvaluatedOpenTime(STRATEGY_ID, second);
+        verify(liveTradingService, never()).fill(any(), any(), any());
+    }
+
+    @Test
+    void aMissedBoundaryIsBackfilledFromTheStore() {
+        seedWith(candles(300, 0));
+        long first = START + 300 * HOUR;
+        long missed = first + HOUR;
+        long second = missed + HOUR;
+        stubResolved(first, candle(300));
+        stubResolved(second, candle(302));
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(missed)), eq(at(second)))).thenReturn(List.of(candle(301)));
+        runner.start();
+
+        listenerCaptor.getValue().onCandleClosed(first);
+        listenerCaptor.getValue().onCandleClosed(second);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(liveTradingService, times(2)).decide(eq(strategy), seriesCaptor.capture());
+        List<Candle> series = seriesCaptor.getValue();
+        assertEquals(303, series.size());
+        assertEquals(first, series.get(300).getOpenTime());
+        assertEquals(missed, series.get(301).getOpenTime());
+        assertEquals(second, series.get(302).getOpenTime());
+    }
+
+    @Test
+    void theSeriesIsTrimmedToTheWindow() {
+        ReflectionTestUtils.setField(runner, "convergenceMarginCandles", 2);
+        seedWith(List.of());
+        for (int i = 0; i < 11; i++) {
+            stubResolved(START + i * HOUR, candle(i));
+        }
+        runner.start();
+
+        for (int i = 0; i < 11; i++) {
+            listenerCaptor.getValue().onCandleClosed(START + i * HOUR);
+        }
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(liveTradingService, times(11)).decide(eq(strategy), seriesCaptor.capture());
+        List<Candle> series = seriesCaptor.getValue();
+        // warm-up 0 + slow 5 + signal 2 + margin 2 = 9
+        assertEquals(9, series.size());
+        assertEquals(START + 2 * HOUR, series.get(0).getOpenTime());
+        assertEquals(START + 10 * HOUR, series.get(8).getOpenTime());
     }
 
     @Test
@@ -119,27 +204,12 @@ class LiveStrategyRunnerTest {
     }
 
     @Test
-    void candlesThatAreNotAvailableYetAreSkipped() {
-        ReflectionTestUtils.setField(runner, "resolveRetryMillis", 0L);
-        long closed = START + HOUR;
-        Instant at = Instant.ofEpochMilli(closed);
-        Instant next = Instant.ofEpochMilli(closed + HOUR);
-        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), eq(at), eq(next)))
-                .thenReturn(List.of());
-
-        listenerCaptor.getValue().onCandleClosed(closed);
-
-        verify(candleHistoryService, times(2))
-                .ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), eq(at), eq(next));
-        verify(liveStrategyRepository, never()).save(any());
-        verify(liveTradingService, never()).evaluateAndTrade(any(), any());
-    }
-
-    @Test
     void stopAndStatusDelegateToTheStream() {
         when(stream.isConnected()).thenReturn(true);
+        when(stream.getLastError()).thenReturn("errorCode 205: Invalid market");
 
         assertTrue(runner.isConnected());
+        assertEquals("errorCode 205: Invalid market", runner.getLastError());
         assertEquals(strategy, runner.getStrategy());
 
         runner.stop();
@@ -147,14 +217,28 @@ class LiveStrategyRunnerTest {
         verify(stream).stop();
     }
 
+    private void seedWith(List<Candle> seeded) {
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
+                .thenReturn(seeded);
+    }
+
+    private void stubResolved(long openTime, Candle candle) {
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(openTime)), eq(at(openTime + HOUR)))).thenReturn(List.of(candle));
+    }
+
+    private static Instant at(long openTime) {
+        return Instant.ofEpochMilli(openTime);
+    }
+
     private static LiveStrategy strategy(long lastEvaluated) {
         LiveStrategy strategy = LiveStrategy.builder()
                 .botId("bot-1")
                 .market("BTC-EUR")
                 .interval("1h")
-                .macdFastPeriod(12)
-                .macdSlowPeriod(26)
-                .macdSignalPeriod(9)
+                .macdFastPeriod(3)
+                .macdSlowPeriod(5)
+                .macdSignalPeriod(2)
                 .sarAcceleration(0.02)
                 .sarMaximum(0.2)
                 .entryOperator("ALL")
