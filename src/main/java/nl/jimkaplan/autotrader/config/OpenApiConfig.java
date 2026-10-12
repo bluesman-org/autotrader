@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,6 +43,13 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
     private String exportDir;
 
     /**
+     * Whether the specification is exported at all; tests turn this off so a context start does not
+     * sleep for the startup delay and call the API.
+     */
+    @Value("${openapi.export-enabled:true}")
+    private boolean exportEnabled = true;
+
+    /**
      * Delay before the startup export, giving the web server time to come up.
      */
     @Value("${openapi.export-startup-delay-ms:5000}")
@@ -64,6 +72,10 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
      * This method is called both when the application starts and when the web server is initialized.
      */
     private void exportOpenApiSpecification() {
+        if (!exportEnabled) {
+            log.info("OpenAPI specification export is disabled (openapi.export-enabled=false)");
+            return;
+        }
         try {
             // Create RestTemplate to call the OpenAPI endpoint
             RestTemplate restTemplate = new RestTemplate();
@@ -109,7 +121,7 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
             log.info("Exported OpenAPI specification to YAML file: {}", yamlFilePath);
 
             log.info("OpenAPI specification export completed successfully");
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             log.error("Failed to export OpenAPI specification", e);
         }
     }
@@ -127,8 +139,9 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
                 // Wait a bit to ensure the server is fully started
                 Thread.sleep(exportStartupDelayMs);
                 exportOpenApiSpecification();
-            } catch (Exception e) {
-                log.error("Failed to export OpenAPI specification", e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("OpenAPI specification export was interrupted", e);
             }
         };
     }

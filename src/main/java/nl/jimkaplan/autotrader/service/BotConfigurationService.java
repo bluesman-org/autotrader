@@ -24,6 +24,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class BotConfigurationService {
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final BotConfigurationRepository botConfigurationRepository;
     private final EncryptionService encryptionService;
 
@@ -174,7 +176,10 @@ public class BotConfigurationService {
                 .map(config -> {
                     String storedHash = config.getWebhookKeyHash();
                     String providedHash = hashApiKey(apiKey);
-                    return storedHash != null && storedHash.equals(providedHash);
+                    // Constant-time comparison: a plain equals leaks how much of the hash matched.
+                    return storedHash != null
+                            && MessageDigest.isEqual(storedHash.getBytes(StandardCharsets.UTF_8),
+                                    providedHash.getBytes(StandardCharsets.UTF_8));
                 })
                 .orElse(false);
     }
@@ -224,7 +229,7 @@ public class BotConfigurationService {
      */
     private String generateSecureRandomKey() {
         byte[] bytes = new byte[32];
-        new SecureRandom().nextBytes(bytes);
+        SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 

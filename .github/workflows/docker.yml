@@ -1,0 +1,53 @@
+name: Docker image
+
+# The image build is not covered by the coverage workflow (it skips Docker) and only the deploy
+# workflow builds it, on dispatch. This job mirrors that arm64 build — through the pom's own buildx
+# configuration, under QEMU — whenever the pieces that shape the image change, and validates the
+# compose files.
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose*.yml'
+      - 'pom.xml'
+      - '.github/workflows/docker.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose*.yml'
+      - 'pom.xml'
+      - '.github/workflows/docker.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+      - name: Set up QEMU
+        # The deployment host is arm64, so the image is built for arm64 like the deploy workflow
+        # does; the Dockerfile's apk step then runs under emulation.
+        uses: docker/setup-qemu-action@v4
+      - name: Build the jar the image copies
+        run: ./mvnw -B package -DskipTests -Ddocker.skip=true
+      - name: Build the image through the project's own plugin configuration
+        # The plugin goal (not `docker build`) exercises the pom's buildx platforms, which is what
+        # ships the image; the pure goal avoids verify, where the gate rejects -DskipTests.
+        run: ./mvnw -B io.fabric8:docker-maven-plugin:build -Ddocker.platforms=linux/arm64
+      - name: Validate the compose files
+        env:
+          MONGO_ROOT_PASSWORD: ci-root
+          MONGO_APP_PASSWORD: ci-app
+          ENCRYPTION_MASTER_KEY: ci-key
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.dev.yml config -q
+          docker compose -f docker-compose.local.yml config -q

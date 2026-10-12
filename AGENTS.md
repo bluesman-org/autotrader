@@ -179,8 +179,14 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Follow the existing test patterns (Arrange-Act-Assert)
     - Use mocks for external dependencies
     - Test both happy paths and error cases
-    - Minimum 90% line coverage and 100% method coverage, except POJOs and similar classes.
-      All LLM assistants must follow this rule.
+    - Minimum 95% line coverage, 100% method coverage and 85% branch coverage, except POJOs and
+      similar classes. All LLM assistants must follow this rule.
+    - Static analysis is part of the gate: SpotBugs (with FindSecBugs) runs at `verify` and must
+      report nothing outside `config/spotbugs-exclude.xml`, where every accepted finding carries a
+      reason. The coverage workflow runs on pull requests and on main pushes.
+    - `AutotraderApplicationTests` starts the full application context, so a bean that cannot be
+      wired fails in CI instead of in a container run. The Docker image is built whenever the
+      Dockerfile, compose files or pom change (`.github/workflows/docker.yml`).
 
 4. **Security**:
     - Never commit API keys or secrets to version control
