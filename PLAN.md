@@ -138,5 +138,7 @@ follow-ups.
       matters more once Phase 5 trades live
 - [ ] Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
 - [ ] Optionally move the remaining `.junie/` design docs under `docs/`
+- [ ] Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump belongs
+      with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17) was closed
 - [x] Duplicate `botId` on create returns a clear 400 (PR #4)
 - [x] Inclusive boundary records for order/alert time-range queries (PR #4)
