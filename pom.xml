@@ -190,6 +190,12 @@
                         <exclude>nl/jimkaplan/autotrader/strategy/model/document/**</exclude>
                         <exclude>nl/jimkaplan/autotrader/AutotraderApplication.class</exclude>
                         <exclude>nl/jimkaplan/autotrader/ServletInitializer.class</exclude>
+                        <!-- The outer JDK connector class is only the socket handshake
+                             (buildAsync().join()); everything decidable about it — frame
+                             accumulation, forwarding, send/close — is covered through the nested
+                             adapter tests, and the handshake itself is exercised by the live
+                             smoke run against Bitvavo. -->
+                        <exclude>nl/jimkaplan/autotrader/strategy/live/JdkWebSocketConnector.class</exclude>
                     </excludes>
                     <rules>
                         <rule>
