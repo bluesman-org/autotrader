@@ -128,13 +128,12 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void fill_buysAtTheNextCandlesOpenInDryRun() {
+    void fill_buysAtTheDecisionMomentsPriceInDryRun() {
         List<Candle> series = vUpToCrossover();
         LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         LiveDecision decision = liveTradingService.decide(strategy, series);
-        Candle fillCandle = nextCandle(series, 62.0);
 
-        liveTradingService.fill(strategy, fillCandle, decision);
+        liveTradingService.fill(strategy, decision, 62.0);
 
         ArgumentCaptor<LiveOrder> orderCaptor = ArgumentCaptor.forClass(LiveOrder.class);
         verify(liveOrderRepository).save(orderCaptor.capture());
@@ -158,16 +157,14 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void fill_sellsAtTheNextCandlesOpenInDryRun() {
+    void fill_sellsAtTheDecisionMomentsPriceInDryRun() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
 
-        List<Candle> series = rising(60);
-        LiveDecision decision = liveTradingService.decide(strategy, series);
-        Candle fillCandle = nextCandle(series, 160.0);
+        LiveDecision decision = liveTradingService.decide(strategy, rising(60));
 
-        liveTradingService.fill(strategy, fillCandle, decision);
+        liveTradingService.fill(strategy, decision, 160.0);
 
         double proceeds = 0.5 * 160.0;
         double fee = proceeds * 0.002;
@@ -210,7 +207,7 @@ class LiveTradingServiceTest {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.empty());
 
-        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         LiveOrder order = captureSingleOrder();
         assertEquals("BUY", order.getSide());
@@ -227,7 +224,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1.0)});
 
-        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
@@ -254,7 +251,7 @@ class LiveTradingServiceTest {
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
         LiveDecision decision = decision("BUY");
-        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision);
+        liveTradingService.fill(strategy, decision, 62.0);
 
         ArgumentCaptor<CreateOrderRequest> requestCaptor = ArgumentCaptor.forClass(CreateOrderRequest.class);
         verify(bitvavoApiClient).post(eq("/order"), requestCaptor.capture(),
@@ -294,7 +291,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(1000.0, 2, 8));
 
-        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
@@ -310,7 +307,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenThrow(new ResourceAccessException("connect timed out"));
 
-        liveTradingService.fill(strategy, nextCandle(vUpToCrossover(), 62.0), decision("BUY"));
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
@@ -336,7 +333,7 @@ class LiveTradingServiceTest {
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
         LiveDecision decision = decision("SELL");
-        liveTradingService.fill(strategy, nextCandle(rising(60), 160.0), decision);
+        liveTradingService.fill(strategy, decision, 160.0);
 
         ArgumentCaptor<CreateOrderRequest> requestCaptor = ArgumentCaptor.forClass(CreateOrderRequest.class);
         verify(bitvavoApiClient).post(eq("/order"), requestCaptor.capture(),
@@ -369,7 +366,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 4));
 
-        liveTradingService.fill(strategy, nextCandle(rising(60), 160.0), decision("SELL"));
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
 
         LiveOrder order = captureSingleOrder();
         assertEquals("FAILED", order.getStatus());
@@ -384,7 +381,7 @@ class LiveTradingServiceTest {
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.empty());
 
-        liveTradingService.fill(strategy, nextCandle(rising(60), 160.0), decision("SELL"));
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
 
         verify(liveOrderRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient, botConfigurationService);
@@ -486,23 +483,6 @@ class LiveTradingServiceTest {
             candles.add(candle(i, 100.0 + i));
         }
         return candles;
-    }
-
-    /**
-     * The candle that follows the series: it opens exactly where the fill should happen.
-     */
-    private static Candle nextCandle(List<Candle> series, double open) {
-        long openTime = series.get(series.size() - 1).getOpenTime() + HOUR;
-        return Candle.builder()
-                .market("BTC-EUR")
-                .interval("1h")
-                .openTime(openTime)
-                .open(BigDecimal.valueOf(open))
-                .high(BigDecimal.valueOf(open + 1))
-                .low(BigDecimal.valueOf(open - 1))
-                .close(BigDecimal.valueOf(open + 0.5))
-                .volume(BigDecimal.ONE)
-                .build();
     }
 
     private static Candle candle(int index, double close) {

@@ -38,9 +38,9 @@ import java.util.List;
  * and fills the resulting decisions — dry-run by default, recorded either way.
  *
  * <p>Decisions and fills are separate, mirroring {@code BacktestEngine}: a signal on the closed
- * candle is <em>decided</em> here and carried to the next boundary by the runner, which calls
- * {@link #fill} with that candle so the fill price is the next candle's open, exactly the
- * backtester's fill point. Live fills use what the exchange reports; dry-run fills use that open.</p>
+ * candle is <em>decided</em> here and filled immediately at the arriving candle's open — the price
+ * the exchange is trading at as the decision is made, which is the backtester's next-open fill
+ * point. Live fills use what the exchange reports; dry-run fills use that open.</p>
  *
  * <p>One position at a time: entry signals are only decided while flat, exit signals only while a
  * position is open. Live orders are priced and rounded from the exchange's market metadata; a
@@ -91,17 +91,17 @@ public class LiveTradingService {
     }
 
     /**
-     * Fill a decision at the given candle's open.
+     * Fill a decision at the moment it is taken, at the arriving candle's open.
      *
      * @param strategy The live strategy
-     * @param candle   The candle that just opened (the boundary that followed the signal)
-     * @param decision The decision taken on the previous candle
+     * @param decision The decision taken on the candle that just closed
+     * @param price    The arriving candle's open, the market price as the decision is made
      */
-    public void fill(LiveStrategy strategy, Candle candle, LiveDecision decision) {
+    public void fill(LiveStrategy strategy, LiveDecision decision, double price) {
         if ("SELL".equals(decision.side())) {
-            sell(strategy, candle, decision);
+            sell(strategy, decision, price);
         } else {
-            buy(strategy, candle, decision);
+            buy(strategy, decision, price);
         }
     }
 
@@ -125,8 +125,7 @@ public class LiveTradingService {
                 .build());
     }
 
-    private void buy(LiveStrategy strategy, Candle candle, LiveDecision decision) {
-        double price = candle.getOpen().doubleValue();
+    private void buy(LiveStrategy strategy, LiveDecision decision, double price) {
         if (strategy.isDryRun()) {
             double quantity = strategy.getAmountPerBuy() / price;
             double fee = strategy.getAmountPerBuy() * BacktestDefaults.FEE_RATE;
@@ -143,7 +142,7 @@ public class LiveTradingService {
                     .dryRun(true)
                     .createdTime(Instant.now())
                     .build());
-            log.info("[dry-run] {} bought {} at {} (next candle open) for {} EUR", strategy.getMarket(),
+            log.info("[dry-run] {} bought {} at {} (the arriving candle's open) for {} EUR", strategy.getMarket(),
                     quantity, price, strategy.getAmountPerBuy());
             return;
         }
@@ -210,14 +209,13 @@ public class LiveTradingService {
         }
     }
 
-    private void sell(LiveStrategy strategy, Candle candle, LiveDecision decision) {
+    private void sell(LiveStrategy strategy, LiveDecision decision, double price) {
         LivePosition position = livePositionRepository
                 .findByStrategyIdAndStatus(strategy.getId(), "OPEN")
                 .orElse(null);
         if (position == null) {
             return;
         }
-        double price = candle.getOpen().doubleValue();
         if (strategy.isDryRun()) {
             double proceeds = position.getQuantity() * price;
             double fee = proceeds * BacktestDefaults.FEE_RATE;
@@ -226,7 +224,7 @@ public class LiveTradingService {
             recordOrder(strategy, decision.signalOpenTime(), "SELL", "DRY_RUN", decision.reason(), proceeds,
                     position.getQuantity(), price, fee, null, null);
             closePosition(position, decision.signalOpenTime(), price, profit);
-            log.info("[dry-run] {} sold {} at {} (next candle open): profit {} EUR", strategy.getMarket(),
+            log.info("[dry-run] {} sold {} at {} (the arriving candle's open): profit {} EUR", strategy.getMarket(),
                     position.getQuantity(), price, profit);
             return;
         }

@@ -13,7 +13,7 @@ class CandleStreamFactoryTest {
         CandleStreamFactory factory = new CandleStreamFactory(URI.create("wss://example.test/ws"),
                 30, 5_000, unusedConnector());
 
-        BitvavoCandleStream stream = factory.create("BTC-EUR", "1h", 3_600_000L, openTime -> {
+        BitvavoCandleStream stream = factory.create("BTC-EUR", "1h", 3_600_000L, (openTime, nextOpen) -> {
         });
 
         assertNotNull(stream);
@@ -24,7 +24,7 @@ class CandleStreamFactoryTest {
     void theDefaultConstructorTargetsBitvavo() {
         CandleStreamFactory factory = new CandleStreamFactory("wss://ws.bitvavo.com/v2/", 30, 5_000);
 
-        BitvavoCandleStream stream = factory.create("BTC-EUR", "1h", 3_600_000L, openTime -> {
+        BitvavoCandleStream stream = factory.create("BTC-EUR", "1h", 3_600_000L, (openTime, nextOpen) -> {
         });
 
         assertNotNull(stream);

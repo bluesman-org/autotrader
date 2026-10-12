@@ -28,21 +28,24 @@ candle channel of its market and interval. Our own policies:
 ## Deciding and trading
 
 - The decision bar is the candle that just closed. The engine evaluates a **bounded window** of the
-  strategy's history for its market and interval — the warm-up plus a 1,000-candle convergence
-  margin, seeded from the store — with the same rules, parameters and sizing as a backtest. The
-  MACD/PSAR recursions converge long before that margin, so the decision at a bar matches what a
-  whole-history evaluation produces there, without re-reading or re-computing a history that grows
-  for the life of the process. The replay gate (`LiveSignalReplayTest`) asserts the exact equality
-  that claim rests on, bar by bar, for the signals and for the MACD/SAR values.
+  strategy's history for its market and interval — the warm-up plus the MACD slow and signal
+  periods plus a 1,000-candle convergence margin, seeded from the store — with the same rules,
+  parameters and sizing as a backtest. The MACD/PSAR recursions converge long before that margin,
+  so the decision at a bar matches what a whole-history evaluation produces there, without
+  re-reading or re-computing a history that grows for the life of the process. The replay gate
+  (`LiveSignalReplayTest`) pins both halves of that argument: one case asserts candle-by-candle
+  (prefix) equality of the signals and the MACD/SAR values, the other asserts that the exact window
+  the runner uses — front-truncated — still matches the whole-series values at its last bar.
 - Signals inside the warm-up (`warmUpCandles`, default 200, as in a backtest) are ignored.
 - **No stale replay**: only candles that close while the strategy runs are acted on. The seed
   itself is never traded, so downtime is not replayed; a candle that closes during a brief stream
   outage is still evaluated when the stream reconnects, and a boundary whose candle cannot be
   resolved is recorded as a `SKIPPED` row in the strategy's orders, its signal never replayed.
-- **Fills**: a signal on a closed candle is filled at the **next candle's open** — the decision is
-  carried one boundary forward, the same pending-fill shape `BacktestEngine` uses. Live orders hit
-  the exchange at that moment; dry-run fills record that open. A decision whose boundary is lost
-  (the strategy was stopped, or the candle never appeared) is dropped rather than filled late.
+- **Fills**: a signal on a closed candle is filled immediately, at the open of the candle that just
+  started — the price the exchange is trading at while the decision is made, which is the same
+  next-open fill the backtester simulates. A live order goes out at that moment, so it and the
+  price it records coincide; a dry-run fill records that open. (When a frame arrives without an
+  open price, the closed candle's close is used as the closest available price.)
 - One position at a time: entry signals are ignored while a position is open, exit signals while
   flat.
 - **Sizing**: a fixed EUR amount per buy (`amountPerBuy`, default 100, minimum 5 EUR), rounded down

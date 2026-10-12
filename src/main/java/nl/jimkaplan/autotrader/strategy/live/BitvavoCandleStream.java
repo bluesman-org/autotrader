@@ -34,7 +34,8 @@ import java.util.concurrent.TimeUnit;
 public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
 
     /**
-     * Receives the open times of candles that just completed.
+     * Receives the open times of candles that just completed, with the open price of the candle
+     * that arrived in their place.
      */
     public interface CandleListener {
 
@@ -42,8 +43,10 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
          * A candle completed.
          *
          * @param openTime The closed candle's open time, epoch milliseconds
+         * @param nextOpen The just-opened candle's open price, the moment's market price; zero when
+         *                 the frame did not carry one
          */
-        void onCandleClosed(long openTime);
+        void onCandleClosed(long openTime, double nextOpen);
     }
 
     static final long MAX_RECONNECT_DELAY_MILLIS = 60_000;
@@ -193,11 +196,20 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
                         node.path("event").asText("unknown"), market, interval);
                 return;
             }
-            handleCandleEvent(readOpenTime(node));
+            handleCandleEvent(readFrame(node));
         } catch (Exception ex) {
             // A malformed frame must not kill the subscription; the next one can still be handled.
             log.warn("Unreadable candle message on the {} {} stream: {}", market, interval, ex.getMessage());
         }
+    }
+
+    /**
+     * One candle frame: the running candle's open time and its open price.
+     *
+     * @param openTime The candle's open time
+     * @param open     The candle's open price, zero when the frame did not carry one
+     */
+    private record CandleFrame(long openTime, double open) {
     }
 
     @Override
@@ -247,7 +259,8 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
         scheduler.schedule(this::connect, delay, TimeUnit.MILLISECONDS);
     }
 
-    private void handleCandleEvent(long openTime) {
+    private void handleCandleEvent(CandleFrame frame) {
+        long openTime = frame.openTime();
         List<Long> boundaries = new ArrayList<>();
         synchronized (this) {
             if (openTime <= lastSeenOpenTime) {
@@ -281,19 +294,19 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
         }
         // Announced outside the monitor: the consumer may read the store, place orders or retry.
         for (long boundary : boundaries) {
-            announceClosed(boundary);
+            announceClosed(boundary, frame.open());
         }
     }
 
-    private void announceClosed(long openTime) {
-        log.debug("{} {} candle closed at open time {}", market, interval, openTime);
+    private void announceClosed(long openTime, double nextOpen) {
+        log.debug("{} {} candle closed at open time {} (next open {})", market, interval, openTime, nextOpen);
         if (stopped) {
             return;
         }
         try {
             listenerExecutor.execute(() -> {
                 try {
-                    listener.onCandleClosed(openTime);
+                    listener.onCandleClosed(openTime, nextOpen);
                 } catch (RuntimeException ex) {
                     // Keep the subscription alive even if the consumer failed on this candle.
                     log.error("Handling the closed {} {} candle at {} failed: {}",
@@ -306,16 +319,24 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
         }
     }
 
-    private long readOpenTime(JsonNode node) {
+    private CandleFrame readFrame(JsonNode node) {
         JsonNode rows = node.path("candle");
         if (!rows.isArray() || rows.isEmpty()) {
             throw new IllegalArgumentException("candle event without a candle row");
         }
         JsonNode row = rows.get(rows.size() - 1);
-        if (!row.isArray() || row.isEmpty()) {
-            throw new IllegalArgumentException("candle event with an empty candle row");
+        if (!row.isArray() || row.size() < 2) {
+            throw new IllegalArgumentException("candle event with a short candle row");
         }
-        return Long.parseLong(row.get(0).asText());
+        double open = 0;
+        try {
+            open = Double.parseDouble(row.get(1).asText());
+        } catch (NumberFormatException ex) {
+            // The open is the frame's best-effort market price; a missing one is tolerated.
+            log.debug("Candle frame without a usable open on the {} {} stream: {}", market, interval,
+                    row.get(1).asText());
+        }
+        return new CandleFrame(Long.parseLong(row.get(0).asText()), open);
     }
 
     private String subscribeMessage() {

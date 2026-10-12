@@ -22,11 +22,15 @@ class BitvavoCandleStreamTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final List<Long> closed = new CopyOnWriteArrayList<>();
+    private final List<Double> nextOpens = new CopyOnWriteArrayList<>();
     private final FakeConnector connector = new FakeConnector();
 
     private BitvavoCandleStream stream() {
         return new BitvavoCandleStream(URI, "BTC-EUR", "1h", HOUR, 1, 20, connector, objectMapper,
-                closed::add);
+                (openTime, nextOpen) -> {
+                    closed.add(openTime);
+                    nextOpens.add(nextOpen);
+                });
     }
 
     @Test
@@ -91,6 +95,8 @@ class BitvavoCandleStreamTest {
 
         await(() -> closed.size() == 1, 3_000);
         assertEquals(List.of(1_000 * HOUR), closed);
+        // The boundary carries the arriving frame's open, the price a fill at that moment sees.
+        assertEquals(List.of(74630.0), nextOpens);
         stream.stop();
     }
 

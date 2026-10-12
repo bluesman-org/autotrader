@@ -23,6 +23,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -85,7 +86,7 @@ class LiveStrategyRunnerTest {
         long closed = START + 300 * HOUR;
         stubResolved(closed, candle(300));
         runner.start();
-        listenerCaptor.getValue().onCandleClosed(closed);
+        listenerCaptor.getValue().onCandleClosed(closed, 62.5);
 
         verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
                 eq(at(closed)), eq(at(closed + HOUR)));
@@ -96,7 +97,7 @@ class LiveStrategyRunnerTest {
         verify(liveTradingService).decide(eq(strategy), seriesCaptor.capture());
         assertEquals(301, seriesCaptor.getValue().size());
         assertEquals(closed, seriesCaptor.getValue().get(300).getOpenTime());
-        verify(liveTradingService, never()).fill(any(), any(), any());
+        verify(liveTradingService, never()).fill(any(), any(), anyDouble());
 
         // The evaluated point is persisted before any action, so a crash costs a trade, not a duplicate.
         InOrder inOrder = inOrder(liveStrategyRepository, liveTradingService);
@@ -105,45 +106,34 @@ class LiveStrategyRunnerTest {
     }
 
     @Test
-    void aDecisionIsFilledAtTheNextCandlesOpen() {
+    void aDecisionIsFilledImmediatelyAtTheArrivingCandlesOpen() {
         seedWith(candles(300, 0));
         long first = START + 300 * HOUR;
-        long second = first + HOUR;
         stubResolved(first, candle(300));
-        stubResolved(second, candle(301));
         LiveDecision decision = new LiveDecision("BUY", "entry ALL [TEST]", first);
-        when(liveTradingService.decide(any(), any())).thenReturn(decision, null);
+        when(liveTradingService.decide(any(), any())).thenReturn(decision);
         runner.start();
 
-        listenerCaptor.getValue().onCandleClosed(first);
-        verify(liveTradingService, never()).fill(any(), any(), any());
+        listenerCaptor.getValue().onCandleClosed(first, 62.5);
 
-        listenerCaptor.getValue().onCandleClosed(second);
-
-        ArgumentCaptor<Candle> fillCandleCaptor = ArgumentCaptor.forClass(Candle.class);
-        verify(liveTradingService).fill(eq(strategy), fillCandleCaptor.capture(), eq(decision));
-        assertEquals(second, fillCandleCaptor.getValue().getOpenTime());
+        // The order goes out at the moment of the decision, so its price is the market price.
+        verify(liveTradingService).fill(eq(strategy), eq(decision), eq(62.5));
     }
 
     @Test
-    void aDecisionIsDroppedWhenItsBoundaryCouldNotBeResolved() {
+    void aMissedBoundaryIsRecordedAsSkipped() {
         seedWith(candles(300, 0));
-        long first = START + 300 * HOUR;
-        long second = first + HOUR;
-        stubResolved(first, candle(300));
+        long second = START + 300 * HOUR + HOUR;
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
                 eq(at(second)), eq(at(second + HOUR)))).thenReturn(List.of());
         ReflectionTestUtils.setField(runner, "resolveRetryMillis", 0L);
-        when(liveTradingService.decide(any(), any()))
-                .thenReturn(new LiveDecision("BUY", "entry ALL [TEST]", first));
         runner.start();
 
-        listenerCaptor.getValue().onCandleClosed(first);
-        listenerCaptor.getValue().onCandleClosed(second);
+        listenerCaptor.getValue().onCandleClosed(second, 0);
 
         verify(liveTradingService).recordSkippedCandle(strategy, second);
         verify(liveStrategyRepository, never()).updateLastEvaluatedOpenTime(STRATEGY_ID, second);
-        verify(liveTradingService, never()).fill(any(), any(), any());
+        verify(liveTradingService, never()).fill(any(), any(), anyDouble());
     }
 
     @Test
@@ -158,8 +148,8 @@ class LiveStrategyRunnerTest {
                 eq(at(missed)), eq(at(second)))).thenReturn(List.of(candle(301)));
         runner.start();
 
-        listenerCaptor.getValue().onCandleClosed(first);
-        listenerCaptor.getValue().onCandleClosed(second);
+        listenerCaptor.getValue().onCandleClosed(first, 62.5);
+        listenerCaptor.getValue().onCandleClosed(second, 62.5);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
@@ -181,7 +171,7 @@ class LiveStrategyRunnerTest {
         runner.start();
 
         for (int i = 0; i < 11; i++) {
-            listenerCaptor.getValue().onCandleClosed(START + i * HOUR);
+            listenerCaptor.getValue().onCandleClosed(START + i * HOUR, 0);
         }
 
         @SuppressWarnings("unchecked")
@@ -198,7 +188,7 @@ class LiveStrategyRunnerTest {
     void alreadyEvaluatedCandlesAreSkippedWithoutTouchingTheStore() {
         strategy.setLastEvaluatedOpenTime(START);
 
-        listenerCaptor.getValue().onCandleClosed(START);
+        listenerCaptor.getValue().onCandleClosed(START, 0);
 
         verifyNoInteractions(candleHistoryService, liveTradingService);
     }

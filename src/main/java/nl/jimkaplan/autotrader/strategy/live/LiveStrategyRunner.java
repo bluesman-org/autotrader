@@ -22,9 +22,10 @@ import java.util.List;
  * appended; a boundary whose candle is missing (also after a long outage) is backfilled on the next
  * append so the in-memory series keeps matching the stored history.</p>
  *
- * <p>Decisions are carried one boundary forward, like the backtester's {@code pendingBuy} /
- * {@code pendingSell}: a signal on the closed candle is filled at the next candle's open. The
- * seed itself is never traded, so nothing is replayed after downtime.</p>
+ * <p>Decisions are filled immediately at the arriving candle's open — the stream passes the open
+ * price of the candle that just started, so a live order goes out at the moment its recorded price
+ * is the market price, the same next-open fill point the backtester uses. The seed itself is never
+ * traded, so nothing is replayed after downtime.</p>
  */
 @Slf4j
 public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
@@ -43,7 +44,6 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
     private final BitvavoCandleStream stream;
     private final List<Candle> series = new ArrayList<>();
     private long lastAppendedOpenTime = Long.MIN_VALUE;
-    private LiveDecision pendingDecision;
     private long resolveRetryMillis = 1_000;
     private int convergenceMarginCandles = CONVERGENCE_MARGIN_CANDLES;
 
@@ -118,16 +118,13 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
     }
 
     @Override
-    public void onCandleClosed(long openTime) {
+    public void onCandleClosed(long openTime, double nextOpen) {
         if (openTime <= strategy.getLastEvaluatedOpenTime()) {
             log.debug("Live strategy {} already evaluated candle {}", strategy.getId(), openTime);
             return;
         }
         Candle candle = resolve(openTime);
         if (candle == null) {
-            // The boundary is gone for good, so a decision waiting to be filled on it is dropped
-            // rather than filled a bar late; the skip is recorded so it is visible.
-            pendingDecision = null;
             liveTradingService.recordSkippedCandle(strategy, openTime);
             return;
         }
@@ -137,12 +134,14 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
         strategy.setLastEvaluatedOpenTime(openTime);
         liveStrategyRepository.updateLastEvaluatedOpenTime(strategy.getId(), openTime);
 
-        LiveDecision decision = pendingDecision;
-        pendingDecision = null;
+        LiveDecision decision = liveTradingService.decide(strategy, series);
         if (decision != null) {
-            liveTradingService.fill(strategy, candle, decision);
+            // Filled right away at the arriving candle's open: the price the exchange is trading at
+            // while the decision is made, the backtester's next-open fill point. If the frame did
+            // not carry an open, the closed candle's close is the closest price available.
+            double price = nextOpen > 0 ? nextOpen : candle.getClose().doubleValue();
+            liveTradingService.fill(strategy, decision, price);
         }
-        pendingDecision = liveTradingService.decide(strategy, series);
     }
 
     private Candle resolve(long openTime) {
