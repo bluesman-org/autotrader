@@ -6,7 +6,9 @@ add new follow-ups, and keep the status line current.
 
 **Status (2026-10-12):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
-default, replay gate). Quality gates hardened (PR #13). Next: Phase 6, retiring TradingView.
+default, replay gate). Quality gates hardened (PR #13). TradingView is kept as a legacy fallback
+(Phase 6, decision of 2026-10-12); next: a live-run trial of the engine — dry-run first — then the
+follow-ups.
 
 ## Objective
 
@@ -103,9 +105,15 @@ default, replay gate). Quality gates hardened (PR #13). Next: Phase 6, retiring 
 - [x] Replay gate: dry-run signals must replay identically on the same history
       (`LiveSignalReplayTest` asserts bar-by-bar equality of signals and indicator values)
 
-### Phase 6 — Retire TradingView
+### Phase 6 — TradingView: kept as a legacy fallback (decided 2026-10-12)
 
-- [ ] Remove the webhook path and TradingView-specific code once the engine covers its role
+- [x] Keep the webhook path and its code: the strategy engine owning the strategy logic was the goal,
+      and TradingView remains the only live-proven execution entry while the engine has traded in
+      dry-run only (see the decision notes below)
+- [ ] Decide on removal once the engine has traded live for a while — a dry-run trial first, then a
+      small live one
+- [ ] If TradingView becomes permanent, unify its order and position records with the engine's
+      (`live_orders`/`live_positions` carry quantity, price and fees; the bot-centric ones do not)
 
 ## Follow-ups
 

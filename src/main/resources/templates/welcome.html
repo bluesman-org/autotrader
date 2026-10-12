@@ -95,31 +95,37 @@
     </header>
 
     <main>
-        <p>Welcome to the Autotrader application. This platform provides automated trading capabilities by integrating
-            TradingView signals with the Bitvavo cryptocurrency exchange.</p>
+        <p>Welcome to the Autotrader application. This platform trades on the Bitvavo exchange with an in-app
+            strategy engine: the same MACD and Parabolic SAR rules you backtest are the ones that trade live —
+            dry-run by default, with every order recorded.</p>
 
         <div class="features">
             <div class="feature">
-                <h3>TradingView Integration</h3>
-                <p>Receive and process trading signals from TradingView through webhooks.</p>
+                <h3>Strategy engine</h3>
+                <p>Own MACD and Parabolic SAR implementations with configurable entry and exit rules.</p>
             </div>
             <div class="feature">
                 <h3>Bitvavo API</h3>
                 <p>Execute trades on the Bitvavo cryptocurrency exchange using their API.</p>
             </div>
             <div class="feature">
-                <h3>Automated Trading</h3>
-                <p>Set up trading strategies that execute automatically based on received signals.</p>
+                <h3>Strategy Backtesting</h3>
+                <p>Configure rules and parameters in the app and rank them on the stored candle history.</p>
             </div>
             <div class="feature">
-                <h3>Strategy Backtesting</h3>
-                <p>Configure MACD and Parabolic SAR strategies and rank them on the stored candle history.</p>
+                <h3>Live strategies</h3>
+                <p>Run the same rules live on closed candles, dry-run by default, through the REST API.</p>
+            </div>
+            <div class="feature">
+                <h3>TradingView (legacy)</h3>
+                <p>The webhook path remains as a fallback while the strategy engine proves itself.</p>
             </div>
         </div>
 
         <div class="api-section">
             <h2>Jump in</h2>
-            <p>Configure and rank strategies in the app, or explore the REST API:</p>
+            <p>Configure and rank strategies in the app, or explore the REST API — including the live
+                strategies (<code>/api/live-strategies</code>, dry-run by default):</p>
             <a href="/autotrader/ui/backtests" class="api-link">Open Strategy Backtests</a>
             <a href="/autotrader/swagger-ui.html" class="api-link">Open API Documentation</a>
         </div>
