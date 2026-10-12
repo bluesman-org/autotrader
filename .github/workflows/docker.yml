@@ -1,8 +1,9 @@
 name: Docker image
 
 # The image build is not covered by the coverage workflow (it skips Docker) and only the deploy
-# workflow builds it, on dispatch. This job builds it for the native platform whenever the pieces
-# that shape it change, and validates the compose files.
+# workflow builds it, on dispatch. This job mirrors that arm64 build — through the pom's own buildx
+# configuration, under QEMU — whenever the pieces that shape the image change, and validates the
+# compose files.
 on:
   pull_request:
     paths:
