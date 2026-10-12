@@ -100,7 +100,8 @@ strategy:
 
 ## Out of scope
 
-- The TradingView webhook path still exists; Phase 6 retires it.
+- The TradingView webhook path still exists as the legacy fallback: PLAN.md's Phase 6 records the
+  decision to keep it until the engine has traded live, and to revisit its removal then.
 - Open-order reconciliation after a crash between an order and its record: the engine records what
   it sent, and the exchange's order history stays the source of truth.
 - Partial fills are recorded as the order response reports them (`filledAmount`,

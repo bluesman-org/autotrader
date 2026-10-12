@@ -13,7 +13,7 @@
     <version>0.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>autotrader</name>
-    <description>Test auto trading with TradingView and Bitvavo</description>
+    <description>Automated trading on Bitvavo with an in-app strategy engine</description>
     <url/>
     <licenses>
         <license/>

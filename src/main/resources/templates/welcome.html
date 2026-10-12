@@ -91,7 +91,7 @@
 <div class="container">
     <header>
         <h1 th:text="${appName}">Autotrader</h1>
-        <p class="description" th:text="${appDescription}">Automated trading with TradingView and Bitvavo</p>
+        <p class="description" th:text="${appDescription}">Automated trading on Bitvavo with an in-app strategy engine</p>
     </header>
 
     <main>
@@ -125,7 +125,7 @@
         <div class="api-section">
             <h2>Jump in</h2>
             <p>Configure and rank strategies in the app, or explore the REST API — including the live
-                strategies (<code>/api/live-strategies</code>, dry-run by default):</p>
+                strategies (<code>/autotrader/api/live-strategies</code>, dry-run by default):</p>
             <a href="/autotrader/ui/backtests" class="api-link">Open Strategy Backtests</a>
             <a href="/autotrader/swagger-ui.html" class="api-link">Open API Documentation</a>
         </div>
