@@ -49,9 +49,10 @@
     </div>
 
     <p class="muted">
-        Recomputed on demand from the run's rules and train/validate split over the stored candles, so
-        the trades reproduce the ranked table's metrics. A trade is a round trip; the fees are in EUR
-        and the net is after both of them.
+        Recomputed on demand from the run's rules and train/validate split over the stored candles,
+        <span th:unless="${historyChanged}">so the trades reproduce the ranked table's metrics.</span>
+        <span th:if="${historyChanged}">so the trades can differ from the ranked table's metrics.</span>
+        A trade is a round trip; the fees are in EUR and the net is after both of them.
     </p>
 
     <h2>Train — earlier part (optimised on)</h2>

@@ -90,7 +90,9 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("2026-09-01 10:00")))
                 .andExpect(content().string(containsString("INSUFFICIENT BALANCE")))
                 .andExpect(content().string(containsString("No trades on this side.")))
-                .andExpect(content().string(not(containsString("The stored history changed"))));
+                .andExpect(content().string(containsString("so the trades reproduce the ranked table's metrics.")))
+                .andExpect(content().string(not(containsString("The stored history changed"))))
+                .andExpect(content().string(not(containsString("can differ from the ranked table"))));
     }
 
     @Test
@@ -101,7 +103,9 @@ class BacktestUiControllerRenderTest {
         mockMvc.perform(get("/ui/backtests/run-1/entries/1"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("The stored history changed since the run")))
-                .andExpect(content().string(containsString("now holds 2400 bars")));
+                .andExpect(content().string(containsString("now holds 2400 bars")))
+                .andExpect(content().string(containsString("so the trades can differ from the ranked table's metrics.")))
+                .andExpect(content().string(not(containsString("so the trades reproduce"))));
     }
 
     private static BacktestEvaluation evaluation() {
