@@ -1,12 +1,15 @@
 # Strategy Engine Plan
 
-Tracking document for replacing TradingView with an in-app strategy engine, built on our own
-data and our own indicators. **Update this file with every PR**: check off completed steps,
-add new follow-ups, and keep the status line current.
+Tracking document for the move to an in-app strategy engine, built on our own data and our own
+indicators. TradingView is kept as a legacy fallback (Phase 6 records that decision). **Update this
+file with every PR**: check off completed steps, add new follow-ups, and keep the status line
+current.
 
 **Status (2026-10-12):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
-default, replay gate). Quality gates hardened (PR #13). Next: Phase 6, retiring TradingView.
+default, replay gate). Quality gates hardened (PR #13). TradingView is kept as a legacy fallback
+(Phase 6, decision of 2026-10-12); next: a live-run trial of the engine — dry-run first — then the
+follow-ups.
 
 ## Objective
 
@@ -17,7 +20,8 @@ default, replay gate). Quality gates hardened (PR #13). Next: Phase 6, retiring 
 - Rank strategies with a train/validate backtester that sweeps entry×exit combinations and
   numeric parameter grids
 - Trade live from the same rules, dry-run by default
-- Retire the TradingView integration once the engine covers its role
+- Keep the TradingView integration as a legacy fallback and revisit its removal once the engine
+  trades live (Phase 6)
 
 ## Decisions
 
@@ -103,9 +107,16 @@ default, replay gate). Quality gates hardened (PR #13). Next: Phase 6, retiring 
 - [x] Replay gate: dry-run signals must replay identically on the same history
       (`LiveSignalReplayTest` asserts bar-by-bar equality of signals and indicator values)
 
-### Phase 6 — Retire TradingView
+### Phase 6 — TradingView: kept as a legacy fallback (decided 2026-10-12)
 
-- [ ] Remove the webhook path and TradingView-specific code once the engine covers its role
+- [x] Keep the webhook path and its code: the strategy engine owning the strategy logic was the goal,
+      and TradingView remains the only live-proven execution entry while the engine has traded in
+      dry-run only (see the decision notes below)
+- [ ] Decide on removal once the engine has traded live for a while — a dry-run trial first, then a
+      small live one (the choice behind this Phase 6 decision; TradingView is a legacy fallback even
+      though the objective once read "retire it")
+- [ ] If TradingView becomes permanent, unify its order and position records with the engine's
+      (`live_orders`/`live_positions` carry quantity, price and fees; the bot-centric ones do not)
 
 ## Follow-ups
 

@@ -19,7 +19,7 @@ public class HomeController {
     @GetMapping("/")
     public String home(Model model) {
         model.addAttribute("appName", "Autotrader");
-        model.addAttribute("appDescription", "Automated trading with TradingView and Bitvavo");
+        model.addAttribute("appDescription", "Automated trading on Bitvavo with an in-app strategy engine");
         return "welcome";
     }
 }

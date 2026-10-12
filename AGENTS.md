@@ -4,8 +4,11 @@ This document provides guidelines for developers working on the Autotrader proje
 
 ## Project Overview
 
-Autotrader is a Spring Boot application that implements automated trading with TradingView and Bitvavo. It provides a
-REST API for interacting with the Bitvavo cryptocurrency exchange.
+Autotrader is a Spring Boot application that trades on the Bitvavo cryptocurrency exchange. Its
+strategy engine — own MACD and Parabolic SAR implementations, configurable entry/exit rules, a
+train/validate backtester and a live runner that is dry-run by default — is the primary path. The
+older TradingView webhook integration is kept as a legacy fallback (see Phase 6 in PLAN.md). The
+application also provides a REST API for interacting with the exchange.
 
 ## Tech Stack
 
@@ -44,7 +47,7 @@ autotrader/
 │   │   │   ├── strategy/                   # In-app strategy engine
 │   │   │   │   ├── model/                  # Candle intervals and documents
 │   │   │   │   └── service/                # Candle history loader
-│   │   │   └── tradingview/                # TradingView integration
+│   │   │   └── tradingview/                # TradingView webhook integration (legacy fallback)
 │   │   │       ├── controller/             # TradingView REST controllers
 │   │   │       ├── model/                  # TradingView data models
 │   │   │       └── service/                # TradingView services

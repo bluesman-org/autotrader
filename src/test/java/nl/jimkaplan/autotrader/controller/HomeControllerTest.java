@@ -21,6 +21,6 @@ class HomeControllerTest {
         // Assert
         assertEquals("welcome", viewName);
         verify(model).addAttribute("appName", "Autotrader");
-        verify(model).addAttribute("appDescription", "Automated trading with TradingView and Bitvavo");
+        verify(model).addAttribute("appDescription", "Automated trading on Bitvavo with an in-app strategy engine");
     }
 }
