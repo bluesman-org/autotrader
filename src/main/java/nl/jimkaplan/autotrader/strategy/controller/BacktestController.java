@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.springframework.http.HttpStatus;
@@ -106,6 +107,51 @@ public class BacktestController {
             @Parameter(description = "ID of the backtest run", required = true)
             @PathVariable String id) {
         return backtestService.get(id)
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new NoSuchElementException("Backtest run not found: " + id));
+    }
+
+    /**
+     * Re-simulate one stored entry and return its individual trades.
+     *
+     * @param id          The run ID
+     * @param entryNumber The entry's number in the ranked table, starting at 1
+     * @return The entry's train and validate trades and skipped signals
+     */
+    @Operation(
+            summary = "Get one entry's individual trades",
+            description = "Re-simulates the stored entry over the same market, range, rules, parameters and " +
+                          "split, deterministically, and returns its train and validate trades and skipped " +
+                          "signals. A run stores only metrics, so the trades are recomputed on demand. " +
+                          "Entries are numbered as shown in the ranked table, starting at 1."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Trades returned",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = BacktestEvaluation.class)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "entryNumber is out of range",
+                    content = @Content
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "No run with that ID",
+                    content = @Content
+            )
+    })
+    @GetMapping("/{id}/entries/{entryNumber}/trades")
+    public ResponseEntity<BacktestEvaluation> trades(
+            @Parameter(description = "ID of the backtest run", required = true)
+            @PathVariable String id,
+            @Parameter(description = "Entry number in the ranked table (1-based)", required = true)
+            @PathVariable int entryNumber) {
+        return backtestService.trades(id, entryNumber)
                 .map(ResponseEntity::ok)
                 .orElseThrow(() -> new NoSuchElementException("Backtest run not found: " + id));
     }

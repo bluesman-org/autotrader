@@ -1,5 +1,11 @@
 package nl.jimkaplan.autotrader.strategy.controller;
 
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestTrade;
+import nl.jimkaplan.autotrader.strategy.backtest.SkipReason;
+import nl.jimkaplan.autotrader.strategy.backtest.SkippedSignal;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunMetrics;
@@ -66,6 +72,36 @@ class BacktestUiControllerRenderTest {
                 // A profit factor with no losses prints as the infinity symbol, not a broken cell
                 .andExpect(content().string(containsString("∞")))
                 .andExpect(content().string(containsString("0.64")));
+    }
+
+    @Test
+    void tradesPageRendersTheTradesAndSkippedSignals() throws Exception {
+        when(backtestService.get("run-1")).thenReturn(Optional.of(run()));
+        when(backtestService.trades("run-1", 1)).thenReturn(Optional.of(evaluation()));
+
+        mockMvc.perform(get("/ui/backtests/run-1/entries/1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Entry 1 · BTC-EUR 1h")))
+                .andExpect(content().string(containsString("12/26/9")))
+                .andExpect(content().string(containsString("Train — earlier part (optimised on)")))
+                .andExpect(content().string(containsString("Validate — held out")))
+                .andExpect(content().string(containsString("2026-09-01 10:00")))
+                .andExpect(content().string(containsString("INSUFFICIENT BALANCE")))
+                .andExpect(content().string(containsString("No trades on this side.")));
+    }
+
+    private static BacktestEvaluation evaluation() {
+        BacktestTrade trade = new BacktestTrade(
+                Instant.parse("2026-09-01T10:00:00Z").toEpochMilli(), 100.0,
+                Instant.parse("2026-09-01T12:00:00Z").toEpochMilli(), 101.5,
+                100.0, 1.0, 0.2, 0.203, 1.097);
+        SkippedSignal skipped = new SkippedSignal(5,
+                Instant.parse("2026-09-02T10:00:00Z").toEpochMilli(), SkipReason.INSUFFICIENT_BALANCE);
+        return new BacktestEvaluation(
+                new BacktestResult(new BacktestMetrics(1003.1, 0.31, 1.28, 1, 100.0, 5.0),
+                        List.of(trade), List.of(skipped)),
+                new BacktestResult(new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0),
+                        List.of(), List.of()));
     }
 
     private static BacktestRun run() {

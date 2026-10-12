@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="|Trades · Backtest ${run.market} ${run.interval} · Autotrader|">Trades · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <p>
+        <a th:href="@{/ui/backtests}">← All backtests</a>
+        · <a th:href="@{/ui/backtests/{id}(id=${run.id})}">Ranked combinations</a>
+    </p>
+    <h1 th:text="|Entry ${entryNumber} · ${run.market} ${run.interval}|">Entry 1 · BTC-EUR 1h</h1>
+
+    <div class="card">
+        <div class="stat-row">
+            <div class="stat"><b th:text="${rangeText}">2026-07-03 → 2026-10-11</b>Range (UTC)</div>
+            <div class="stat"><b th:text="${run.candleCount}">2697</b>Bars</div>
+            <div class="stat">
+                <b th:text="${entry.fastPeriod + '/' + entry.slowPeriod + '/' + entry.signalPeriod}">12/26/9</b>MACD
+                fast/slow/signal
+            </div>
+            <div class="stat">
+                <b th:text="${entry.acceleration + '/' + entry.maximum}">0.02/0.2</b>SAR accel/max
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(run.amountPerBuy, 1, 0) + ' EUR'}">100 EUR</b>Per buy
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(run.feeRate * 100, 1, 2) + '%'}">0.20%</b>Fee per side
+            </div>
+        </div>
+        <p class="muted">
+            Entry: <span class="pill" th:text="${entry.entryOperator}">ALL</span>
+            <span th:text="${#strings.replace(#strings.listJoin(entry.entryConditions, ', '), '_', ' ')}">MACD BULLISH CROSSOVER</span>
+            · Exit: <span class="pill" th:text="${entry.exitOperator}">ALL</span>
+            <span th:text="${#strings.replace(#strings.listJoin(entry.exitConditions, ', '), '_', ' ')}">SAR BEARISH CROSSOVER</span>
+        </p>
+    </div>
+
+    <p class="muted">
+        Recomputed on demand from the same candles, rules and train/validate split the run used, so the
+        trades reproduce the ranked table's metrics. A trade is a round trip; the fees are in EUR and the
+        net is after both of them.
+    </p>
+
+    <h2>Train — earlier part (optimised on)</h2>
+    <div class="card">
+        <div class="stat-row">
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(trainMetrics.finalEquity, 1, 2) + ' EUR'}">1000.00 EUR</b>Final
+                equity
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(trainMetrics.totalReturnPercent, 1, 2)}">0.00</b>Return %
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(trainMetrics.maxDrawdownPercent, 1, 2)}">0.00</b>Max DD %
+            </div>
+            <div class="stat"><b th:text="${trainMetrics.tradeCount}">0</b>Trades</div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(trainMetrics.winRatePercent, 1, 1)}">0.0</b>Win %
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(trainMetrics.profitFactor, 1, 2)}">0.00</b>PF
+            </div>
+        </div>
+    </div>
+    <p class="muted" th:if="${#lists.isEmpty(trainTrades)}">No trades on this side.</p>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(trainTrades)}">
+        <table>
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Entry (UTC)</th>
+                <th>Buy price</th>
+                <th>Exit (UTC)</th>
+                <th>Sell price</th>
+                <th>Quantity</th>
+                <th>Amount EUR</th>
+                <th>Fee in</th>
+                <th>Fee out</th>
+                <th>Net EUR</th>
+                <th>Net %</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="trade, iter : ${trainTrades}">
+                <td th:text="${iter.count}">1</td>
+                <td th:text="${trade.entryTimeText}">2026-09-01 10:00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryPrice, 1, 2)}">0.00</td>
+                <td th:text="${trade.exitTimeText}">2026-09-02 10:00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitPrice, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.quantity, 1, 8)}">0.00000000</td>
+                <td th:text="${#numbers.formatDecimal(trade.amount, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryFee, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitFee, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit / trade.amount * 100, 1, 2)}">0.00</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div th:unless="${#lists.isEmpty(trainSkipped)}">
+        <h3>Skipped entry signals</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Bar time (UTC)</th>
+                    <th class="left">Reason</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="skipped : ${trainSkipped}">
+                    <td th:text="${skipped.timeText}">2026-09-01 10:00</td>
+                    <td class="left" th:text="${#strings.replace(skipped.reason.name(), '_', ' ')}">INSUFFICIENT
+                        BALANCE
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <h2>Validate — held out</h2>
+    <div class="card">
+        <div class="stat-row">
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(validateMetrics.finalEquity, 1, 2) + ' EUR'}">1000.00 EUR</b>Final
+                equity
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(validateMetrics.totalReturnPercent, 1, 2)}">0.00</b>Return %
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(validateMetrics.maxDrawdownPercent, 1, 2)}">0.00</b>Max DD %
+            </div>
+            <div class="stat"><b th:text="${validateMetrics.tradeCount}">0</b>Trades</div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(validateMetrics.winRatePercent, 1, 1)}">0.0</b>Win %
+            </div>
+            <div class="stat">
+                <b th:text="${#numbers.formatDecimal(validateMetrics.profitFactor, 1, 2)}">0.00</b>PF
+            </div>
+        </div>
+    </div>
+    <p class="muted" th:if="${#lists.isEmpty(validateTrades)}">No trades on this side.</p>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(validateTrades)}">
+        <table>
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Entry (UTC)</th>
+                <th>Buy price</th>
+                <th>Exit (UTC)</th>
+                <th>Sell price</th>
+                <th>Quantity</th>
+                <th>Amount EUR</th>
+                <th>Fee in</th>
+                <th>Fee out</th>
+                <th>Net EUR</th>
+                <th>Net %</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="trade, iter : ${validateTrades}">
+                <td th:text="${iter.count}">1</td>
+                <td th:text="${trade.entryTimeText}">2026-09-01 10:00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryPrice, 1, 2)}">0.00</td>
+                <td th:text="${trade.exitTimeText}">2026-09-02 10:00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitPrice, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.quantity, 1, 8)}">0.00000000</td>
+                <td th:text="${#numbers.formatDecimal(trade.amount, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryFee, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitFee, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit / trade.amount * 100, 1, 2)}">0.00</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div th:unless="${#lists.isEmpty(validateSkipped)}">
+        <h3>Skipped entry signals</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Bar time (UTC)</th>
+                    <th class="left">Reason</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="skipped : ${validateSkipped}">
+                    <td th:text="${skipped.timeText}">2026-09-01 10:00</td>
+                    <td class="left" th:text="${#strings.replace(skipped.reason.name(), '_', ' ')}">INSUFFICIENT
+                        BALANCE
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+</body>
+</html>

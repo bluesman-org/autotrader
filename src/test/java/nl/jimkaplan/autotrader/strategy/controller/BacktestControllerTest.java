@@ -2,6 +2,9 @@ package nl.jimkaplan.autotrader.strategy.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.junit.jupiter.api.Test;
@@ -96,5 +99,29 @@ class BacktestControllerTest {
         assertThrows(IllegalArgumentException.class, () -> backtestController.recent(0));
         assertThrows(IllegalArgumentException.class, () -> backtestController.recent(101));
         verifyNoInteractions(backtestService);
+    }
+
+    @Test
+    void trades_returnsTheEvaluatedEntry() {
+        BacktestEvaluation evaluation = new BacktestEvaluation(
+                new BacktestResult(metrics(), List.of(), List.of()),
+                new BacktestResult(metrics(), List.of(), List.of()));
+        when(backtestService.trades("run-1", 1)).thenReturn(Optional.of(evaluation));
+
+        ResponseEntity<BacktestEvaluation> response = backtestController.trades("run-1", 1);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(evaluation, response.getBody());
+    }
+
+    @Test
+    void trades_throwsWhenTheRunIsMissing() {
+        when(backtestService.trades("missing", 1)).thenReturn(Optional.empty());
+
+        assertThrows(NoSuchElementException.class, () -> backtestController.trades("missing", 1));
+    }
+
+    private static BacktestMetrics metrics() {
+        return new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0);
     }
 }
