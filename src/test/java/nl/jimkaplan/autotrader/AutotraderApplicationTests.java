@@ -12,15 +12,19 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * project has hit; one context start catches it.
  *
  * <p>No database is needed: the two startup runners are replaced by mocks, nothing touches Mongo
- * before the first request, and the OpenAPI export is pointed at the build directory (with the
- * mock web environment it does not run at all). The property overrides stand in for the environment
- * variables the application.yml placeholders expect.</p>
+ * before the first request, and the OpenAPI export is switched off
+ * ({@code openapi.export-enabled=false}), so its runner returns without sleeping or calling the
+ * API (it would otherwise, since Spring runs CommandLineRunners in this environment too). The
+ * property overrides stand in for the environment variables the application.yml placeholders
+ * expect.</p>
  */
 @SpringBootTest(properties = {
         "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-context-test",
         "bitvavo.api.url=http://localhost:9999",
         "encryption.master-key=dGVzdC1rZXk=",
-        "openapi.export-dir=target/context-test-openapi"
+        "openapi.export-dir=target/context-test-openapi",
+        "openapi.export-enabled=false",
+        "openapi.export-startup-delay-ms=0"
 })
 class AutotraderApplicationTests {
 

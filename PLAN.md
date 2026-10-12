@@ -4,11 +4,9 @@ Tracking document for replacing TradingView with an in-app strategy engine, buil
 data and our own indicators. **Update this file with every PR**: check off completed steps,
 add new follow-ups, and keep the status line current.
 
-**Status (2026-10-11):** Phase 1 complete (PR #4), coverage gate in place (PR #5), indicators
-pinned to the reference fixtures (PR #6), rules in (PR #7), backtest engine and sweep in (PR #8),
-REST API in (PR #9), in-app UI in (PR #10), Docker development stack in (PR #11). Phase 5 is
-built (live engine, dry-run by default, replay gate) and waits for its PR slot; next: Phase 6,
-retiring TradingView.
+**Status (2026-10-12):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
+backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
+default, replay gate). Quality gates hardened (PR #13). Next: Phase 6, retiring TradingView.
 
 ## Objective
 

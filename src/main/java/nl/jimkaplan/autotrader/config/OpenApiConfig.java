@@ -43,6 +43,13 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
     private String exportDir;
 
     /**
+     * Whether the specification is exported at all; tests turn this off so a context start does not
+     * sleep for the startup delay and call the API.
+     */
+    @Value("${openapi.export-enabled:true}")
+    private boolean exportEnabled = true;
+
+    /**
      * Delay before the startup export, giving the web server time to come up.
      */
     @Value("${openapi.export-startup-delay-ms:5000}")
@@ -65,6 +72,10 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
      * This method is called both when the application starts and when the web server is initialized.
      */
     private void exportOpenApiSpecification() {
+        if (!exportEnabled) {
+            log.info("OpenAPI specification export is disabled (openapi.export-enabled=false)");
+            return;
+        }
         try {
             // Create RestTemplate to call the OpenAPI endpoint
             RestTemplate restTemplate = new RestTemplate();

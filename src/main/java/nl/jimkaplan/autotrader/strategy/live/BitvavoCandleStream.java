@@ -167,13 +167,17 @@ public class BitvavoCandleStream implements WebSocketConnector.SessionListener {
     }
 
     @Override
-    public synchronized void onOpen(WebSocketConnector.WebSocketSession opened) {
-        session = opened;
-        reconnectAttempt = 0;
-        reconnectScheduled = false;
-        lastError = null;
+    public void onOpen(WebSocketConnector.WebSocketSession opened) {
+        // Fields under the lifecycle monitor; the socket write stays outside it, like every other
+        // send on this class, so a stalled peer cannot block stop() or a reconnect.
+        synchronized (this) {
+            session = opened;
+            reconnectAttempt = 0;
+            reconnectScheduled = false;
+            lastError = null;
+            scheduleKeepalive();
+        }
         send(subscribeMessage());
-        scheduleKeepalive();
         log.info("Subscribed to {} {} candles", market, interval);
     }
 

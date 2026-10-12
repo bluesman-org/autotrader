@@ -31,10 +31,16 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
           cache: 'maven'
+      - name: Set up QEMU
+        # The deployment host is arm64, so the image is built for arm64 like the deploy workflow
+        # does; the Dockerfile's apk step then runs under emulation.
+        uses: docker/setup-qemu-action@v4
       - name: Build the jar the image copies
         run: ./mvnw -B package -DskipTests -Ddocker.skip=true
-      - name: Build the image for this runner's platform
-        run: docker build -t autotrader:ci .
+      - name: Build the image through the project's own plugin configuration
+        # The plugin goal (not `docker build`) exercises the pom's buildx platforms, which is what
+        # ships the image; the pure goal avoids verify, where the gate rejects -DskipTests.
+        run: ./mvnw -B io.fabric8:docker-maven-plugin:build -Ddocker.platforms=linux/arm64
       - name: Validate the compose files
         env:
           MONGO_ROOT_PASSWORD: ci-root
