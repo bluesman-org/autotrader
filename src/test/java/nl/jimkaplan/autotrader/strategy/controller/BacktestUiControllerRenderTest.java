@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.controller;
 
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -76,8 +78,8 @@ class BacktestUiControllerRenderTest {
 
     @Test
     void tradesPageRendersTheTradesAndSkippedSignals() throws Exception {
-        when(backtestService.get("run-1")).thenReturn(Optional.of(run()));
-        when(backtestService.trades("run-1", 1)).thenReturn(Optional.of(evaluation()));
+        when(backtestService.trades("run-1", 1))
+                .thenReturn(Optional.of(new BacktestEntryTrades(run(), 1, 2399, false, evaluation())));
 
         mockMvc.perform(get("/ui/backtests/run-1/entries/1"))
                 .andExpect(status().isOk())
@@ -87,7 +89,19 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("Validate — held out")))
                 .andExpect(content().string(containsString("2026-09-01 10:00")))
                 .andExpect(content().string(containsString("INSUFFICIENT BALANCE")))
-                .andExpect(content().string(containsString("No trades on this side.")));
+                .andExpect(content().string(containsString("No trades on this side.")))
+                .andExpect(content().string(not(containsString("The stored history changed"))));
+    }
+
+    @Test
+    void tradesPageWarnsWhenTheStoredHistoryChanged() throws Exception {
+        when(backtestService.trades("run-1", 1))
+                .thenReturn(Optional.of(new BacktestEntryTrades(run(), 1, 2400, true, evaluation())));
+
+        mockMvc.perform(get("/ui/backtests/run-1/entries/1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("The stored history changed since the run")))
+                .andExpect(content().string(containsString("now holds 2400 bars")));
     }
 
     private static BacktestEvaluation evaluation() {

@@ -6,6 +6,7 @@ import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.repository.BacktestRunRepository;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestConfig;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestSplit;
@@ -153,35 +154,48 @@ public class BacktestService {
      * with the same rules and split is deterministic and cheap, while stored trades for up to
      * fifty entries could outgrow MongoDB's document limit, so the trades are recomputed on
      * demand. The result reproduces the stored metrics as long as the candle history inside the
-     * run's range has not changed since the run. Runs are read in full, so their entries are
-     * present.</p>
+     * run's range has not changed since the run; the returned value carries the store's current
+     * bar count and whether it differs, so callers can say so instead of only logging it. Runs are
+     * read in full, so their entries are present.</p>
      *
      * @param id          The run ID
      * @param entryNumber The entry's number in the ranked table, starting at 1
-     * @return The entry's train and validate results, or empty when the run does not exist
-     * @throws IllegalArgumentException if the entry number is out of range, or the candles for
-     *                                  the run's range are no longer stored
+     * @return The run, the entry's recomputed results and the history comparison, or empty when
+     *         the run does not exist
+     * @throws IllegalArgumentException if the entry number is out of range
+     * @throws IllegalStateException    if the run's stored settings no longer resolve, or the
+     *                                  candles for its range are no longer stored
      */
-    public Optional<BacktestEvaluation> trades(String id, int entryNumber) {
+    public Optional<BacktestEntryTrades> trades(String id, int entryNumber) {
         Optional<BacktestRun> storedRun = backtestRunRepository.findById(id);
         if (storedRun.isEmpty()) {
             return Optional.empty();
         }
         BacktestRun run = storedRun.get();
         if (entryNumber < 1 || entryNumber > run.getEntries().size()) {
-            throw new IllegalArgumentException("entry " + entryNumber + " does not exist; valid entries are 1 to "
+            throw new IllegalArgumentException("Entry " + entryNumber + " does not exist; valid entries are 1 to "
                     + run.getEntries().size());
         }
         BacktestRunEntry entry = run.getEntries().get(entryNumber - 1);
-        CandleInterval interval = CandleInterval.fromCode(run.getInterval());
+        CandleInterval interval;
+        RuleGroup entryRules;
+        RuleGroup exitRules;
+        try {
+            interval = CandleInterval.fromCode(run.getInterval());
+            entryRules = storedRuleGroup(entry.getEntryOperator(), entry.getEntryConditions());
+            exitRules = storedRuleGroup(entry.getExitOperator(), entry.getExitConditions());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException("The stored run's interval or rule names no longer resolve", ex);
+        }
         candleHistoryService.ensureRange(run.getMarket(), interval,
                 Instant.ofEpochMilli(run.getFromTime()), Instant.ofEpochMilli(run.getToTime()));
         List<Candle> candles = candleHistoryService.getCandles(run.getMarket(), interval,
                 Instant.ofEpochMilli(run.getFromTime()), Instant.ofEpochMilli(run.getToTime()));
         if (candles.isEmpty()) {
-            throw new IllegalArgumentException("no candles for the run's range");
+            throw new IllegalStateException("No candles are stored for the run's range");
         }
-        if (candles.size() != run.getCandleCount()) {
+        boolean historyChanged = candles.size() != run.getCandleCount();
+        if (historyChanged) {
             // The request-supplied run id stays out of the log line (CRLF-injection hygiene)
             log.warn("The stored {} {} history changed: {} bars now, {} recorded by the run; recomputing "
                             + "from the current candles",
@@ -195,12 +209,11 @@ public class BacktestService {
         BacktestConfig config = new BacktestConfig(run.getInitialCapital(), run.getAmountPerBuy(),
                 run.getFeeRate(), run.getWarmUpCandles());
         IndicatorSeries indicators = IndicatorSeries.of(series, macd, sar);
-        boolean[] entrySignals = StrategyEvaluator.evaluate(
-                storedRuleGroup(entry.getEntryOperator(), entry.getEntryConditions()), series, indicators);
-        boolean[] exitSignals = StrategyEvaluator.evaluate(
-                storedRuleGroup(entry.getExitOperator(), entry.getExitConditions()), series, indicators);
-        return Optional.of(BacktestSplit.of(series, config, run.getTrainRatio())
-                .evaluate(entrySignals, exitSignals));
+        boolean[] entrySignals = StrategyEvaluator.evaluate(entryRules, series, indicators);
+        boolean[] exitSignals = StrategyEvaluator.evaluate(exitRules, series, indicators);
+        BacktestEvaluation evaluation = BacktestSplit.of(series, config, run.getTrainRatio())
+                .evaluate(entrySignals, exitSignals);
+        return Optional.of(new BacktestEntryTrades(run, entryNumber, candles.size(), historyChanged, evaluation));
     }
 
     private static RuleGroup storedRuleGroup(String operator, List<String> conditions) {

@@ -9,9 +9,12 @@
     <!-- Internal carriers hand around their own lists and indicator arrays: nothing crosses a
          trust boundary, the web layer serializes copies, and defensive copying of the indicator
          arrays would allocate per bar in the hot path. The two service-shaped classes hold
-         framework collaborators (RestTemplate, the candle stream), which Spring manages. -->
+         framework collaborators (RestTemplate, the candle stream), which Spring manages. The
+         records that carry a stored run (RunSummaryView, BacktestEntryTrades) do so for display,
+         and the run is already published through the API as-is. -->
     <Match>
         <Or>
+            <Class name="nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades"/>
             <Class name="nl.jimkaplan.autotrader.strategy.backtest.BacktestResult"/>
             <Class name="nl.jimkaplan.autotrader.strategy.backtest.SweepDefinition"/>
             <Class name="nl.jimkaplan.autotrader.strategy.backtest.SweepResult"/>

@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.springframework.http.HttpStatus;
@@ -86,7 +86,8 @@ public class BacktestController {
      * @param id The run ID
      * @return The stored run
      */
-    @Operation(summary = "Get a backtest run", description = "Returns a stored backtest run and its ranked entries.")
+    @Operation(summary = "Get a backtest run", operationId = "getBacktestRun",
+            description = "Returns a stored backtest run and its ranked entries.")
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
@@ -121,9 +122,10 @@ public class BacktestController {
     @Operation(
             summary = "Get one entry's individual trades",
             description = "Re-simulates the stored entry over the same market, range, rules, parameters and " +
-                          "split, deterministically, and returns its train and validate trades and skipped " +
-                          "signals. A run stores only metrics, so the trades are recomputed on demand. " +
-                          "Entries are numbered as shown in the ranked table, starting at 1."
+                          "split, deterministically, and returns the stored run, its recomputed train and " +
+                          "validate trades and skipped signals, and whether the candle history changed " +
+                          "since the run. A run stores only metrics, so the trades are recomputed on " +
+                          "demand. Entries are numbered as shown in the ranked table, starting at 1."
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -131,7 +133,7 @@ public class BacktestController {
                     description = "Trades returned",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = BacktestEvaluation.class)
+                            schema = @Schema(implementation = BacktestEntryTrades.class)
                     )
             ),
             @ApiResponse(
@@ -146,7 +148,7 @@ public class BacktestController {
             )
     })
     @GetMapping("/{id}/entries/{entryNumber}/trades")
-    public ResponseEntity<BacktestEvaluation> trades(
+    public ResponseEntity<BacktestEntryTrades> trades(
             @Parameter(description = "ID of the backtest run", required = true)
             @PathVariable String id,
             @Parameter(description = "Entry number in the ranked table (1-based)", required = true)

@@ -1,7 +1,7 @@
 package nl.jimkaplan.autotrader.strategy.service;
 
 import nl.jimkaplan.autotrader.repository.BacktestRunRepository;
-import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.RankingMetric;
 import nl.jimkaplan.autotrader.strategy.controller.BacktestRunRequest;
 import nl.jimkaplan.autotrader.strategy.controller.MacdParametersRequest;
@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -257,15 +258,21 @@ class BacktestServiceTest {
         run.setId("run-1");
         when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
 
-        BacktestEvaluation evaluation = backtestService.trades("run-1", 1).orElseThrow();
+        BacktestEntryTrades result = backtestService.trades("run-1", 1).orElseThrow();
 
+        assertEquals(run, result.run());
+        assertEquals(1, result.entryNumber());
+        assertEquals(140, result.candleCount());
+        assertFalse(result.historyChanged());
         BacktestRunEntry entry = run.getEntries().get(0);
-        assertEquals(entry.getTrain().getTradeCount(), evaluation.train().trades().size());
-        assertEquals(entry.getTrain().getFinalEquity(), evaluation.train().metrics().finalEquity(), 1e-9);
-        assertEquals(entry.getValidate().getTradeCount(), evaluation.validate().trades().size());
-        assertEquals(entry.getValidate().getFinalEquity(), evaluation.validate().metrics().finalEquity(), 1e-9);
+        assertEquals(entry.getTrain().getTradeCount(), result.evaluation().train().trades().size());
+        assertEquals(entry.getTrain().getFinalEquity(),
+                result.evaluation().train().metrics().finalEquity(), 1e-9);
+        assertEquals(entry.getValidate().getTradeCount(), result.evaluation().validate().trades().size());
+        assertEquals(entry.getValidate().getFinalEquity(),
+                result.evaluation().validate().metrics().finalEquity(), 1e-9);
         // Deterministic: the same read returns the same trades
-        assertEquals(evaluation, backtestService.trades("run-1", 1).orElseThrow());
+        assertEquals(result, backtestService.trades("run-1", 1).orElseThrow());
     }
 
     @Test
@@ -287,26 +294,44 @@ class BacktestServiceTest {
     }
 
     @Test
+    void trades_rejectsStoredRunsWhoseRulesNoLongerResolve() {
+        BacktestRunEntry entry = BacktestRunEntry.builder()
+                .fastPeriod(12).slowPeriod(26).signalPeriod(9)
+                .acceleration(0.02).maximum(0.2)
+                .entryOperator("ALL").entryConditions(List.of("NOT_A_RULE"))
+                .exitOperator("ALL").exitConditions(List.of("SAR_BEARISH_CROSSOVER"))
+                .build();
+        BacktestRun run = storedRun(List.of(entry));
+        when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
+
+        // Stored data that no longer resolves is a server-side condition, not a client error
+        assertThrows(IllegalStateException.class, () -> backtestService.trades("run-1", 1));
+        verifyNoInteractions(candleHistoryService);
+    }
+
+    @Test
     void trades_rejectsRangesWithoutCandles() {
         BacktestRun run = storedRun(List.of(storedEntry()));
         when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(List.of());
 
-        assertThrows(IllegalArgumentException.class, () -> backtestService.trades("run-1", 1));
+        assertThrows(IllegalStateException.class, () -> backtestService.trades("run-1", 1));
     }
 
     @Test
-    void trades_recomputesFromTheStoredHistoryWhenTheCandleCountDiffers() {
+    void trades_reportsAChangedHistoryRatherThanOnlyLoggingIt() {
         BacktestRun run = storedRun(List.of(storedEntry()));
         when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(candles(139));
 
-        // The run recorded 140 bars; the trades follow what is stored now
-        BacktestEvaluation evaluation = backtestService.trades("run-1", 1).orElseThrow();
+        // The run recorded 140 bars; the trades follow what is stored now, and the caller is told
+        BacktestEntryTrades result = backtestService.trades("run-1", 1).orElseThrow();
 
-        assertTrue(evaluation.train().trades().size() > 0);
+        assertTrue(result.historyChanged());
+        assertEquals(139, result.candleCount());
+        assertTrue(result.evaluation().train().trades().size() > 0);
     }
 
     private static BacktestRun storedRun(List<BacktestRunEntry> entries) {

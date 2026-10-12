@@ -442,7 +442,7 @@
           "Live strategies"
         ],
         "summary": "Get a live strategy",
-        "operationId": "get",
+        "operationId": "getLiveStrategy",
         "parameters": [
           {
             "name": "id",
@@ -671,7 +671,7 @@
         ],
         "summary": "Get a backtest run",
         "description": "Returns a stored backtest run and its ranked entries.",
-        "operationId": "get_1",
+        "operationId": "getBacktestRun",
         "parameters": [
           {
             "name": "id",
@@ -706,7 +706,7 @@
           "Backtests"
         ],
         "summary": "Get one entry's individual trades",
-        "description": "Re-simulates the stored entry over the same market, range, rules, parameters and split, deterministically, and returns its train and validate trades and skipped signals. A run stores only metrics, so the trades are recomputed on demand. Entries are numbered as shown in the ranked table, starting at 1.",
+        "description": "Re-simulates the stored entry over the same market, range, rules, parameters and split, deterministically, and returns the stored run, its recomputed train and validate trades and skipped signals, and whether the candle history changed since the run. A run stores only metrics, so the trades are recomputed on demand. Entries are numbered as shown in the ranked table, starting at 1.",
         "operationId": "trades",
         "parameters": [
           {
@@ -735,7 +735,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BacktestEvaluation"
+                  "$ref": "#/components/schemas/BacktestEntryTrades"
                 }
               }
             }
@@ -1356,6 +1356,28 @@
           },
           "address": {
             "type": "string"
+          }
+        }
+      },
+      "BacktestEntryTrades": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/BacktestRun"
+          },
+          "entryNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "candleCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "historyChanged": {
+            "type": "boolean"
+          },
+          "evaluation": {
+            "$ref": "#/components/schemas/BacktestEvaluation"
           }
         }
       },

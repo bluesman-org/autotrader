@@ -2,7 +2,7 @@ package nl.jimkaplan.autotrader.strategy.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
 import nl.jimkaplan.autotrader.strategy.backtest.RankingMetric;
 import nl.jimkaplan.autotrader.strategy.model.CandleInterval;
@@ -131,21 +131,10 @@ public class BacktestUiController {
     @GetMapping("/{id}/entries/{entryNumber}")
     public String trades(@PathVariable String id, @PathVariable int entryNumber, Model model,
                          RedirectAttributes redirectAttributes) {
-        Optional<BacktestRun> storedRun = backtestService.get(id);
-        if (storedRun.isEmpty()) {
-            redirectAttributes.addFlashAttribute("error", "No backtest run with ID " + id);
-            return "redirect:/ui/backtests";
-        }
-        BacktestRun run = storedRun.get();
-        if (entryNumber < 1 || entryNumber > run.getEntries().size()) {
-            redirectAttributes.addFlashAttribute("error", "Entry " + entryNumber
-                    + " does not exist; valid entries are 1 to " + run.getEntries().size());
-            return "redirect:/ui/backtests/" + id;
-        }
-        Optional<BacktestEvaluation> evaluated;
+        Optional<BacktestEntryTrades> evaluated;
         try {
             evaluated = backtestService.trades(id, entryNumber);
-        } catch (IllegalArgumentException ex) {
+        } catch (IllegalArgumentException | IllegalStateException ex) {
             log.warn("Trades view rejected: {}", ex.getMessage());
             redirectAttributes.addFlashAttribute("error", ex.getMessage());
             return "redirect:/ui/backtests/" + id;
@@ -158,17 +147,20 @@ public class BacktestUiController {
             redirectAttributes.addFlashAttribute("error", "No backtest run with ID " + id);
             return "redirect:/ui/backtests";
         }
-        BacktestEvaluation evaluation = evaluated.get();
+        BacktestEntryTrades trades = evaluated.get();
+        BacktestRun run = trades.run();
         model.addAttribute("run", run);
-        model.addAttribute("entryNumber", entryNumber);
-        model.addAttribute("entry", run.getEntries().get(entryNumber - 1));
+        model.addAttribute("entryNumber", trades.entryNumber());
+        model.addAttribute("entry", run.getEntries().get(trades.entryNumber() - 1));
         model.addAttribute("rangeText", rangeText(run));
-        model.addAttribute("trainTrades", tradeViews(evaluation.train()));
-        model.addAttribute("trainMetrics", evaluation.train().metrics());
-        model.addAttribute("trainSkipped", skippedViews(evaluation.train()));
-        model.addAttribute("validateTrades", tradeViews(evaluation.validate()));
-        model.addAttribute("validateMetrics", evaluation.validate().metrics());
-        model.addAttribute("validateSkipped", skippedViews(evaluation.validate()));
+        model.addAttribute("historyChanged", trades.historyChanged());
+        model.addAttribute("candleCount", trades.candleCount());
+        model.addAttribute("trainTrades", tradeViews(trades.evaluation().train()));
+        model.addAttribute("trainMetrics", trades.evaluation().train().metrics());
+        model.addAttribute("trainSkipped", skippedViews(trades.evaluation().train()));
+        model.addAttribute("validateTrades", tradeViews(trades.evaluation().validate()));
+        model.addAttribute("validateMetrics", trades.evaluation().validate().metrics());
+        model.addAttribute("validateSkipped", skippedViews(trades.evaluation().validate()));
         return "backtests/trades";
     }
 

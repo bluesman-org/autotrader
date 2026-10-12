@@ -43,10 +43,15 @@
         </p>
     </div>
 
+    <div class="banner warn" th:if="${historyChanged}"
+         th:text="|The stored history changed since the run: the range now holds ${candleCount} bars against the ${run.candleCount} the run recorded. The trades below follow the current candles and can differ from the ranked table.|">
+        The stored history changed since the run.
+    </div>
+
     <p class="muted">
-        Recomputed on demand from the same candles, rules and train/validate split the run used, so the
-        trades reproduce the ranked table's metrics. A trade is a round trip; the fees are in EUR and the
-        net is after both of them.
+        Recomputed on demand from the run's rules and train/validate split over the stored candles, so
+        the trades reproduce the ranked table's metrics. A trade is a round trip; the fees are in EUR
+        and the net is after both of them.
     </p>
 
     <h2>Train — earlier part (optimised on)</h2>
@@ -71,62 +76,8 @@
             </div>
         </div>
     </div>
-    <p class="muted" th:if="${#lists.isEmpty(trainTrades)}">No trades on this side.</p>
-    <div class="table-wrap" th:unless="${#lists.isEmpty(trainTrades)}">
-        <table>
-            <thead>
-            <tr>
-                <th>#</th>
-                <th>Entry (UTC)</th>
-                <th>Buy price</th>
-                <th>Exit (UTC)</th>
-                <th>Sell price</th>
-                <th>Quantity</th>
-                <th>Amount EUR</th>
-                <th>Fee in</th>
-                <th>Fee out</th>
-                <th>Net EUR</th>
-                <th>Net %</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="trade, iter : ${trainTrades}">
-                <td th:text="${iter.count}">1</td>
-                <td th:text="${trade.entryTimeText}">2026-09-01 10:00</td>
-                <td th:text="${#numbers.formatDecimal(trade.entryPrice, 1, 2)}">0.00</td>
-                <td th:text="${trade.exitTimeText}">2026-09-02 10:00</td>
-                <td th:text="${#numbers.formatDecimal(trade.exitPrice, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.quantity, 1, 8)}">0.00000000</td>
-                <td th:text="${#numbers.formatDecimal(trade.amount, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.entryFee, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.exitFee, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.profit, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.profit / trade.amount * 100, 1, 2)}">0.00</td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
-    <div th:unless="${#lists.isEmpty(trainSkipped)}">
-        <h3>Skipped entry signals</h3>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                <tr>
-                    <th>Bar time (UTC)</th>
-                    <th class="left">Reason</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr th:each="skipped : ${trainSkipped}">
-                    <td th:text="${skipped.timeText}">2026-09-01 10:00</td>
-                    <td class="left" th:text="${#strings.replace(skipped.reason.name(), '_', ' ')}">INSUFFICIENT
-                        BALANCE
-                    </td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <div th:replace="~{fragments/trade-tables :: tradeTable(${trainTrades})}"></div>
+    <div th:replace="~{fragments/trade-tables :: skippedSignals(${trainSkipped})}"></div>
 
     <h2>Validate — held out</h2>
     <div class="card">
@@ -150,62 +101,8 @@
             </div>
         </div>
     </div>
-    <p class="muted" th:if="${#lists.isEmpty(validateTrades)}">No trades on this side.</p>
-    <div class="table-wrap" th:unless="${#lists.isEmpty(validateTrades)}">
-        <table>
-            <thead>
-            <tr>
-                <th>#</th>
-                <th>Entry (UTC)</th>
-                <th>Buy price</th>
-                <th>Exit (UTC)</th>
-                <th>Sell price</th>
-                <th>Quantity</th>
-                <th>Amount EUR</th>
-                <th>Fee in</th>
-                <th>Fee out</th>
-                <th>Net EUR</th>
-                <th>Net %</th>
-            </tr>
-            </thead>
-            <tbody>
-            <tr th:each="trade, iter : ${validateTrades}">
-                <td th:text="${iter.count}">1</td>
-                <td th:text="${trade.entryTimeText}">2026-09-01 10:00</td>
-                <td th:text="${#numbers.formatDecimal(trade.entryPrice, 1, 2)}">0.00</td>
-                <td th:text="${trade.exitTimeText}">2026-09-02 10:00</td>
-                <td th:text="${#numbers.formatDecimal(trade.exitPrice, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.quantity, 1, 8)}">0.00000000</td>
-                <td th:text="${#numbers.formatDecimal(trade.amount, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.entryFee, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.exitFee, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.profit, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.profit / trade.amount * 100, 1, 2)}">0.00</td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
-    <div th:unless="${#lists.isEmpty(validateSkipped)}">
-        <h3>Skipped entry signals</h3>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                <tr>
-                    <th>Bar time (UTC)</th>
-                    <th class="left">Reason</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr th:each="skipped : ${validateSkipped}">
-                    <td th:text="${skipped.timeText}">2026-09-01 10:00</td>
-                    <td class="left" th:text="${#strings.replace(skipped.reason.name(), '_', ' ')}">INSUFFICIENT
-                        BALANCE
-                    </td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <div th:replace="~{fragments/trade-tables :: tradeTable(${validateTrades})}"></div>
+    <div th:replace="~{fragments/trade-tables :: skippedSignals(${validateSkipped})}"></div>
 </main>
 </body>
 </html>

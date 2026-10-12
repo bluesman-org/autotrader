@@ -79,7 +79,7 @@ public class LiveStrategyController {
      * @param id The strategy ID
      * @return The strategy, running state and stream state
      */
-    @Operation(summary = "Get a live strategy")
+    @Operation(summary = "Get a live strategy", operationId = "getLiveStrategy")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Strategy found",
                     content = @Content(mediaType = "application/json",

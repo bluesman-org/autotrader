@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.strategy.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
@@ -103,15 +104,16 @@ class BacktestControllerTest {
 
     @Test
     void trades_returnsTheEvaluatedEntry() {
-        BacktestEvaluation evaluation = new BacktestEvaluation(
-                new BacktestResult(metrics(), List.of(), List.of()),
-                new BacktestResult(metrics(), List.of(), List.of()));
-        when(backtestService.trades("run-1", 1)).thenReturn(Optional.of(evaluation));
+        BacktestEntryTrades trades = new BacktestEntryTrades(BacktestRun.builder().build(), 1, 0, false,
+                new BacktestEvaluation(
+                        new BacktestResult(metrics(), List.of(), List.of()),
+                        new BacktestResult(metrics(), List.of(), List.of())));
+        when(backtestService.trades("run-1", 1)).thenReturn(Optional.of(trades));
 
-        ResponseEntity<BacktestEvaluation> response = backtestController.trades("run-1", 1);
+        ResponseEntity<BacktestEntryTrades> response = backtestController.trades("run-1", 1);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(evaluation, response.getBody());
+        assertEquals(trades, response.getBody());
     }
 
     @Test

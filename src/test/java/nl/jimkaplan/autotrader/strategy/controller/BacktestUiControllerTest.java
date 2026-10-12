@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.controller;
 
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
@@ -149,18 +150,19 @@ class BacktestUiControllerTest {
 
     @Test
     void trades_showsTheEntryAndItsRecomputedTrades() {
-        BacktestRun run = runWithEntry("run-1");
-        when(backtestService.get("run-1")).thenReturn(Optional.of(run));
-        when(backtestService.trades("run-1", 1)).thenReturn(Optional.of(evaluation()));
+        BacktestEntryTrades trades = entryTrades("run-1", false, 2399);
+        when(backtestService.trades("run-1", 1)).thenReturn(Optional.of(trades));
         Model model = new ExtendedModelMap();
 
         String view = backtestUiController.trades("run-1", 1, model, new RedirectAttributesModelMap());
 
         assertEquals("backtests/trades", view);
-        assertSame(run, model.getAttribute("run"));
+        assertSame(trades.run(), model.getAttribute("run"));
         assertEquals(1, model.getAttribute("entryNumber"));
-        assertEquals(run.getEntries().get(0), model.getAttribute("entry"));
+        assertEquals(trades.run().getEntries().get(0), model.getAttribute("entry"));
         assertEquals("2026-07-03 → 2026-10-11", model.getAttribute("rangeText"));
+        assertEquals(false, model.getAttribute("historyChanged"));
+        assertEquals(2399, model.getAttribute("candleCount"));
         @SuppressWarnings("unchecked")
         List<BacktestTradeView> trainTrades = (List<BacktestTradeView>) model.getAttribute("trainTrades");
         assertNotNull(trainTrades);
@@ -185,7 +187,7 @@ class BacktestUiControllerTest {
 
     @Test
     void trades_redirectsWhenTheRunIsUnknown() {
-        when(backtestService.get("missing")).thenReturn(Optional.empty());
+        when(backtestService.trades("missing", 1)).thenReturn(Optional.empty());
         RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
         String view = backtestUiController.trades("missing", 1, new ExtendedModelMap(), redirectAttributes);
@@ -196,7 +198,8 @@ class BacktestUiControllerTest {
 
     @Test
     void trades_redirectsWhenTheEntryNumberIsOutOfRange() {
-        when(backtestService.get("run-1")).thenReturn(Optional.of(runWithEntry("run-1")));
+        when(backtestService.trades("run-1", 2))
+                .thenThrow(new IllegalArgumentException("Entry 2 does not exist; valid entries are 1 to 1"));
         RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
         String view = backtestUiController.trades("run-1", 2, new ExtendedModelMap(), redirectAttributes);
@@ -207,33 +210,20 @@ class BacktestUiControllerTest {
     }
 
     @Test
-    void trades_redirectsWhenTheRunDisappearsBeforeTheRecomputation() {
-        when(backtestService.get("run-1")).thenReturn(Optional.of(runWithEntry("run-1")));
-        when(backtestService.trades("run-1", 1)).thenReturn(Optional.empty());
-        RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
-
-        String view = backtestUiController.trades("run-1", 1, new ExtendedModelMap(), redirectAttributes);
-
-        assertEquals("redirect:/ui/backtests", view);
-        assertEquals("No backtest run with ID run-1", redirectAttributes.getFlashAttributes().get("error"));
-    }
-
-    @Test
-    void trades_redirectsWithTheMessageWhenTheRecomputationIsRejected() {
-        when(backtestService.get("run-1")).thenReturn(Optional.of(runWithEntry("run-1")));
+    void trades_redirectsWhenTheStoredCandlesAreGone() {
         when(backtestService.trades("run-1", 1))
-                .thenThrow(new IllegalArgumentException("no candles for the run's range"));
+                .thenThrow(new IllegalStateException("No candles are stored for the run's range"));
         RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
         String view = backtestUiController.trades("run-1", 1, new ExtendedModelMap(), redirectAttributes);
 
         assertEquals("redirect:/ui/backtests/run-1", view);
-        assertEquals("no candles for the run's range", redirectAttributes.getFlashAttributes().get("error"));
+        assertEquals("No candles are stored for the run's range",
+                redirectAttributes.getFlashAttributes().get("error"));
     }
 
     @Test
     void trades_redirectsWithAFixedMessageWhenTheCandleFetchFails() {
-        when(backtestService.get("run-1")).thenReturn(Optional.of(runWithEntry("run-1")));
         when(backtestService.trades("run-1", 1)).thenThrow(
                 new ResourceAccessException("I/O error on GET request for \"https://api.bitvavo.com\": connect timed out"));
         RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
@@ -242,6 +232,10 @@ class BacktestUiControllerTest {
 
         assertEquals("redirect:/ui/backtests/run-1", view);
         assertEquals(BacktestUiController.CANDLE_FETCH_ERROR, redirectAttributes.getFlashAttributes().get("error"));
+    }
+
+    private static BacktestEntryTrades entryTrades(String id, boolean historyChanged, int candleCount) {
+        return new BacktestEntryTrades(runWithEntry(id), 1, candleCount, historyChanged, evaluation());
     }
 
     private static BacktestRun runWithEntry(String id) {
