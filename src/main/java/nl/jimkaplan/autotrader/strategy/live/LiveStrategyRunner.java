@@ -142,15 +142,19 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
 
     /**
      * The price a decision made on this candle is filled at: the open of the candle that followed
-     * it. That candle has already closed and is in the store for any boundary older than the frame
-     * that revealed it (a reconnect gap), which keeps those fills at the backtester's price. For
-     * the candle still forming, the frame's open is the market price; the closed candle's close is
-     * the last resort.
+     * it. That candle has already closed for any boundary older than the frame that revealed it (a
+     * reconnect gap), so it is fetched into the store and read from there — the backtester's price.
+     * For the candle still forming the fetch is clamped away and the frame's open is the market
+     * price; the closed candle's close is the last resort.
      */
     private double fillPrice(long openTime, double nextOpen, Candle closedCandle) {
         long nextOpenTime = openTime + interval.getMillis();
-        List<Candle> next = candleHistoryService.getCandles(strategy.getMarket(), interval,
-                Instant.ofEpochMilli(nextOpenTime), Instant.ofEpochMilli(nextOpenTime + interval.getMillis()));
+        Instant from = Instant.ofEpochMilli(nextOpenTime);
+        Instant to = Instant.ofEpochMilli(nextOpenTime + interval.getMillis());
+        // ensureRange clamps its end to the last closed candle, so this fetches the candle after an
+        // older boundary and does nothing while the boundary's immediate successor is still forming.
+        candleHistoryService.ensureRange(strategy.getMarket(), interval, from, to);
+        List<Candle> next = candleHistoryService.getCandles(strategy.getMarket(), interval, from, to);
         if (!next.isEmpty()) {
             return next.get(0).getOpen().doubleValue();
         }
@@ -195,12 +199,14 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
     }
 
     /**
-     * Re-read a skipped range from the store, so the in-memory series keeps matching the stored
-     * history instead of silently losing bars.
+     * Re-read a skipped range from the store, fetching it first when it is not there yet, so the
+     * in-memory series keeps matching the exchange's history instead of silently losing bars.
      */
     private void backfill(long fromOpenTime, long toOpenTime) {
-        List<Candle> missed = candleHistoryService.getCandles(strategy.getMarket(), interval,
-                Instant.ofEpochMilli(fromOpenTime), Instant.ofEpochMilli(toOpenTime + interval.getMillis()));
+        Instant from = Instant.ofEpochMilli(fromOpenTime);
+        Instant to = Instant.ofEpochMilli(toOpenTime + interval.getMillis());
+        candleHistoryService.ensureRange(strategy.getMarket(), interval, from, to);
+        List<Candle> missed = candleHistoryService.getCandles(strategy.getMarket(), interval, from, to);
         int appended = 0;
         for (Candle missedCandle : missed) {
             if (missedCandle.getOpenTime() > lastAppendedOpenTime) {

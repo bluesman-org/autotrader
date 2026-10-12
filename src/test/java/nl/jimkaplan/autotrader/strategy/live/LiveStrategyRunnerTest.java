@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -143,6 +144,10 @@ class LiveStrategyRunnerTest {
         listenerCaptor.getValue().onCandleClosed(older, 62.5);
         listenerCaptor.getValue().onCandleClosed(newest, 62.5);
 
+        // The older boundary's next candle is not in the store when the batch arrives; the fill
+        // price fetches it (this is the step that makes the read succeed), like resolve() does.
+        verify(candleHistoryService, atLeastOnce()).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(older + HOUR)), eq(at(older + 2 * HOUR)));
         verify(liveTradingService).fill(eq(strategy), eq(first), eq(61.8));
         verify(liveTradingService).fill(eq(strategy), eq(second), eq(62.5));
     }
@@ -192,6 +197,11 @@ class LiveStrategyRunnerTest {
 
         listenerCaptor.getValue().onCandleClosed(first, 62.5);
         listenerCaptor.getValue().onCandleClosed(second, 62.5);
+
+        // The backfill fetches the missing range before reading it, so a candle that only appears
+        // in the store after the failed resolve is still repaired into the series.
+        verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(missed)), eq(at(second)));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
