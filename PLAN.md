@@ -89,14 +89,14 @@ follow-ups.
 - [x] Run backtests and browse ranked results (synchronous run with inline validation errors, the
       ranked table with train and validate metrics side by side, recent runs, welcome-page link)
 
-### Phase 4.5 — Docker development stack ✅ (PR #11, in review)
+### Phase 4.5 — Docker development stack ✅ (PR #11)
 
 - [x] New docker compose implementation for development (`docker-compose.dev.yml`: the app
       container plus the local Mongo, dev settings, no production credentials)
 - [x] All Dockerfiles multi-platform (the image no longer pins `linux/arm64`; the platform is
       chosen at build time — native locally, `linux/arm64` in the deploy workflow)
 
-### Phase 5 — Live engine (built; PR pending, review queue)
+### Phase 5 — Live engine ✅ (PR #12)
 
 - [x] Bitvavo WebSocket candles (own keepalive/reconnect policy: `getTime` every 30 s, exponential
       backoff to 60 s, boundary-only reporting with the candle store as the authoritative source)
