@@ -250,6 +250,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
+        List<LiveOrder> saves = recordSaves();
         LiveDecision decision = decision("BUY");
         liveTradingService.fill(strategy, decision, 62.0);
 
@@ -263,13 +264,23 @@ class LiveTradingServiceTest {
         assertEquals(0, new BigDecimal("100").compareTo(request.getAmountQuote()));
         assertEquals(1L, request.getOperatorId());
 
-        LiveOrder order = captureSingleOrder();
+        assertEquals(2, saves.size());
+        LiveOrder pending = saves.get(0);
+        LiveOrder order = saves.get(1);
+        assertEquals("PENDING", pending.getStatus());
+        assertNotNull(pending.getClientOrderId());
+        assertEquals(100.0, pending.getAmountQuote(), 1e-9);
+        assertEquals(100.0 / 62.0, pending.getQuantity(), 1e-9);
+        assertEquals(62.0, pending.getPrice(), 1e-9);
+        assertEquals(0.2, pending.getFee(), 1e-9);
+        assertEquals(pending.getClientOrderId(), request.getClientOrderId().toString());
         assertEquals("FILLED", order.getStatus());
         assertEquals(orderId.toString(), order.getOrderId());
         assertEquals(0.001, order.getQuantity(), 1e-12);
         assertEquals(100000.0, order.getPrice(), 1e-9);
         assertEquals(0.2, order.getFee(), 1e-9);
         assertFalse(order.isDryRun());
+        assertEquals(pending.getClientOrderId(), order.getClientOrderId());
         assertEquals(decision.signalOpenTime(), order.getSignalOpenTime());
 
         ArgumentCaptor<LivePosition> positionCaptor = ArgumentCaptor.forClass(LivePosition.class);
@@ -332,6 +343,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
+        List<LiveOrder> saves = recordSaves();
         LiveDecision decision = decision("SELL");
         liveTradingService.fill(strategy, decision, 160.0);
 
@@ -342,11 +354,19 @@ class LiveTradingServiceTest {
         assertEquals("sell", request.getSide());
         assertEquals(0, new BigDecimal("0.001").compareTo(request.getAmount()));
 
-        LiveOrder order = captureSingleOrder();
+        assertEquals(2, saves.size());
+        LiveOrder pending = saves.get(0);
+        LiveOrder order = saves.get(1);
+        assertEquals("PENDING", pending.getStatus());
+        assertEquals("SELL", pending.getSide());
+        assertEquals(0.001, pending.getQuantity(), 1e-12);
+        assertEquals(160.0, pending.getPrice(), 1e-9);
+        assertEquals(pending.getClientOrderId(), request.getClientOrderId().toString());
         assertEquals("SELL", order.getSide());
         assertEquals("FILLED", order.getStatus());
         assertEquals(110.0, order.getAmountQuote(), 1e-9);
         assertEquals(110000.0, order.getPrice(), 1e-9);
+        assertEquals(pending.getClientOrderId(), order.getClientOrderId());
         assertEquals(decision.signalOpenTime(), order.getSignalOpenTime());
 
         ArgumentCaptor<LivePosition> positionCaptor = ArgumentCaptor.forClass(LivePosition.class);
@@ -376,6 +396,60 @@ class LiveTradingServiceTest {
     }
 
     @Test
+    void fill_liveBuyWhenThePostFails_marksThePendingRowFailed() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET)))
+                .thenThrow(new ResourceAccessException("read timed out"));
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals(2, saves.size());
+        LiveOrder pending = saves.get(0);
+        LiveOrder failed = saves.get(1);
+        assertEquals("PENDING", pending.getStatus());
+        assertNotNull(pending.getClientOrderId());
+        assertEquals("FAILED", failed.getStatus());
+        assertEquals("read timed out", failed.getErrorMessage());
+        assertEquals(pending.getClientOrderId(), failed.getClientOrderId());
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveSellWhenThePostFails_marksThePendingRowFailed() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET)))
+                .thenThrow(new ResourceAccessException("read timed out"));
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        assertEquals(2, saves.size());
+        LiveOrder pending = saves.get(0);
+        LiveOrder failed = saves.get(1);
+        assertEquals("PENDING", pending.getStatus());
+        assertEquals("SELL", pending.getSide());
+        assertEquals("FAILED", failed.getStatus());
+        assertEquals("read timed out", failed.getErrorMessage());
+        assertEquals(pending.getClientOrderId(), failed.getClientOrderId());
+        assertEquals("OPEN", position.getStatus());
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
     void fill_doesNothingWhenThePositionVanishedBeforeTheExitFill() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
@@ -389,6 +463,35 @@ class LiveTradingServiceTest {
 
     private static LiveDecision decision(String side) {
         return new LiveDecision(side, side.toLowerCase() + " ALL [TEST]", START);
+    }
+
+    private List<LiveOrder> recordSaves() {
+        List<LiveOrder> saves = new ArrayList<>();
+        when(liveOrderRepository.save(any(LiveOrder.class))).thenAnswer(invocation -> {
+            saves.add(copy(invocation.getArgument(0)));
+            return invocation.getArgument(0);
+        });
+        return saves;
+    }
+
+    private static LiveOrder copy(LiveOrder order) {
+        return LiveOrder.builder()
+                .strategyId(order.getStrategyId())
+                .market(order.getMarket())
+                .side(order.getSide())
+                .status(order.getStatus())
+                .dryRun(order.isDryRun())
+                .signalOpenTime(order.getSignalOpenTime())
+                .reason(order.getReason())
+                .amountQuote(order.getAmountQuote())
+                .quantity(order.getQuantity())
+                .price(order.getPrice())
+                .fee(order.getFee())
+                .orderId(order.getOrderId())
+                .clientOrderId(order.getClientOrderId())
+                .errorMessage(order.getErrorMessage())
+                .createdTime(order.getCreatedTime())
+                .build();
     }
 
     private LiveOrder captureSingleOrder() {

@@ -8,11 +8,13 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
+
 /**
  * Starts the enabled live strategies when the application boots, so a restart resumes the engine
  * without manual intervention. Before any strategy runs, the recorded orders and open positions are
- * reconciled against the exchange's order history, so state lost in a crash between an order and
- * its record is recovered first. Failures are logged and do not stop the application.
+ * reconciled against the exchange's order history; a strategy whose reconciliation failed is held
+ * back rather than allowed to trade on state that could not be trusted.
  */
 @Slf4j
 @Component
@@ -24,7 +26,7 @@ public class LiveStrategyStarter implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        liveOrderReconciliationService.reconcileAll();
-        liveStrategyService.startEnabled();
+        Set<String> failedReconciliation = liveOrderReconciliationService.reconcileAll();
+        liveStrategyService.startEnabled(failedReconciliation);
     }
 }

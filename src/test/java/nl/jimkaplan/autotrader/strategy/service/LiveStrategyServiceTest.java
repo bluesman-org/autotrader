@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -276,11 +277,28 @@ class LiveStrategyServiceTest {
         when(streamFactory.create(eq("ETH-EUR"), any(), anyLong(), any()))
                 .thenThrow(new RuntimeException("no stream"));
 
-        liveStrategyService.startEnabled();
+        liveStrategyService.startEnabled(Set.of());
 
         assertTrue(liveStrategyService.isRunning("strategy-1"));
         assertFalse(liveStrategyService.isRunning("strategy-2"));
         verify(liveStrategyRepository).updateEnabled("strategy-1", true);
+        verify(liveStrategyRepository, never()).updateEnabled("strategy-2", true);
+    }
+
+    @Test
+    void startEnabled_holdsBackStrategiesWhoseReconciliationFailed() {
+        LiveStrategy good = stored("strategy-1", "BTC-EUR");
+        LiveStrategy held = stored("strategy-2", "ETH-EUR");
+        when(liveStrategyRepository.findByEnabledTrue()).thenReturn(List.of(good, held));
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(good));
+        stubRunnerConstruction();
+
+        liveStrategyService.startEnabled(Set.of("strategy-2"));
+
+        assertTrue(liveStrategyService.isRunning("strategy-1"));
+        assertFalse(liveStrategyService.isRunning("strategy-2"));
+        verify(liveStrategyRepository).updateEnabled("strategy-1", true);
+        verify(liveStrategyRepository, never()).findById("strategy-2");
         verify(liveStrategyRepository, never()).updateEnabled("strategy-2", true);
     }
 

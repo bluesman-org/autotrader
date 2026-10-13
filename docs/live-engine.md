@@ -48,6 +48,12 @@ candle channel of its market and interval. Our own policies:
   a candle that closed during a stream outage — the fill price is the open of the candle that
   followed it, read from the store, so those fills keep the backtester's price too; a frame without
   a usable open falls back to the closed candle's close.
+- **Pre-write**: before a real order is sent it is saved as a `PENDING` row carrying a generated
+  client order ID (`clientOrderId`), which is sent to Bitvavo with the order and kept on the row.
+  The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee, or
+  to `FAILED` with the error — so an ambiguous timeout between the write and the response stays
+  reconcilable at the next boot (see "Reconciliation on startup"). Dry-run rows, and failures
+  caught before anything is sent, carry no client order ID.
 - One position at a time: entry signals are ignored while a position is open, exit signals while
   flat.
 - **Sizing**: a fixed EUR amount per buy (`amountPerBuy`, default 100, minimum 5 EUR), rounded down
@@ -65,45 +71,53 @@ candle channel of its market and interval. Our own policies:
   time of the last evaluated candle. It is persisted **before** the order for that candle is
   placed, so a crash costs a trade instead of duplicating one, and evaluation is idempotent across
   restarts.
-- `live_orders` — every intended or executed order: `DRY_RUN`, `FILLED` or `FAILED`, with the
-  signal's candle open time, the rule set that fired, amounts, the fill or estimated price, the fee
-  and the exchange order ID for live fills. A boundary whose candle could not be resolved is
-  recorded as `SKIPPED`, so a missed signal window is visible through the API.
+- `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent),
+  `DRY_RUN`, `FILLED` or `FAILED`, with the signal's candle open time, the rule set that fired,
+  amounts, the fill or estimated price, the fee, the exchange order ID for live fills and the client
+  order ID the pre-write sent. A boundary whose candle could not be resolved is recorded as
+  `SKIPPED`, so a missed signal window is visible through the API.
 - `live_positions` — the position, closed in place (`OPEN` → `CLOSED`) with the realised profit
   after fees.
 
-On boot, every strategy with `enabled: true` is started again (`LiveStrategyStarter`). Lifecycle
-transitions are serialized: two concurrent starts can never create two runners for one strategy,
-and the enabled flag is written with a targeted field update, so a concurrent last-evaluated write
-or stop can never be clobbered by a stale document copy.
+On boot, every strategy with `enabled: true` is started again (`LiveStrategyStarter`), after
+reconciliation has run. A strategy whose reconciliation failed is held back — `startEnabled` logs
+it (`not started: reconciliation failed; restart after fixing`) and does not start it — so it
+cannot trade on state that could not be trusted; the rest still start, and a failure to start one
+never stops the others. Lifecycle transitions are serialized: two concurrent starts can never
+create two runners for one strategy, and the enabled flag is written with a targeted field update,
+so a concurrent last-evaluated write or stop can never be clobbered by a stale document copy.
 
 ## Reconciliation on startup
 
-Before any strategy is started, `LiveOrderReconciliationService` brings the recorded orders and
-the open position in line with the exchange, so a crash between an order submission and its record
-is repaired from the exchange's order history — the source of truth — at the next boot.
+Before any strategy is started, `LiveOrderReconciliationService` settles the recorded orders and
+the open position against the exchange, so a crash between an order submission and its response is
+repaired from the exchange's order history at the next boot. It returns the ids of the strategies
+it could not reconcile; `LiveStrategyStarter` passes those to `LiveStrategyService.startEnabled`,
+which holds them back rather than let them trade on stale state.
 
-- **Scope**: every non-dry-run strategy with a resolvable bot. Order history is read with
-  `GET /orders?market={market}&limit=100`; a failure for one strategy is logged and the next one
-  still runs, and reconciliation never throws out of `reconcileAll()`.
-- **Filled only**: an exchange order is acted on only when its status is `filled`. An order that is
-  still `open`, `partiallyFilled`, `canceled` or `expired` is logged and left alone — v1 does not
-  reconcile partial or abandoned orders.
-- **Ambiguous failures**: a local `FAILED` buy or sell row with no order ID is corrected in place
-  when an unclaimed filled order of the same side was created between ten minutes before and one
-  minute after the row: the row is marked `FILLED` with the exchange's amounts, price and fee, the
-  error is cleared, and the reason records that the exchange had accepted the order despite the
-  recorded failure.
-- **Missing rows**: a filled order no local row accounts for (by order ID, or as an ambiguous
-  failure) is stored as a new `FILLED` row, mirroring the fields the engine records when it places
-  an order: `signalOpenTime` 0, the exchange's amounts, price and fee, and a reason that says it
-  was reconciled from the order history.
+- **Attribution by client order ID**: reconciliation only ever touches this strategy's own rows — a
+  `PENDING` row, and a `FAILED` row that still carries a `clientOrderId`. Each is looked up in the
+  history by its client order ID, so nothing is adopted that a row does not claim. Two strategies
+  (or the legacy TradingView path) trading one account and market therefore cannot contaminate each
+  other's orders or positions.
+- **Bounded to the strategy's lifetime**: the history is read with
+  `GET /orders?market={market}&start={strategy.createdTime epoch millis}&limit=100`, so fills that
+  predate the strategy are never considered.
+- **Resolution**: a `PENDING` row found `filled` becomes `FILLED` in place with the exchange's
+  amounts, price (derived as `filledAmountQuote / filledAmount`) and fee, clearing its error. A
+  `FAILED` row found `filled` is corrected the same way and its reason records that the exchange had
+  accepted the order despite the recorded failure. A `PENDING` row the exchange does not know is
+  marked `FAILED` ("not found in the exchange's order history within the strategy's lifetime;
+  treated as never accepted"); a `FAILED` row it does not know is left as it is.
+- **Filled only**: only `filled` entries are acted on. An order still `open`, `partiallyFilled`,
+  `canceled` or `expired` is logged and left alone (v1 does not reconcile partial or abandoned
+  orders), as is a history entry missing its order ID, creation time, side or client order ID.
 - **Position sync**: the strategy's filled non-dry-run orders are walked in creation order — a buy
   opens, a sell closes — and the stored open position is brought in line: a position that should be
   closed is closed in place with the last sell's price, time and realised profit, and a position
   that should be open is created from the last buy. When they already agree, nothing is written.
-- **Idempotent**: the order IDs adopted on the first run are matched by ID and never adopted twice,
-  so re-running reconciliation is a no-op beyond reads.
+- **Idempotent**: once a row is settled it is no longer `PENDING` or `FAILED`, so a second run
+  writes nothing.
 
 ## API
 
@@ -130,9 +144,10 @@ strategy:
 
 - The TradingView webhook path still exists as the legacy fallback: PLAN.md's Phase 6 records the
   decision to keep it until the engine has traded live, and to revisit its removal then.
-- Open-order reconciliation after a crash between an order and its record: the engine records what
-  it sent, and the exchange's order history stays the source of truth (see "Reconciliation on
-  startup"). The startup reconciliation adopts `filled` orders only; an order that is still open,
-  partially filled, canceled or expired at boot is logged and left alone.
+- Open-order reconciliation after a crash between an order and its response: the engine pre-writes
+  the order with a client order ID, and the exchange's order history stays the source of truth (see
+  "Reconciliation on startup"). Startup reconciliation settles only the strategy's own rows against
+  `filled` orders; an order that is still open, partially filled, canceled or expired at boot is
+  logged and left alone.
 - Partial fills are recorded as the order response reports them (`filledAmount`,
   `filledAmountQuote`, `feePaid`), and the position uses those figures.

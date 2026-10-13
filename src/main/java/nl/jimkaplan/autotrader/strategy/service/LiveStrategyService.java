@@ -22,6 +22,7 @@ import nl.jimkaplan.autotrader.strategy.rule.RuleGroup;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -212,10 +213,19 @@ public class LiveStrategyService {
     }
 
     /**
-     * Start every enabled strategy; failures are logged, not thrown, so startup survives them.
+     * Start every enabled strategy whose reconciliation did not fail. A strategy whose state could
+     * not be reconciled is logged and held back — starting it on stale state is worse than not
+     * starting it — while failures to start one strategy never stop the others.
+     *
+     * @param failedReconciliation The ids of strategies whose reconciliation failed
      */
-    public void startEnabled() {
+    public void startEnabled(Collection<String> failedReconciliation) {
         for (LiveStrategy strategy : liveStrategyRepository.findByEnabledTrue()) {
+            if (failedReconciliation.contains(strategy.getId())) {
+                log.error("Live strategy {} not started: reconciliation failed; restart after fixing",
+                        strategy.getId());
+                continue;
+            }
             try {
                 start(strategy.getId());
             } catch (RuntimeException ex) {

@@ -13,45 +13,45 @@ import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 /**
  * Reconciles the live engine's recorded orders and position with the exchange after a crash between
- * an order submission and its record.
+ * an order submission and its response.
  *
- * <p>{@code live_orders} records what the engine sent; a crash after the exchange accepted an order
- * but before the row was written leaves the order missing locally (or recorded as {@code FAILED}
- * when the failure was an ambiguous read timeout). At boot the exchange's order history is the
- * source of truth: this service adopts its {@code filled} orders, corrects the ambiguous failure
- * rows and brings the strategy's open position in line with the fills.</p>
+ * <p>A real order is written as a {@code PENDING} row carrying the client order ID that was sent
+ * with it, so at boot this service can look that ID up in the exchange's order history and settle
+ * the row: a filled order becomes {@code FILLED} with the exchange's figures, and a {@code PENDING}
+ * row the exchange does not know was never accepted and becomes {@code FAILED}. Only the rows of
+ * this strategy are ever touched — nothing is adopted from the history that a row's client order ID
+ * does not claim — so two strategies (or the legacy path) trading one account and market cannot
+ * contaminate each other's orders or positions.</p>
  *
- * <p>Only {@code filled} orders are considered. An order that is still {@code open},
- * {@code partiallyFilled}, {@code canceled} or {@code expired} is logged and left alone: v1 does
- * not reconcile partial or abandoned orders. The service is idempotent — a second run sees the
- * order IDs it adopted the first time and writes nothing — and it never throws out of
- * {@link #reconcileAll()}, so a failing exchange call for one strategy cannot stop the others or
- * the boot itself.</p>
+ * <p>The history is bounded to the strategy's lifetime ({@code start} = the strategy's creation
+ * time), so fills that predate it are never considered, and only {@code filled} entries are acted
+ * on: an order still {@code open}, {@code partiallyFilled}, {@code canceled} or {@code expired} is
+ * warned and left for a later boot (v1 does not reconcile partial or abandoned orders). The service
+ * is idempotent — once a row is settled it is no longer {@code PENDING} or {@code FAILED}, so a
+ * second run writes nothing — and it never throws. It returns the ids of the strategies it could
+ * not reconcile, so the caller can hold them back instead of letting them trade on stale state.</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LiveOrderReconciliationService {
 
-    static final long FAILED_WINDOW_BEFORE_MILLIS = 10L * 60L * 1000L;
-    static final long FAILED_WINDOW_AFTER_MILLIS = 60L * 1000L;
-    static final String MISSING_REASON =
-            "reconciled from the exchange's order history: filled but missing locally "
-                    + "(a crash between submission and record)";
     static final String RECONCILED_NOTE =
             "(reconciled: the exchange had accepted the order despite the recorded failure)";
+    static final String NOT_ACCEPTED_MESSAGE =
+            "not found in the exchange's order history within the strategy's lifetime; "
+                    + "treated as never accepted";
 
     private final LiveStrategyService liveStrategyService;
     private final BotConfigurationService botConfigurationService;
@@ -60,17 +60,22 @@ public class LiveOrderReconciliationService {
     private final LivePositionRepository livePositionRepository;
 
     /**
-     * Reconcile every non-dry-run strategy with a resolvable bot against the exchange. A failure
-     * for one strategy is logged and the next one still runs; this method never throws.
+     * Reconcile every non-dry-run strategy with a resolvable bot against the exchange.
+     *
+     * @return The ids of the strategies whose reconciliation threw; those must not be started
      */
-    public void reconcileAll() {
+    public Set<String> reconcileAll() {
+        Set<String> failed = new LinkedHashSet<>();
         for (LiveStrategy strategy : liveStrategyService.all()) {
             try {
                 reconcile(strategy);
             } catch (RuntimeException ex) {
-                log.warn("Reconciling live strategy {} failed: {}", strategy.getId(), ex.getMessage(), ex);
+                failed.add(strategy.getId());
+                log.error("Reconciling live strategy {} failed; it will not be started: {}",
+                        strategy.getId(), ex.getMessage(), ex);
             }
         }
+        return failed;
     }
 
     private void reconcile(LiveStrategy strategy) {
@@ -86,16 +91,16 @@ public class LiveOrderReconciliationService {
         }
 
         OrderResponse[] history = bitvavoApiClient.get(
-                "/orders?market=" + strategy.getMarket() + "&limit=100",
+                "/orders?market=" + strategy.getMarket()
+                        + "&start=" + strategy.getCreatedTime().toEpochMilli() + "&limit=100",
                 OrderResponse[].class, bot.getApiKey(), bot.getApiSecret());
-        List<OrderResponse> eligible = eligible(history);
+        Map<String, OrderResponse> byClientOrderId = byClientOrderId(history, strategy.getId());
 
         List<LiveOrder> rows = liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(strategy.getId());
-        Set<String> claimed = new HashSet<>();
-        claimRecorded(rows, eligible, claimed);
-        correctFailedRows(strategy, rows, eligible, claimed);
-        List<LiveOrder> created = createMissing(strategy, eligible, claimed);
-        syncPosition(strategy, rows, created);
+        for (LiveOrder row : rows) {
+            resolve(strategy, row, byClientOrderId);
+        }
+        syncPosition(strategy, rows);
     }
 
     private BotConfiguration activeBot(LiveStrategy strategy) {
@@ -106,156 +111,94 @@ public class LiveOrderReconciliationService {
     }
 
     /**
-     * The exchange orders reconciliation may act on: only the ones that filled. Every other status
-     * is logged and ignored, which is the documented v1 limitation.
+     * Index the history by client order ID. An entry missing any of the fields reconciliation keys
+     * on is warned and skipped rather than trusted.
      */
-    private List<OrderResponse> eligible(OrderResponse[] history) {
-        List<OrderResponse> eligible = new ArrayList<>();
+    private Map<String, OrderResponse> byClientOrderId(OrderResponse[] history, String strategyId) {
+        Map<String, OrderResponse> byClientOrderId = new LinkedHashMap<>();
         if (history == null) {
-            return eligible;
+            return byClientOrderId;
         }
         for (OrderResponse order : history) {
-            if ("filled".equalsIgnoreCase(order.getStatus())) {
-                eligible.add(order);
-            } else {
-                log.warn("Exchange order {} of {} is {} (not filled); reconciliation leaves it alone",
-                        order.getOrderId(), order.getMarket(), order.getStatus());
+            if (order.getOrderId() == null || order.getCreated() == null
+                    || order.getSide() == null || order.getClientOrderId() == null) {
+                log.warn("Exchange order entry for strategy {} is incomplete "
+                        + "(orderId/created/side/clientOrderId missing); skipped", strategyId);
+                continue;
             }
+            byClientOrderId.put(order.getClientOrderId().toString(), order);
         }
-        return eligible;
+        return byClientOrderId;
     }
 
     /**
-     * Claim every exchange order a local row already references by order ID, so a recorded order is
-     * never adopted a second time.
+     * Settle one of this strategy's un-settled rows against the history entry that carries its
+     * client order ID.
      */
-    private void claimRecorded(List<LiveOrder> rows, List<OrderResponse> eligible, Set<String> claimed) {
-        for (LiveOrder row : rows) {
-            if (row.getOrderId() == null) {
-                continue;
-            }
-            for (OrderResponse order : eligible) {
-                String orderId = String.valueOf(order.getOrderId());
-                if (row.getOrderId().equals(orderId)) {
-                    claimed.add(orderId);
-                }
-            }
+    private void resolve(LiveStrategy strategy, LiveOrder row, Map<String, OrderResponse> byClientOrderId) {
+        if (row.getClientOrderId() == null
+                || (!"PENDING".equals(row.getStatus()) && !"FAILED".equals(row.getStatus()))) {
+            return;
         }
-    }
-
-    /**
-     * Correct {@code FAILED} buy/sell rows without an order ID that an unclaimed filled order of the
-     * same side and a nearby creation time explains: the failure was an ambiguous read timeout and
-     * the exchange did accept the order. The row is updated in place; no second row is created.
-     */
-    private void correctFailedRows(LiveStrategy strategy, List<LiveOrder> rows,
-                                   List<OrderResponse> eligible, Set<String> claimed) {
-        for (LiveOrder row : rows) {
-            if (!ambiguous(row)) {
-                continue;
+        OrderResponse order = byClientOrderId.get(row.getClientOrderId());
+        if (order == null) {
+            if ("PENDING".equals(row.getStatus())) {
+                notAccepted(row);
             }
-            OrderResponse match = claimable(row, eligible, claimed);
-            if (match == null) {
-                continue;
-            }
-            apply(row, match);
+            return;
+        }
+        if (!"filled".equalsIgnoreCase(order.getStatus())) {
+            log.warn("Exchange order {} for strategy {} is {} (not filled); row {} is left alone",
+                    order.getOrderId(), strategy.getId(), order.getStatus(), row.getId());
+            return;
+        }
+        boolean corrected = "FAILED".equals(row.getStatus());
+        apply(row, order);
+        if (corrected) {
             row.setReason(appendReconciled(row.getReason()));
-            liveOrderRepository.save(row);
-            log.info("Reconciled failed live order {} of strategy {}: the exchange had filled it as {}",
-                    row.getId(), strategy.getId(), match.getOrderId());
         }
+        liveOrderRepository.save(row);
+        log.info("Reconciled live order {} of strategy {} as {}", row.getId(), strategy.getId(),
+                order.getOrderId());
     }
 
-    private static boolean ambiguous(LiveOrder row) {
-        return !row.isDryRun()
-                && ("BUY".equals(row.getSide()) || "SELL".equals(row.getSide()))
-                && "FAILED".equals(row.getStatus())
-                && row.getOrderId() == null;
+    private void notAccepted(LiveOrder row) {
+        row.setStatus("FAILED");
+        row.setErrorMessage(NOT_ACCEPTED_MESSAGE);
+        liveOrderRepository.save(row);
+        log.warn("Pending live order {} was not found in the exchange's order history; "
+                + "treated as never accepted", row.getId());
     }
 
     /**
-     * The unclaimed filled order that explains a failed row: same side, created between ten minutes
-     * before and one minute after the row. The order is claimed on a match.
+     * Adopt the exchange's figures into the row, keeping its pre-write estimates for anything the
+     * response omits.
      */
-    private OrderResponse claimable(LiveOrder row, List<OrderResponse> eligible, Set<String> claimed) {
-        long rowMillis = row.getCreatedTime().toEpochMilli();
-        for (OrderResponse order : eligible) {
-            String orderId = String.valueOf(order.getOrderId());
-            if (claimed.contains(orderId) || !row.getSide().equalsIgnoreCase(order.getSide())) {
-                continue;
-            }
-            long created = order.getCreated();
-            if (created >= rowMillis - FAILED_WINDOW_BEFORE_MILLIS
-                    && created <= rowMillis + FAILED_WINDOW_AFTER_MILLIS) {
-                claimed.add(orderId);
-                return order;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Adopt the exchange's figures into a local row, mirroring {@code LiveTradingService.recordOrder}.
-     */
-    private void apply(LiveOrder row, OrderResponse order) {
+    private static void apply(LiveOrder row, OrderResponse order) {
         row.setStatus("FILLED");
         row.setOrderId(String.valueOf(order.getOrderId()));
-        row.setAmountQuote(amount(order.getFilledAmountQuote(), order.getAmountQuote()));
-        row.setQuantity(amount(order.getFilledAmount(), order.getAmount()));
-        row.setPrice(derivedPrice(order));
-        row.setFee(fee(order));
-        row.setErrorMessage(null);
-    }
-
-    /**
-     * Create a {@code FILLED} row for every eligible exchange order no local row accounts for.
-     *
-     * @return The rows created
-     */
-    private List<LiveOrder> createMissing(LiveStrategy strategy, List<OrderResponse> eligible, Set<String> claimed) {
-        List<LiveOrder> created = new ArrayList<>();
-        for (OrderResponse order : eligible) {
-            String orderId = String.valueOf(order.getOrderId());
-            if (claimed.contains(orderId)) {
-                continue;
-            }
-            claimed.add(orderId);
-            LiveOrder row = LiveOrder.builder()
-                    .strategyId(strategy.getId())
-                    .market(strategy.getMarket())
-                    .side(order.getSide().toUpperCase())
-                    .status("FILLED")
-                    .dryRun(false)
-                    .signalOpenTime(0)
-                    .reason(MISSING_REASON)
-                    .amountQuote(amount(order.getFilledAmountQuote(), order.getAmountQuote()))
-                    .quantity(amount(order.getFilledAmount(), order.getAmount()))
-                    .price(derivedPrice(order))
-                    .fee(fee(order))
-                    .orderId(orderId)
-                    .createdTime(Instant.ofEpochMilli(order.getCreated()))
-                    .build();
-            liveOrderRepository.save(row);
-            created.add(row);
-            log.info("Created missing live order {} for strategy {} ({} {})",
-                    orderId, strategy.getId(), order.getSide(), order.getMarket());
+        Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
+        Double quantity = TradeMath.amount(order.getFilledAmount(), order.getAmount());
+        Double price = TradeMath.price(order.getFilledAmount(), order.getFilledAmountQuote());
+        row.setAmountQuote(amountQuote != null ? amountQuote : row.getAmountQuote());
+        row.setQuantity(quantity != null ? quantity : row.getQuantity());
+        row.setPrice(price != null ? price : row.getPrice());
+        if (order.getFeePaid() != null) {
+            row.setFee(order.getFeePaid().doubleValue());
         }
-        return created;
+        row.setErrorMessage(null);
     }
 
     /**
      * Bring the strategy's open position in line with its filled, non-dry-run orders: a buy opens,
      * a sell closes. When the position already matches nothing is written.
-     *
-     * @param rows    The strategy's rows after the failed-row correction
-     * @param created The missing rows adopted in this run
      */
-    private void syncPosition(LiveStrategy strategy, List<LiveOrder> rows, List<LiveOrder> created) {
-        List<LiveOrder> fills = new ArrayList<>(rows);
-        fills.addAll(created);
-        fills.removeIf(fill -> fill.isDryRun() || !"FILLED".equals(fill.getStatus())
-                || (!"BUY".equals(fill.getSide()) && !"SELL".equals(fill.getSide())));
-        fills.sort(Comparator.comparing(LiveOrder::getCreatedTime));
+    private void syncPosition(LiveStrategy strategy, List<LiveOrder> rows) {
+        List<LiveOrder> fills = rows.stream()
+                .filter(fill -> !fill.isDryRun() && "FILLED".equals(fill.getStatus())
+                        && ("BUY".equals(fill.getSide()) || "SELL".equals(fill.getSide())))
+                .sorted(Comparator.comparing(LiveOrder::getCreatedTime))
+                .toList();
 
         LiveOrder lastBuy = null;
         LiveOrder lastSell = null;
@@ -297,7 +240,7 @@ public class LiveOrderReconciliationService {
                 .dryRun(false)
                 .createdTime(Instant.now())
                 .build());
-        log.info("Opened a reconciled position for strategy {} from exchange order {}",
+        log.info("Opened a reconciled position for strategy {} from live order {}",
                 strategy.getId(), buy.getOrderId());
     }
 
@@ -306,10 +249,9 @@ public class LiveOrderReconciliationService {
             log.warn("Cannot close the open position of strategy {}: no sell order explains the close", strategyId);
             return;
         }
-        double profit = zeroIfNull(sell.getAmountQuote())
-                - position.getQuantity() * position.getEntryPrice()
-                - zeroIfNull(sell.getFee())
-                - zeroIfNull(position.getEntryFee());
+        double profit = TradeMath.closeProfit(TradeMath.zeroIfNull(sell.getAmountQuote()),
+                position.getQuantity(), position.getEntryPrice(), position.getEntryFee(),
+                TradeMath.zeroIfNull(sell.getFee()));
         position.setStatus("CLOSED");
         position.setExitPrice(sell.getPrice());
         position.setExitTime(sell.getSignalOpenTime() > 0 ? sell.getSignalOpenTime()
@@ -320,29 +262,7 @@ public class LiveOrderReconciliationService {
                 strategyId, sell.getPrice(), profit);
     }
 
-    private static Double amount(BigDecimal value, BigDecimal fallback) {
-        BigDecimal resolved = value != null ? value : fallback;
-        return resolved == null ? null : resolved.doubleValue();
-    }
-
-    private static Double derivedPrice(OrderResponse order) {
-        BigDecimal base = order.getFilledAmount();
-        BigDecimal quote = order.getFilledAmountQuote();
-        if (base == null || quote == null || base.signum() <= 0) {
-            return null;
-        }
-        return quote.divide(base, 8, RoundingMode.HALF_UP).doubleValue();
-    }
-
-    private static Double fee(OrderResponse order) {
-        return order.getFeePaid() == null ? null : order.getFeePaid().doubleValue();
-    }
-
     private static String appendReconciled(String reason) {
         return reason == null || reason.isBlank() ? RECONCILED_NOTE : reason + " " + RECONCILED_NOTE;
-    }
-
-    private static double zeroIfNull(Double value) {
-        return value == null ? 0 : value;
     }
 }

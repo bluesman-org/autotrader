@@ -10,7 +10,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.DefaultApplicationArguments;
 
+import java.util.Set;
+
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LiveStrategyStarterTest {
@@ -25,11 +28,13 @@ class LiveStrategyStarterTest {
     private LiveStrategyStarter starter;
 
     @Test
-    void startingTheApplicationReconcilesFirstAndThenStartsTheEnabledStrategies() {
+    void startingReconcilesFirstAndPassesTheFailedStrategies() {
+        when(liveOrderReconciliationService.reconcileAll()).thenReturn(Set.of("strategy-2"));
+
         starter.run(new DefaultApplicationArguments());
 
         InOrder inOrder = inOrder(liveOrderReconciliationService, liveStrategyService);
         inOrder.verify(liveOrderReconciliationService).reconcileAll();
-        inOrder.verify(liveStrategyService).startEnabled();
+        inOrder.verify(liveStrategyService).startEnabled(Set.of("strategy-2"));
     }
 }

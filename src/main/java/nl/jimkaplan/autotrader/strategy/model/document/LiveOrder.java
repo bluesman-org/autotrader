@@ -37,7 +37,8 @@ public class LiveOrder extends BaseDocument {
     private String side;
 
     /**
-     * "DRY_RUN", "FILLED" or "FAILED".
+     * "PENDING", "DRY_RUN", "FILLED", "FAILED" or "SKIPPED". A real order is written as
+     * {@code PENDING} before it is sent, so an ambiguous failure stays reconcilable.
      */
     @Field("status")
     private String status;
@@ -47,6 +48,13 @@ public class LiveOrder extends BaseDocument {
      */
     @Field("dry_run")
     private boolean dryRun;
+
+    /**
+     * The exchange's client order ID, set only for a real order before it is sent. It lets a boot
+     * attribute the exchange's order history back to this row; null for dry-run and legacy rows.
+     */
+    @Field("client_order_id")
+    private String clientOrderId;
 
     /**
      * The open time of the closed candle whose signal triggered the order.
