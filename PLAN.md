@@ -133,8 +133,10 @@ follow-ups.
    a live hint under the simulation fields (blank fields fall back to the documented defaults),
    verified in a real browser; without it every entry skips as `INSUFFICIENT_BALANCE` and the run
    shows zero trades (PR #21)
-5. ⬜ Reconcile open orders after a crash between an order submission and its record (`live_orders`
-   recorded what was sent; the exchange's order history is the source of truth)
+5. ✅ Reconcile open orders after a crash between an order submission and its record — real orders
+   are pre-written as `PENDING` with a client order ID and looked up in the exchange's history at
+   boot; the position is synced and unreconcilable strategies are held back (v1: `filled` orders
+   only) (PR #24)
 6. ✅ Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — the
    engine's metrics carry the count, runs store it (absent `—` for older runs), the ranked table
    has a Skipped column per side and the trades page a Skipped stat (PR #23)

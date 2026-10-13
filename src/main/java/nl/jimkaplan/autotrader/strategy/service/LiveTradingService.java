@@ -32,6 +32,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Evaluates a live strategy on closed candles with the same rules and parameters as the backtester,
@@ -41,6 +42,12 @@ import java.util.List;
  * candle is <em>decided</em> here and filled immediately at the arriving candle's open — the price
  * the exchange is trading at as the decision is made, which is the backtester's next-open fill
  * point. Live fills use what the exchange reports; dry-run fills use that open.</p>
+ *
+ * <p>A real order is written as a {@code PENDING} row with a generated client order ID before it is
+ * sent, and that same row is updated in place to {@code FILLED} or {@code FAILED} afterwards. The
+ * client order ID is sent to the exchange, so a crash or an ambiguous timeout between the write and
+ * the response leaves a row the next boot can reconcile against the exchange's order history
+ * (see {@link LiveOrderReconciliationService}) instead of a lost or duplicated order.</p>
  *
  * <p>One position at a time: entry signals are only decided while flat, exit signals only while a
  * position is open. Live orders are priced and rounded from the exchange's market metadata; a
@@ -149,14 +156,15 @@ public class LiveTradingService {
 
         BotConfiguration bot = activeBot(strategy);
         if (bot == null) {
-            recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+            recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                     null, null, null, "No active bot configuration for " + strategy.getBotId());
             return;
         }
+        LiveOrder pending = null;
         try {
             double eur = eurBalance(bot);
             if (eur < strategy.getAmountPerBuy() || eur < MINIMUM_ORDER_EUR) {
-                recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                         null, null, null, "Insufficient EUR balance: " + eur);
                 return;
             }
@@ -167,45 +175,50 @@ public class LiveTradingService {
                     .setScale(notionalDecimals, RoundingMode.DOWN);
             if (market.getMinOrderInQuoteAsset() != null
                     && amountQuote.compareTo(market.getMinOrderInQuoteAsset()) < 0) {
-                recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                         null, null, null, "Below the market minimum of " + market.getMinOrderInQuoteAsset() + " EUR");
                 return;
             }
+
+            UUID clientOrderId = UUID.randomUUID();
+            double estimatedQuantity = amountQuote.doubleValue() / price;
+            double estimatedFee = amountQuote.doubleValue() * BacktestDefaults.FEE_RATE;
+            pending = preWrite(strategy, decision.signalOpenTime(), "BUY", decision.reason(), clientOrderId,
+                    amountQuote.doubleValue(), estimatedQuantity, price, estimatedFee);
+
             CreateOrderRequest request = CreateOrderRequest.builder()
                     .market(strategy.getMarket())
                     .side("buy")
                     .orderType("market")
                     .amountQuote(amountQuote)
                     .operatorId(bot.getOperatorId())
+                    .clientOrderId(clientOrderId)
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, bot.getApiKey(), bot.getApiSecret());
-            double quantity = filled(baseValue(response.getFilledAmount(), response.getAmount()),
-                    amountQuote.doubleValue() / price);
-            double fillPrice = filled(ratio(baseValue(response.getFilledAmountQuote(), null), quantity), price);
-            double fee = filled(baseValue(response.getFeePaid(), null),
-                    amountQuote.doubleValue() * BacktestDefaults.FEE_RATE);
-            recordOrder(strategy, decision.signalOpenTime(), "BUY", "FILLED", decision.reason(),
-                    amountQuote.doubleValue(), quantity, fillPrice, fee,
-                    String.valueOf(response.getOrderId()), null);
+            applyFill(pending, response);
             livePositionRepository.save(LivePosition.builder()
                     .strategyId(strategy.getId())
                     .market(strategy.getMarket())
                     .status("OPEN")
-                    .quantity(quantity)
-                    .entryPrice(fillPrice)
-                    .entryFee(fee)
+                    .quantity(pending.getQuantity())
+                    .entryPrice(pending.getPrice())
+                    .entryFee(pending.getFee())
                     .entryTime(decision.signalOpenTime())
                     .dryRun(false)
                     .createdTime(Instant.now())
                     .build());
-            log.info("{} bought {} at {} for {} EUR (order {})", strategy.getMarket(), quantity,
-                    fillPrice, amountQuote, response.getOrderId());
+            log.info("{} bought {} at {} for {} EUR (order {})", strategy.getMarket(), pending.getQuantity(),
+                    pending.getPrice(), pending.getAmountQuote(), response.getOrderId());
         } catch (RuntimeException ex) {
             log.warn("Buying {} for strategy {} failed: {}", strategy.getMarket(), strategy.getId(),
                     ex.getMessage());
-            recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
-                    null, null, null, ex.getMessage());
+            if (pending == null) {
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
+                        null, null, null, ex.getMessage());
+            } else {
+                applyFailure(pending, ex.getMessage());
+            }
         }
     }
 
@@ -219,8 +232,8 @@ public class LiveTradingService {
         if (strategy.isDryRun()) {
             double proceeds = position.getQuantity() * price;
             double fee = proceeds * BacktestDefaults.FEE_RATE;
-            double profit = proceeds - position.getQuantity() * position.getEntryPrice() - fee
-                    - zeroIfNull(position.getEntryFee());
+            double profit = TradeMath.closeProfit(proceeds, position.getQuantity(), position.getEntryPrice(),
+                    position.getEntryFee(), fee);
             recordOrder(strategy, decision.signalOpenTime(), "SELL", "DRY_RUN", decision.reason(), proceeds,
                     position.getQuantity(), price, fee, null, null);
             closePosition(position, decision.signalOpenTime(), price, profit);
@@ -231,10 +244,11 @@ public class LiveTradingService {
 
         BotConfiguration bot = activeBot(strategy);
         if (bot == null) {
-            recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+            recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
                     null, null, null, "No active bot configuration for " + strategy.getBotId());
             return;
         }
+        LiveOrder pending = null;
         try {
             GetMarketResponse market = bitvavoApiClient.get("/markets?market=" + strategy.getMarket(),
                     GetMarketResponse.class, bot.getApiKey(), bot.getApiSecret());
@@ -242,39 +256,107 @@ public class LiveTradingService {
             BigDecimal amount = BigDecimal.valueOf(position.getQuantity())
                     .setScale(quantityDecimals, RoundingMode.DOWN);
             if (amount.signum() <= 0) {
-                recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
                         null, null, null,
                         "Position quantity rounds to zero at " + quantityDecimals + " decimals");
                 return;
             }
+
+            UUID clientOrderId = UUID.randomUUID();
+            double estimatedProceeds = position.getQuantity() * price;
+            pending = preWrite(strategy, decision.signalOpenTime(), "SELL", decision.reason(), clientOrderId,
+                    estimatedProceeds, position.getQuantity(), price,
+                    estimatedProceeds * BacktestDefaults.FEE_RATE);
+
             CreateOrderRequest request = CreateOrderRequest.builder()
                     .market(strategy.getMarket())
                     .side("sell")
                     .orderType("market")
                     .amount(amount)
                     .operatorId(bot.getOperatorId())
+                    .clientOrderId(clientOrderId)
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, bot.getApiKey(), bot.getApiSecret());
-            double proceeds = filled(baseValue(response.getFilledAmountQuote(), null),
-                    amount.doubleValue() * price);
-            double fee = filled(baseValue(response.getFeePaid(), null),
-                    proceeds * BacktestDefaults.FEE_RATE);
-            double profit = proceeds - position.getQuantity() * position.getEntryPrice() - fee
-                    - zeroIfNull(position.getEntryFee());
-            recordOrder(strategy, decision.signalOpenTime(), "SELL", "FILLED", decision.reason(), proceeds,
-                    amount.doubleValue(),
-                    filled(ratio(baseValue(response.getFilledAmountQuote(), null), amount.doubleValue()), price),
-                    fee, String.valueOf(response.getOrderId()), null);
+            applyFill(pending, response);
+            double profit = TradeMath.closeProfit(TradeMath.zeroIfNull(pending.getAmountQuote()),
+                    position.getQuantity(), position.getEntryPrice(), position.getEntryFee(),
+                    TradeMath.zeroIfNull(pending.getFee()));
             closePosition(position, decision.signalOpenTime(), price, profit);
-            log.info("{} sold {} at {}: profit {} EUR (order {})", strategy.getMarket(),
-                    amount.doubleValue(), price, profit, response.getOrderId());
+            log.info("{} sold {} at {}: profit {} EUR (order {})", strategy.getMarket(), pending.getQuantity(),
+                    price, profit, response.getOrderId());
         } catch (RuntimeException ex) {
             log.warn("Selling {} for strategy {} failed: {}", strategy.getMarket(), strategy.getId(),
                     ex.getMessage());
-            recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
-                    null, null, null, ex.getMessage());
+            if (pending == null) {
+                recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
+                        null, null, null, ex.getMessage());
+            } else {
+                applyFailure(pending, ex.getMessage());
+            }
         }
+    }
+
+    /**
+     * Write the row for a real order before it is sent, so the exchange's client order ID is on
+     * record. The amounts are the dry-run style estimates, replaced by the response's figures once
+     * the order is placed.
+     */
+    private LiveOrder preWrite(LiveStrategy strategy, long signalOpenTime, String side, String reason,
+                               UUID clientOrderId, double amountQuote, double quantity, double price, double fee) {
+        LiveOrder order = LiveOrder.builder()
+                .strategyId(strategy.getId())
+                .market(strategy.getMarket())
+                .side(side)
+                .status("PENDING")
+                .dryRun(false)
+                .signalOpenTime(signalOpenTime)
+                .reason(reason)
+                .amountQuote(amountQuote)
+                .quantity(quantity)
+                .price(price)
+                .fee(fee)
+                .clientOrderId(clientOrderId.toString())
+                .createdTime(Instant.now())
+                .build();
+        liveOrderRepository.save(order);
+        return order;
+    }
+
+    /**
+     * Update the pre-written row with what the exchange reports, falling back to its estimates for
+     * anything the response omits.
+     */
+    private void applyFill(LiveOrder order, CreateOrderResponse response) {
+        double quantity = TradeMath.filled(
+                TradeMath.firstNonNull(response.getFilledAmount(), response.getAmount()),
+                TradeMath.zeroIfNull(order.getQuantity()));
+        order.setQuantity(quantity);
+        order.setAmountQuote(TradeMath.filled(response.getFilledAmountQuote(),
+                TradeMath.zeroIfNull(order.getAmountQuote())));
+        order.setPrice(TradeMath.filled(TradeMath.ratio(response.getFilledAmountQuote(), quantity),
+                TradeMath.zeroIfNull(order.getPrice())));
+        order.setFee(TradeMath.filled(response.getFeePaid(), TradeMath.zeroIfNull(order.getFee())));
+        order.setOrderId(String.valueOf(response.getOrderId()));
+        order.setStatus("FILLED");
+        liveOrderRepository.save(order);
+    }
+
+    /**
+     * Update the pre-written row to {@code FAILED}. It keeps its client order ID, so an ambiguous
+     * timeout stays reconcilable against the exchange's history at the next boot. A row already
+     * marked {@code FILLED} is never overwritten: the exchange holds the fill, and the failure here
+     * happened after it.
+     */
+    private void applyFailure(LiveOrder order, String message) {
+        if ("FILLED".equals(order.getStatus())) {
+            log.warn("Order {} of strategy {} filled at the exchange; not overwriting it as FAILED after {}",
+                    order.getOrderId(), order.getStrategyId(), message);
+            return;
+        }
+        order.setStatus("FAILED");
+        order.setErrorMessage(message);
+        liveOrderRepository.save(order);
     }
 
     private void closePosition(LivePosition position, long exitOpenTime, double price, double profit) {
@@ -343,23 +425,5 @@ public class LiveTradingService {
 
     private static String reason(String side, RuleGroup rules) {
         return side + " " + rules.operator() + " " + rules.conditions();
-    }
-
-    private static BigDecimal baseValue(BigDecimal value, BigDecimal fallback) {
-        return value != null ? value : fallback;
-    }
-
-    private static double filled(BigDecimal value, double fallback) {
-        return value != null ? value.doubleValue() : fallback;
-    }
-
-    private static BigDecimal ratio(BigDecimal amountQuote, double quantity) {
-        return amountQuote != null && quantity > 0
-                ? amountQuote.divide(BigDecimal.valueOf(quantity), 8, RoundingMode.HALF_UP)
-                : null;
-    }
-
-    private static double zeroIfNull(Double value) {
-        return value == null ? 0 : value;
     }
 }
