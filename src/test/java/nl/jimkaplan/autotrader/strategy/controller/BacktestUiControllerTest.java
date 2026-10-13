@@ -272,9 +272,9 @@ class BacktestUiControllerTest {
         SkippedSignal skipped = new SkippedSignal(5,
                 Instant.parse("2026-09-02T10:00:00Z").toEpochMilli(), SkipReason.INSUFFICIENT_BALANCE);
         return new BacktestEvaluation(
-                new BacktestResult(new BacktestMetrics(1003.1, 0.31, 1.28, 1, 100.0, 5.0),
+                new BacktestResult(new BacktestMetrics(1003.1, 0.31, 1.28, 1, 100.0, 5.0, 1),
                         List.of(trade), List.of(skipped)),
-                new BacktestResult(new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0),
+                new BacktestResult(new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0, 0),
                         List.of(), List.of()));
     }
 

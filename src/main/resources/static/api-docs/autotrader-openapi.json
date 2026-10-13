@@ -1291,6 +1291,10 @@
           "profitFactor": {
             "type": "number",
             "format": "double"
+          },
+          "skippedSignals": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -1418,6 +1422,10 @@
           "profitFactor": {
             "type": "number",
             "format": "double"
+          },
+          "skippedSignals": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

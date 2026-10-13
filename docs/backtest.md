@@ -35,6 +35,7 @@ a number that can be ranked.
 | `totalReturnPercent` | `(finalEquity − initialCapital) / initialCapital × 100` |
 | `maxDrawdownPercent` | Largest peak-to-trough decline of the bar-close equity, in percent |
 | `tradeCount` | Completed round trips |
+| `skippedSignals` | Entry signals that could not be filled (insufficient balance); omitted from the API response (shown as `—` in the UI) in runs stored before the field existed, so absence means unknown, not zero. The per-entry trades page shows its own recomputed count, which can differ from the stored one when the candle store changed since the run |
 | `winRatePercent` | Share of trades with positive net profit; `0` when there are no trades |
 | `profitFactor` | Gross profit ÷ gross loss; `0` with no trades, **infinite** with profits and no losses |
 

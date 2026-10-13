@@ -319,6 +319,7 @@ public class BacktestService {
                 .tradeCount(metrics.tradeCount())
                 .winRatePercent(metrics.winRatePercent())
                 .profitFactor(metrics.profitFactor())
+                .skippedSignals(metrics.skippedSignals())
                 .build();
     }
 }

@@ -7,6 +7,8 @@ import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunMetrics;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -96,6 +98,35 @@ class BacktestControllerTest {
     }
 
     @Test
+    void storedRun_omitsTheUnknownSkippedCount() throws JsonProcessingException {
+        BacktestRun run = BacktestRun.builder()
+                .entries(List.of(BacktestRunEntry.builder()
+                        .train(BacktestRunMetrics.builder().build())
+                        .validate(BacktestRunMetrics.builder().build())
+                        .build()))
+                .build();
+        run.setId("run-1");
+
+        // A run stored before the field existed: absent, never null
+        String json = new ObjectMapper().writeValueAsString(run);
+
+        assertFalse(json.contains("skippedSignals"));
+    }
+
+    @Test
+    void storedRun_includesTheSkippedCountWhenKnown() throws JsonProcessingException {
+        BacktestRun run = BacktestRun.builder()
+                .entries(List.of(BacktestRunEntry.builder()
+                        .train(BacktestRunMetrics.builder().skippedSignals(3).build())
+                        .build()))
+                .build();
+
+        String json = new ObjectMapper().writeValueAsString(run);
+
+        assertTrue(json.contains("\"skippedSignals\":3"));
+    }
+
+    @Test
     void recent_rejectsLimitsOutOfRange() {
         assertThrows(IllegalArgumentException.class, () -> backtestController.recent(0));
         assertThrows(IllegalArgumentException.class, () -> backtestController.recent(101));
@@ -124,6 +155,6 @@ class BacktestControllerTest {
     }
 
     private static BacktestMetrics metrics() {
-        return new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0);
+        return new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0, 0);
     }
 }
