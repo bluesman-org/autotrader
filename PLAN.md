@@ -143,7 +143,9 @@ follow-ups.
 7. ✅ Per-entry trade lists: the ranked table links each entry to a page (and
    `GET /api/backtests/{id}/entries/{n}/trades`) that recomputes it over the same candles and lists
    its train/validate trades and skipped signals (PR #19)
-8. ⬜ Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
+8. ✅ Offsite MongoDB backups in addition to `~/backups/autotrader` — every nightly dump is
+   copied to Google Drive (mounted with `google-drive-ocamlfuse`), byte-verified and kept 90
+   days offsite; a failed copy fails the nightly run loudly (PR #25)
 9. ⬜ Analyze and if there is useful stuff, move the remaining `.junie/` design docs under `docs/`
 10. ⬜ UI improvements (TBD)
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
