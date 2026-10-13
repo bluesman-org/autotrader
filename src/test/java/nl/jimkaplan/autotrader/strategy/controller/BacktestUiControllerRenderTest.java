@@ -80,7 +80,11 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 // A profit factor with no losses prints as the infinity symbol, not a broken cell
                 .andExpect(content().string(containsString("∞")))
-                .andExpect(content().string(containsString("0.64")));
+                .andExpect(content().string(containsString("0.64")))
+                // The skipped column renders the stored count, and the em dash when it is absent
+                .andExpect(content().string(containsString("<th>Skipped</th>")))
+                .andExpect(content().string(containsString("<td>2</td>")))
+                .andExpect(content().string(containsString("<td>—</td>")));
     }
 
     @Test
@@ -123,9 +127,9 @@ class BacktestUiControllerRenderTest {
         SkippedSignal skipped = new SkippedSignal(5,
                 Instant.parse("2026-09-02T10:00:00Z").toEpochMilli(), SkipReason.INSUFFICIENT_BALANCE);
         return new BacktestEvaluation(
-                new BacktestResult(new BacktestMetrics(1003.1, 0.31, 1.28, 1, 100.0, 5.0),
+                new BacktestResult(new BacktestMetrics(1003.1, 0.31, 1.28, 1, 100.0, 5.0, 0),
                         List.of(trade), List.of(skipped)),
-                new BacktestResult(new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0),
+                new BacktestResult(new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0, 0),
                         List.of(), List.of()));
     }
 
@@ -138,6 +142,7 @@ class BacktestUiControllerRenderTest {
                 .train(BacktestRunMetrics.builder()
                         .finalEquity(1003.1).totalReturnPercent(0.31).maxDrawdownPercent(1.28)
                         .tradeCount(48).winRatePercent(52.1).profitFactor(Double.POSITIVE_INFINITY)
+                        .skippedSignals(2)
                         .build())
                 .validate(BacktestRunMetrics.builder()
                         .finalEquity(1006.4).totalReturnPercent(0.64).maxDrawdownPercent(0.9)

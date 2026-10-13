@@ -131,7 +131,7 @@ public final class BacktestEngine {
         }
         BacktestMetrics metrics = new BacktestMetrics(finalEquity,
                 (finalEquity - config.initialCapital()) / config.initialCapital() * 100,
-                maxDrawdown, trades.size(), winRate, profitFactor);
+                maxDrawdown, trades.size(), winRate, profitFactor, skippedSignals.size());
         return new BacktestResult(metrics, List.copyOf(trades), List.copyOf(skippedSignals));
     }
 }

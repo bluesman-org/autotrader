@@ -124,6 +124,6 @@ class BacktestControllerTest {
     }
 
     private static BacktestMetrics metrics() {
-        return new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0);
+        return new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0, 0);
     }
 }

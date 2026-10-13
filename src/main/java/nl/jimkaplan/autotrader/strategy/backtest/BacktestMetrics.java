@@ -10,7 +10,9 @@ package nl.jimkaplan.autotrader.strategy.backtest;
  * @param winRatePercent     Share of profitable trades, in percent (0 when there are no trades)
  * @param profitFactor       Gross profit divided by gross loss; 0 when there are no trades,
  *                           infinite when there are profits and no losses
+ * @param skippedSignals     Entry signals that could not be filled, recorded rather than faked
  */
 public record BacktestMetrics(double finalEquity, double totalReturnPercent, double maxDrawdownPercent,
-                              int tradeCount, double winRatePercent, double profitFactor) {
+                              int tradeCount, double winRatePercent, double profitFactor,
+                              int skippedSignals) {
 }

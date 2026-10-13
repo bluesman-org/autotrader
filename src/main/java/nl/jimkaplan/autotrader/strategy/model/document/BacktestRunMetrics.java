@@ -24,4 +24,9 @@ public class BacktestRunMetrics {
      * Gross profit over gross loss; may be infinite when there are profits and no losses.
      */
     private double profitFactor;
+
+    /**
+     * Entry signals that could not be filled; null in runs stored before the field existed.
+     */
+    private Integer skippedSignals;
 }

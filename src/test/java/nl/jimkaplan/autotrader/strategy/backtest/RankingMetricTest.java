@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RankingMetricTest {
 
-    private final BacktestMetrics metrics = new BacktestMetrics(1050.0, 5.0, 12.0, 4, 75.0, 2.5);
+    private final BacktestMetrics metrics = new BacktestMetrics(1050.0, 5.0, 12.0, 4, 75.0, 2.5, 0);
 
     @Test
     void extractsEachValue() {
