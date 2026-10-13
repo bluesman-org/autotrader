@@ -5,11 +5,12 @@ indicators. TradingView is kept as a legacy fallback (Phase 6 records that decis
 file with every PR**: check off completed steps, add new follow-ups, and keep the status line
 current.
 
-**Status (2026-10-12):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
+**Status (2026-10-13):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
-default, replay gate). Quality gates hardened (PR #13). TradingView is kept as a legacy fallback
-(Phase 6, decision of 2026-10-12); next: a live-run trial of the engine — dry-run first — then the
-follow-ups.
+default, replay gate); the live series is anchored to a fixed start (PR #27) so restarts and
+backtests replay identical decisions. Quality gates hardened (PR #13). TradingView is kept as a
+legacy fallback (Phase 6, decision of 2026-10-12); next: a live-run trial of the engine — dry-run
+first — then the follow-ups.
 
 ## Objective
 
@@ -167,6 +168,12 @@ follow-ups.
 16. ✅ Make restores self-healing: deterministic client order IDs (derived from the strategy and a
     persisted sequence) so boot reconciliation can recover orders whose records were lost to a
     backup restore — a lost buy reopens the position, a lost sell closes it (PR #26)
+17. ✅ Anchor the live candle series at a fixed start: the runner persists `seriesStartTime` on the
+    first seed and never truncates the series afterwards, because Parabolic SAR's flip timing is
+    start-sensitive (the 2026-10-13 rehearsal showed near-identical runs exiting on different
+    candles). A backtest started at the anchor with `warmUp` set to the window length reproduces the
+    engine exactly, and the convergence claims in `docs/live-engine.md` now carry the right scope
+    (PR #27)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
