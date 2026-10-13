@@ -16,9 +16,17 @@ into Google Drive.
 
 `scripts/backup-mongo.sh` runs from cron (`15 3 * * *`): it writes the dump, prunes the
 local copies, then — when `AUTOTRADER_BACKUP_GDRIVE_DIR` is set in `.env` or the
-environment — remounts the Drive if needed, copies the archive and byte-verifies it
-(`cmp`). An offsite failure exits non-zero so it is visible in
-`~/backups/autotrader/backup.log`; the local dump is already on disk at that point.
+environment — remounts the Drive if needed, stages the copy as `<name>.part`,
+byte-verifies it through the mount (`cmp`) and renames it into place. The comparison
+proves the write path, not the Drive side: the mount uploads asynchronously, so the
+2026-10-13 drill — not the nightly check — is the evidence that the bytes land in Drive.
+
+Every mount operation is bounded by a timeout, and any offsite failure (unmountable Drive,
+copy or comparison error, failed prune) exits non-zero. **That is also how failures are
+noticed**: the cron line redirects the run's output to `~/backups/autotrader/backup.log`, so
+`grep FAILED ~/backups/autotrader/backup.log` is the check — worth running after any
+Drive-side change (revoked grant, quota, password change). The mount's own startup output
+goes to `~/backups/autotrader/gdrive-mount.log`.
 
 ## The Google Drive mount
 

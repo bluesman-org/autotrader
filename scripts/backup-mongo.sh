@@ -39,29 +39,52 @@ find "$BACKUP_DIR" -name 'autotrader-*.archive.gz' -mtime +"$KEEP_DAYS" -delete
 # Offsite copy to a mounted Google Drive (google-drive-ocamlfuse). Opt-in: set
 # AUTOTRADER_BACKUP_GDRIVE_DIR to the mountpoint. When set, every failure is
 # loud — the local dump above is already on disk, so a silently missing offsite
-# copy is the one thing this must never do.
+# copy is the one thing this must never do. Every step that touches the mount is
+# bounded by a timeout: a mount whose daemon is up but wedged passes
+# `mountpoint -q`, and without the bounds the cron run would hang instead of
+# failing.
 if [ -n "$GDRIVE_DIR" ]; then
   if ! mountpoint -q "$GDRIVE_DIR"; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite: $GDRIVE_DIR is not mounted, attempting to mount"
-    # google-drive-ocamlfuse 0.8+ never returns from the mount; detach it.
-    setsid google-drive-ocamlfuse "$GDRIVE_DIR" </dev/null >/dev/null 2>&1 &
+    # google-drive-ocamlfuse 0.8+ never returns from the mount; detach it and
+    # keep the child's output so the reason for a failed mount survives.
+    setsid google-drive-ocamlfuse "$GDRIVE_DIR" </dev/null >>"$BACKUP_DIR/gdrive-mount.log" 2>&1 &
     for _ in $(seq 1 15); do
       mountpoint -q "$GDRIVE_DIR" && break
       sleep 2
     done
   fi
   if ! mountpoint -q "$GDRIVE_DIR"; then
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: $GDRIVE_DIR is not mounted" >&2
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: $GDRIVE_DIR is not mounted (see gdrive-mount.log)" >&2
     exit 1
   fi
   DEST="$GDRIVE_DIR/$GDRIVE_SUBDIR"
-  mkdir -p "$DEST"
-  cp "$OUT" "$DEST/"
-  if cmp -s "$OUT" "$DEST/$(basename "$OUT")"; then
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy written: $DEST/$(basename "$OUT")"
+  DEST_FILE="$DEST/$(basename "$OUT")"
+  if ! timeout 5m mkdir -p "$DEST"; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: could not reach $DEST" >&2
+    exit 1
+  fi
+  # Stage under .part and rename only after the comparison: a truncated file
+  # must never carry the final name the restore runbook picks archives by.
+  if ! timeout 15m cp "$OUT" "$DEST_FILE.part"; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: copy timed out or errored" >&2
+    exit 1
+  fi
+  if timeout 5m cmp -s "$OUT" "$DEST_FILE.part"; then
+    if ! timeout 5m mv "$DEST_FILE.part" "$DEST_FILE"; then
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: could not finalize $DEST_FILE" >&2
+      exit 1
+    fi
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy written: $DEST_FILE"
   else
+    timeout 5m rm -f "$DEST_FILE.part" || true
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: verification mismatch" >&2
     exit 1
   fi
-  find "$DEST" -name 'autotrader-*.archive.gz' -mtime +"$GDRIVE_KEEP_DAYS" -delete
+  if ! timeout 5m find "$DEST" \
+      \( -name 'autotrader-*.archive.gz' -mtime +"$GDRIVE_KEEP_DAYS" \
+      -o -name 'autotrader-*.archive.gz.part' -mtime +0 \) -delete; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite prune FAILED: old copies not removed" >&2
+    exit 1
+  fi
 fi
