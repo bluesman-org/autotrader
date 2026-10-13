@@ -41,4 +41,15 @@ public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, St
     @Query("{ '_id' : ?0 }")
     @Update("{ '$set' : { 'last_evaluated_open_time' : ?1 } }")
     void updateLastEvaluatedOpenTime(String id, long openTime);
+
+    /**
+     * Advance the order sequence without touching any other field; the runner and the boot
+     * reconciliation can update it concurrently with the last-evaluated writes.
+     *
+     * @param id       The strategy ID
+     * @param sequence The next sequence number to use
+     */
+    @Query("{ '_id' : ?0 }")
+    @Update("{ '$set' : { 'next_order_sequence' : ?1 } }")
+    void updateNextOrderSequence(String id, long sequence);
 }

@@ -48,8 +48,14 @@ candle channel of its market and interval. Our own policies:
   a candle that closed during a stream outage — the fill price is the open of the candle that
   followed it, read from the store, so those fills keep the backtester's price too; a frame without
   a usable open falls back to the closed candle's close.
-- **Pre-write**: before a real order is sent it is saved as a `PENDING` row carrying a generated
-  client order ID (`clientOrderId`), which is sent to Bitvavo with the order and kept on the row.
+- **Pre-write**: before a real order is sent it is saved as a `PENDING` row carrying its client
+  order ID (`clientOrderId`): a UUID derived from the strategy and a persisted per-strategy
+  sequence (`ClientOrderIds`), sent to Bitvavo with the order and kept on the row. The derivation
+  is deterministic so the boot reconciliation can re-derive its own possible IDs and recognise
+  orders whose records were lost to a restore; Bitvavo requires the value to be unique only across
+  open orders, so a sequence number whose order was never accepted (or has long filled) is safe to
+  reuse. The persisted sequence is advanced before the pre-write, so a crash can skip a number but
+  never let a later order reuse one.
   The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee, or
   to `FAILED` with the error — so an ambiguous timeout between the write and the response stays
   reconcilable at the next boot (see "Reconciliation on startup"). An order rejected before it is
@@ -99,9 +105,10 @@ which holds them back rather than let them trade on stale state.
 
 - **Attribution by client order ID**: reconciliation only ever touches this strategy's own rows — a
   `PENDING` row, and a `FAILED` row that still carries a `clientOrderId`. Each is looked up in the
-  history by its client order ID, so nothing is adopted that a row does not claim. Two strategies
-  (or the legacy TradingView path) trading one account and market therefore cannot contaminate each
-  other's orders or positions.
+  history by its client order ID, and the restore recovery below re-derives IDs from this
+  strategy's own sequence namespace — so nothing is adopted that a row or a re-derived ID does not
+  claim. Two strategies (or the legacy TradingView path) trading one account and market therefore
+  cannot contaminate each other's orders or positions.
 - **Bounded to the strategy's lifetime**: the history is read with
   `GET /orders?market={market}&start={strategy.createdTime epoch millis}&limit=1000` (Bitvavo's
   maximum page size), so fills that predate the strategy are never considered.
@@ -133,6 +140,21 @@ which holds them back rather than let them trade on stale state.
   that should be open is created from the last buy. When they already agree, nothing is written.
 - **Idempotent**: once a row is settled it is no longer `PENDING` or `FAILED`, so a second run
   writes nothing.
+
+### Restoring from a backup
+
+A restore rewinds the recorded state to the dump while the exchange keeps trading on; the next boot
+brings the two back together:
+
+- Rows that existed at the dump are settled by client order ID as usual (a `PENDING` that filled, a
+  `FAILED` the exchange accepted).
+- Orders placed after the dump have no restored row — the recovery re-derives their IDs from the
+  strategy's sequence counter (which the dump itself carries), recreates the rows from the
+  exchange's figures, and lets the position sync close or reopen the position accordingly.
+- What it cannot see: orders pushed beyond the 1000-order history page, and anything not placed by
+  the engine (manual trades, the legacy webhook) — those stay the operator's business. After a
+  restore, check the recovery log lines and the exchange's balance view; decrypting restored bot
+  configurations needs the `ENCRYPTION_MASTER_KEY` from Bitwarden.
 
 ## API
 

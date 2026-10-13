@@ -10,6 +10,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
@@ -64,6 +65,7 @@ public class LiveTradingService {
     private final BitvavoApiClient bitvavoApiClient;
     private final LiveOrderRepository liveOrderRepository;
     private final LivePositionRepository livePositionRepository;
+    private final LiveStrategyRepository liveStrategyRepository;
 
     /**
      * Decide what the last closed candle of the series asks for.
@@ -180,7 +182,12 @@ public class LiveTradingService {
                 return;
             }
 
-            UUID clientOrderId = UUID.randomUUID();
+            long sequence = strategy.getNextOrderSequence();
+            UUID clientOrderId = ClientOrderIds.forSequence(strategy.getId(), sequence);
+            // Advance the persisted sequence before anything can be sent: a crash may skip a
+            // number (harmless) but can never let a later order reuse one.
+            liveStrategyRepository.updateNextOrderSequence(strategy.getId(), sequence + 1);
+            strategy.setNextOrderSequence(sequence + 1);
             double estimatedQuantity = amountQuote.doubleValue() / price;
             double estimatedFee = amountQuote.doubleValue() * BacktestDefaults.FEE_RATE;
             pending = preWrite(strategy, decision.signalOpenTime(), "BUY", decision.reason(), clientOrderId,
@@ -262,7 +269,12 @@ public class LiveTradingService {
                 return;
             }
 
-            UUID clientOrderId = UUID.randomUUID();
+            long sequence = strategy.getNextOrderSequence();
+            UUID clientOrderId = ClientOrderIds.forSequence(strategy.getId(), sequence);
+            // Advance the persisted sequence before anything can be sent: a crash may skip a
+            // number (harmless) but can never let a later order reuse one.
+            liveStrategyRepository.updateNextOrderSequence(strategy.getId(), sequence + 1);
+            strategy.setNextOrderSequence(sequence + 1);
             double estimatedProceeds = position.getQuantity() * price;
             pending = preWrite(strategy, decision.signalOpenTime(), "SELL", decision.reason(), clientOrderId,
                     estimatedProceeds, position.getQuantity(), price,

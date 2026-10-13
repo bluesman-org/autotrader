@@ -108,6 +108,13 @@ public class LiveStrategy extends BaseDocument {
     private long lastEvaluatedOpenTime;
 
     /**
+     * The sequence number of the next real order; feeds the deterministic client order ID so a
+     * record lost to a restore can be re-derived from the exchange. 0 when nothing was sent yet.
+     */
+    @Field("next_order_sequence")
+    private long nextOrderSequence;
+
+    /**
      * When the strategy was created.
      */
     @Field("created_time")

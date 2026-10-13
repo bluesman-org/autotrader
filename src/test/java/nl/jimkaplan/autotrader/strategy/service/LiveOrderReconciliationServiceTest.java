@@ -9,6 +9,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
@@ -24,6 +25,7 @@ import org.springframework.web.client.ResourceAccessException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -67,6 +69,9 @@ class LiveOrderReconciliationServiceTest {
 
     @Mock
     private LivePositionRepository livePositionRepository;
+
+    @Mock
+    private LiveStrategyRepository liveStrategyRepository;
 
     @InjectMocks
     private LiveOrderReconciliationService service;
@@ -406,6 +411,172 @@ class LiveOrderReconciliationServiceTest {
 
         assertEquals(Set.of(STRATEGY_ID), failed);
         verify(liveOrderRepository).findByStrategyIdOrderByCreatedTimeDesc("strategy-2");
+    }
+
+    @Test
+    void aLostBuyIsRecoveredFromTheExchangeAndOpensThePosition() {
+        LiveStrategy strategy = strategy(false, MARKET);
+        strategy.setNextOrderSequence(3);
+        when(liveStrategyService.all()).thenReturn(List.of(strategy));
+        when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(bot()));
+        UUID lostClientOrderId = ClientOrderIds.forSequence(STRATEGY_ID, 3);
+        UUID orderId = UUID.randomUUID();
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(orderId, "buy", "filled", START + HOUR,
+                        lostClientOrderId, "0.01", "620.00", "1.24")});
+        List<LiveOrder> stored = new ArrayList<>();
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenAnswer(invocation -> new ArrayList<>(stored));
+        when(liveOrderRepository.save(any(LiveOrder.class))).thenAnswer(invocation -> {
+            LiveOrder row = invocation.getArgument(0);
+            stored.add(row);
+            return row;
+        });
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        service.reconcileAll();
+
+        ArgumentCaptor<LiveOrder> saved = ArgumentCaptor.forClass(LiveOrder.class);
+        verify(liveOrderRepository).save(saved.capture());
+        LiveOrder recovered = saved.getValue();
+        assertEquals("FILLED", recovered.getStatus());
+        assertEquals("BUY", recovered.getSide());
+        assertEquals(lostClientOrderId.toString(), recovered.getClientOrderId());
+        assertEquals(orderId.toString(), recovered.getOrderId());
+        assertEquals(0.01, recovered.getQuantity(), 1e-9);
+        assertEquals(62000.0, recovered.getPrice(), 1e-9);
+        assertEquals(1.24, recovered.getFee(), 1e-9);
+        assertTrue(recovered.getReason().contains("recovered"));
+        verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
+        ArgumentCaptor<LivePosition> opened = ArgumentCaptor.forClass(LivePosition.class);
+        verify(livePositionRepository).save(opened.capture());
+        assertEquals("OPEN", opened.getValue().getStatus());
+        assertEquals(0.01, opened.getValue().getQuantity(), 1e-9);
+        assertEquals(62000.0, opened.getValue().getEntryPrice(), 1e-9);
+    }
+
+    @Test
+    void aLostSellIsRecoveredFromTheExchangeAndClosesThePosition() {
+        LiveStrategy strategy = strategy(false, MARKET);
+        strategy.setNextOrderSequence(1);
+        when(liveStrategyService.all()).thenReturn(List.of(strategy));
+        when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(bot()));
+        UUID lostClientOrderId = ClientOrderIds.forSequence(STRATEGY_ID, 1);
+        UUID orderId = UUID.randomUUID();
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(orderId, "sell", "filled", START + 2 * HOUR,
+                        lostClientOrderId, "0.01", "630.00", "1.26")});
+        LiveOrder buy = LiveOrder.builder()
+                .strategyId(STRATEGY_ID)
+                .market(MARKET)
+                .side("BUY")
+                .status("FILLED")
+                .dryRun(false)
+                .signalOpenTime(START)
+                .reason("buy ALL [TEST]")
+                .amountQuote(620.0)
+                .quantity(0.01)
+                .price(62000.0)
+                .fee(1.24)
+                .clientOrderId(UUID.randomUUID().toString())
+                .createdTime(Instant.ofEpochMilli(START))
+                .build();
+        buy.setId("buy-1");
+        List<LiveOrder> stored = new ArrayList<>(List.of(buy));
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenAnswer(invocation -> new ArrayList<>(stored));
+        when(liveOrderRepository.save(any(LiveOrder.class))).thenAnswer(invocation -> {
+            LiveOrder row = invocation.getArgument(0);
+            stored.add(row);
+            return row;
+        });
+        LivePosition position = LivePosition.builder()
+                .strategyId(STRATEGY_ID)
+                .market(MARKET)
+                .status("OPEN")
+                .quantity(0.01)
+                .entryPrice(62000.0)
+                .entryFee(1.24)
+                .entryTime(START)
+                .dryRun(false)
+                .createdTime(Instant.ofEpochMilli(START))
+                .build();
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+
+        service.reconcileAll();
+
+        verify(liveOrderRepository).save(any(LiveOrder.class));
+        verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 2);
+        verify(livePositionRepository).save(position);
+        assertEquals("CLOSED", position.getStatus());
+        assertEquals(63000.0, position.getExitPrice(), 1e-9);
+        assertEquals(7.5, position.getProfit(), 1e-9);
+    }
+
+    @Test
+    void aRecoveredOrderStillOpenIsLeftForALaterBoot() {
+        LiveStrategy strategy = strategy(false, MARKET);
+        strategy.setNextOrderSequence(3);
+        when(liveStrategyService.all()).thenReturn(List.of(strategy));
+        when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy", "open", START + HOUR,
+                        ClientOrderIds.forSequence(STRATEGY_ID, 3), null, null, null)});
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
+
+        service.reconcileAll();
+
+        verify(liveOrderRepository, never()).save(any());
+        verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
+    }
+
+    @Test
+    void anOrderWithAnUnrelatedClientOrderIdIsNotAdopted() {
+        LiveStrategy strategy = strategy(false, MARKET);
+        when(liveStrategyService.all()).thenReturn(List.of(strategy));
+        when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy", "filled", START + HOUR,
+                        UUID.randomUUID(), "0.01", "620.00", "1.24")});
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        service.reconcileAll();
+
+        verify(liveOrderRepository, never()).save(any());
+        verifyNoInteractions(liveStrategyRepository);
+    }
+
+    @Test
+    void recoveryIsIdempotent() {
+        LiveStrategy strategy = strategy(false, MARKET);
+        strategy.setNextOrderSequence(3);
+        when(liveStrategyService.all()).thenReturn(List.of(strategy));
+        when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy", "filled", START + HOUR,
+                        ClientOrderIds.forSequence(STRATEGY_ID, 3), "0.01", "620.00", "1.24")});
+        List<LiveOrder> stored = new ArrayList<>();
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenAnswer(invocation -> new ArrayList<>(stored));
+        when(liveOrderRepository.save(any(LiveOrder.class))).thenAnswer(invocation -> {
+            LiveOrder row = invocation.getArgument(0);
+            stored.add(row);
+            return row;
+        });
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        service.reconcileAll();
+        service.reconcileAll();
+
+        verify(liveOrderRepository).save(any(LiveOrder.class));
+        verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
     }
 
     @Test

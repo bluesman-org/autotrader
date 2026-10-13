@@ -680,6 +680,9 @@ components:
         lastEvaluatedOpenTime:
           type: "integer"
           format: "int64"
+        nextOrderSequence:
+          type: "integer"
+          format: "int64"
         createdTime:
           type: "string"
           format: "date-time"
