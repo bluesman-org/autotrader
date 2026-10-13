@@ -44,19 +44,20 @@ find "$BACKUP_DIR" \( -name 'autotrader-*.archive.gz' -mtime +"$KEEP_DAYS" \
 # AUTOTRADER_BACKUP_GDRIVE_DIR to the mountpoint. When set, every failure is
 # loud — the local dump above is already on disk, so a silently missing offsite
 # copy is the one thing this must never do. The steps are bounded by timeouts
-# for answered-but-slow I/O, and the block by a watchdog: a task parked on an
-# unanswered FUSE request cannot be woken by a signal, so `timeout` alone cannot
-# promise the run ends — the watchdog kills the run instead, so a hung mount
-# never leaves a stale run behind for the next night to pile onto.
+# for answered-but-slow I/O, and the block by a watchdog placed above the sum
+# of those bounds (≈13 min), so it can only fire for a task parked on an
+# unanswered FUSE request — which no signal can wake, and which `timeout` alone
+# therefore cannot end. The watchdog kills the run so a hung mount never leaves
+# a stale run behind for the next night to pile onto.
 if [ -n "$GDRIVE_DIR" ]; then
   # The sleeper lives in the subshell so the cleanup TERM trap can kill it —
   # killing the subshell alone would orphan the sleep, which would then hold
-  # this run's stdout (the cron log pipe) open for the full five minutes.
+  # this run's stdout (the cron log pipe) open for the full fifteen minutes.
   (
-    sleep 300 & WATCHDOG_SLEEP=$!
+    sleep 900 & WATCHDOG_SLEEP=$!
     trap 'kill "$WATCHDOG_SLEEP" 2>/dev/null; exit 0' TERM
     wait "$WATCHDOG_SLEEP"
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: the Drive mount did not respond within 5 minutes" >&2
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: the Drive mount did not respond within 15 minutes" >&2
     kill -0 "$$" 2>/dev/null && kill -TERM "$$"
   ) &
   WATCHDOG=$!

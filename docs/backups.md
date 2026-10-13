@@ -35,10 +35,11 @@ side: the mount uploads asynchronously, so the 2026-10-13 drill — not the nigh
 is the evidence that the bytes land in Drive.
 
 Every mount check and operation is bounded by a timeout, and the whole offsite block by a
-five-minute watchdog — an unanswered FUSE request cannot be interrupted by a timeout, so
-the watchdog kills the run instead of letting it (and every following night's run) hang.
-Any offsite failure (unmountable Drive, copy or comparison error, failed prune, watchdog)
-exits non-zero; if the mount stops answering entirely, lazy-unmount it
+fifteen-minute watchdog placed above the sum of those bounds — an unanswered FUSE request
+cannot be interrupted by a timeout, so the watchdog kills the run instead of letting it (and
+every following night's run) hang, and it can only fire when the mount truly stopped
+answering. Any offsite failure (unmountable Drive, copy or comparison error, failed prune,
+watchdog) exits non-zero; if the mount stops answering entirely, lazy-unmount it
 (`fusermount3 -uz ~/GoogleDrive`) and the next run remounts it. **That is also how failures
 are noticed**: the cron line redirects the run's output to `~/backups/autotrader/backup.log`,
 and on a host with the offsite copy enabled a healthy run's last line is
