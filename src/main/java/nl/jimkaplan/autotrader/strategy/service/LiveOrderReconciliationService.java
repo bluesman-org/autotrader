@@ -29,18 +29,23 @@ import java.util.Set;
  * <p>A real order is written as a {@code PENDING} row carrying the client order ID that was sent
  * with it, so at boot this service can look that ID up in the exchange's order history and settle
  * the row: a filled order becomes {@code FILLED} with the exchange's figures, and a {@code PENDING}
- * row the exchange does not know was never accepted and becomes {@code FAILED}. Only the rows of
- * this strategy are ever touched — nothing is adopted from the history that a row's client order ID
- * does not claim — so two strategies (or the legacy path) trading one account and market cannot
- * contaminate each other's orders or positions.</p>
+ * row the exchange does not know — in a page known to be complete — was never accepted and becomes
+ * {@code FAILED}. An incomplete page (the limit was reached, or an entry could not be read) leaves
+ * such a row {@code PENDING} for the next boot. Only the rows of this strategy are ever touched —
+ * nothing is adopted from the history that a row's client order ID does not claim — so two
+ * strategies (or the legacy path) trading one account and market cannot contaminate each other's
+ * orders or positions.</p>
  *
  * <p>The history is bounded to the strategy's lifetime ({@code start} = the strategy's creation
- * time), so fills that predate it are never considered, and only {@code filled} entries are acted
- * on: an order still {@code open}, {@code partiallyFilled}, {@code canceled} or {@code expired} is
- * warned and left for a later boot (v1 does not reconcile partial or abandoned orders). The service
- * is idempotent — once a row is settled it is no longer {@code PENDING} or {@code FAILED}, so a
- * second run writes nothing — and it never throws. It returns the ids of the strategies it could
- * not reconcile, so the caller can hold them back instead of letting them trade on stale state.</p>
+ * time) and read with the exchange's maximum page size, so fills that predate it are never
+ * considered, and only {@code filled} entries are acted on: an order still {@code open},
+ * {@code partiallyFilled}, {@code canceled} or {@code expired} is warned and left for a later boot
+ * (v1 does not reconcile partial or abandoned orders). A real {@code FAILED} row recorded before
+ * the engine sent a client order ID cannot be attributed and is warned for a manual check. The
+ * service is idempotent — once a row is settled it is no longer {@code PENDING} or {@code FAILED},
+ * so a second run writes nothing — and it never throws. It returns the ids of the strategies it
+ * could not reconcile, so the caller can hold them back instead of letting them trade on stale
+ * state.</p>
  */
 @Slf4j
 @Service
@@ -52,6 +57,15 @@ public class LiveOrderReconciliationService {
     static final String NOT_ACCEPTED_MESSAGE =
             "not found in the exchange's order history within the strategy's lifetime; "
                     + "treated as never accepted";
+    static final int ORDER_HISTORY_LIMIT = 1000;
+
+    /**
+     * The strategy's order history indexed by client order ID, with whether the page is known to be
+     * complete. A complete page is non-null, shorter than the requested limit (so there are no more
+     * pages) and had no entry skipped as incomplete.
+     */
+    private record History(Map<String, OrderResponse> byClientOrderId, boolean complete) {
+    }
 
     private final LiveStrategyService liveStrategyService;
     private final BotConfigurationService botConfigurationService;
@@ -92,13 +106,14 @@ public class LiveOrderReconciliationService {
 
         OrderResponse[] history = bitvavoApiClient.get(
                 "/orders?market=" + strategy.getMarket()
-                        + "&start=" + strategy.getCreatedTime().toEpochMilli() + "&limit=100",
+                        + "&start=" + strategy.getCreatedTime().toEpochMilli()
+                        + "&limit=" + ORDER_HISTORY_LIMIT,
                 OrderResponse[].class, bot.getApiKey(), bot.getApiSecret());
-        Map<String, OrderResponse> byClientOrderId = byClientOrderId(history, strategy.getId());
+        History indexed = history(history, strategy.getId());
 
         List<LiveOrder> rows = liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(strategy.getId());
         for (LiveOrder row : rows) {
-            resolve(strategy, row, byClientOrderId);
+            resolve(strategy, row, indexed);
         }
         syncPosition(strategy, rows);
     }
@@ -112,38 +127,54 @@ public class LiveOrderReconciliationService {
 
     /**
      * Index the history by client order ID. An entry missing any of the fields reconciliation keys
-     * on is warned and skipped rather than trusted.
+     * on is warned and skipped rather than trusted, and marks the page incomplete.
      */
-    private Map<String, OrderResponse> byClientOrderId(OrderResponse[] history, String strategyId) {
+    private History history(OrderResponse[] history, String strategyId) {
         Map<String, OrderResponse> byClientOrderId = new LinkedHashMap<>();
         if (history == null) {
-            return byClientOrderId;
+            return new History(byClientOrderId, false);
         }
+        boolean complete = history.length < ORDER_HISTORY_LIMIT;
         for (OrderResponse order : history) {
             if (order.getOrderId() == null || order.getCreated() == null
                     || order.getSide() == null || order.getClientOrderId() == null) {
                 log.warn("Exchange order entry for strategy {} is incomplete "
                         + "(orderId/created/side/clientOrderId missing); skipped", strategyId);
+                complete = false;
                 continue;
             }
             byClientOrderId.put(order.getClientOrderId().toString(), order);
         }
-        return byClientOrderId;
+        return new History(byClientOrderId, complete);
     }
 
     /**
      * Settle one of this strategy's un-settled rows against the history entry that carries its
      * client order ID.
      */
-    private void resolve(LiveStrategy strategy, LiveOrder row, Map<String, OrderResponse> byClientOrderId) {
-        if (row.getClientOrderId() == null
-                || (!"PENDING".equals(row.getStatus()) && !"FAILED".equals(row.getStatus()))) {
+    private void resolve(LiveStrategy strategy, LiveOrder row, History history) {
+        if (row.getClientOrderId() == null) {
+            if (!row.isDryRun() && "FAILED".equals(row.getStatus())) {
+                log.warn("Live order {} of strategy {} has no client order ID (recorded before orders "
+                        + "carried one); it cannot be reconciled automatically and needs a manual check",
+                        row.getId(), strategy.getId());
+            }
             return;
         }
-        OrderResponse order = byClientOrderId.get(row.getClientOrderId());
+        if (!"PENDING".equals(row.getStatus()) && !"FAILED".equals(row.getStatus())) {
+            return;
+        }
+        OrderResponse order = history.byClientOrderId().get(row.getClientOrderId());
         if (order == null) {
-            if ("PENDING".equals(row.getStatus())) {
+            if (!"PENDING".equals(row.getStatus())) {
+                return;
+            }
+            if (history.complete()) {
                 notAccepted(row);
+            } else {
+                log.info("Pending live order {} of strategy {} was not found in an incomplete page of "
+                        + "the exchange's order history; it will be retried at the next boot",
+                        row.getId(), strategy.getId());
             }
             return;
         }

@@ -344,9 +344,16 @@ public class LiveTradingService {
 
     /**
      * Update the pre-written row to {@code FAILED}. It keeps its client order ID, so an ambiguous
-     * timeout stays reconcilable against the exchange's history at the next boot.
+     * timeout stays reconcilable against the exchange's history at the next boot. A row already
+     * marked {@code FILLED} is never overwritten: the exchange holds the fill, and the failure here
+     * happened after it.
      */
     private void applyFailure(LiveOrder order, String message) {
+        if ("FILLED".equals(order.getStatus())) {
+            log.warn("Order {} of strategy {} filled at the exchange; not overwriting it as FAILED after {}",
+                    order.getOrderId(), order.getStrategyId(), message);
+            return;
+        }
         order.setStatus("FAILED");
         order.setErrorMessage(message);
         liveOrderRepository.save(order);

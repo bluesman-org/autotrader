@@ -450,6 +450,64 @@ class LiveTradingServiceTest {
     }
 
     @Test
+    void fill_liveBuyKeepsTheRowFilledWhenSavingThePositionFails() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setFilledAmount(new BigDecimal("0.001"));
+        response.setFilledAmountQuote(new BigDecimal("100.00"));
+        response.setFeePaid(new BigDecimal("0.2"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+        when(livePositionRepository.save(any(LivePosition.class)))
+                .thenThrow(new ResourceAccessException("database down"));
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("PENDING", saves.get(0).getStatus());
+        assertEquals("FILLED", saves.get(1).getStatus());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertNull(saves.get(1).getErrorMessage());
+    }
+
+    @Test
+    void fill_liveSellKeepsTheRowFilledWhenClosingThePositionFails() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(openPosition(0.001, 100000.0, 0.2)));
+        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setFilledAmountQuote(new BigDecimal("110.00"));
+        response.setFeePaid(new BigDecimal("0.22"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+        when(livePositionRepository.save(any(LivePosition.class)))
+                .thenThrow(new ResourceAccessException("database down"));
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("PENDING", saves.get(0).getStatus());
+        assertEquals("SELL", saves.get(1).getSide());
+        assertEquals("FILLED", saves.get(1).getStatus());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertNull(saves.get(1).getErrorMessage());
+    }
+
+    @Test
     void fill_doesNothingWhenThePositionVanishedBeforeTheExitFill() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))

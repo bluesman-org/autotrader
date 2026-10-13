@@ -101,17 +101,26 @@ which holds them back rather than let them trade on stale state.
   (or the legacy TradingView path) trading one account and market therefore cannot contaminate each
   other's orders or positions.
 - **Bounded to the strategy's lifetime**: the history is read with
-  `GET /orders?market={market}&start={strategy.createdTime epoch millis}&limit=100`, so fills that
-  predate the strategy are never considered.
+  `GET /orders?market={market}&start={strategy.createdTime epoch millis}&limit=1000` (Bitvavo's
+  maximum page size), so fills that predate the strategy are never considered.
 - **Resolution**: a `PENDING` row found `filled` becomes `FILLED` in place with the exchange's
   amounts, price (derived as `filledAmountQuote / filledAmount`) and fee, clearing its error. A
   `FAILED` row found `filled` is corrected the same way and its reason records that the exchange had
   accepted the order despite the recorded failure. A `PENDING` row the exchange does not know is
   marked `FAILED` ("not found in the exchange's order history within the strategy's lifetime;
-  treated as never accepted"); a `FAILED` row it does not know is left as it is.
+  treated as never accepted") — but only when the page is known to be complete: a non-null page
+  shorter than the limit with no entry skipped as incomplete. When the page is not complete (the
+  limit was reached, the response was null, or an entry could not be read) such a row is left
+  `PENDING` and retried at the next boot, since "not in this page" is not "never accepted". A
+  `FAILED` row the exchange does not know is left as it is either way.
 - **Filled only**: only `filled` entries are acted on. An order still `open`, `partiallyFilled`,
   `canceled` or `expired` is logged and left alone (v1 does not reconcile partial or abandoned
   orders), as is a history entry missing its order ID, creation time, side or client order ID.
+- **Upgrade note**: a real `FAILED` order recorded before the engine sent a client order ID cannot be
+  attributed to this strategy, and reconciliation has no safe heuristic for it (an earlier design
+  guessed by side and time, reintroducing exactly the cross-strategy misattribution the client order
+  ID removes). Such a row is skipped and warned about at boot for a manual check. This deployment has
+  only ever run dry-run, so no real order predates the change.
 - **Position sync**: the strategy's filled non-dry-run orders are walked in creation order — a buy
   opens, a sell closes — and the stored open position is brought in line: a position that should be
   closed is closed in place with the last sell's price, time and realised profit, and a position

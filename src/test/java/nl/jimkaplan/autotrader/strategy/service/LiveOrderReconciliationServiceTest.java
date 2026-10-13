@@ -227,7 +227,7 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
-    void incompleteHistoryEntriesAreSkipped() {
+    void incompleteHistoryEntriesAreSkippedAndLeaveThePendingRowPending() {
         stubStrategyAndBot();
         UUID clientOrderId = UUID.randomUUID();
         LiveOrder pending = pendingRow("BUY", clientOrderId, Instant.ofEpochMilli(START + MINUTE));
@@ -241,12 +241,26 @@ class LiveOrderReconciliationServiceTest {
 
         assertTrue(service.reconcileAll().isEmpty());
 
-        assertEquals("FAILED", pending.getStatus());
-        assertEquals(LiveOrderReconciliationService.NOT_ACCEPTED_MESSAGE, pending.getErrorMessage());
+        assertEquals("PENDING", pending.getStatus());
+        verify(liveOrderRepository, never()).save(any());
     }
 
     @Test
-    void aNullHistoryMarksAPendingRowAsNeverAccepted() {
+    void aPendingRowMissingFromAFullPageIsLeftPending() {
+        stubStrategyAndBot();
+        LiveOrder pending = pendingRow("BUY", UUID.randomUUID(), Instant.ofEpochMilli(START + MINUTE));
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(pending));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(fullHistory());
+
+        assertTrue(service.reconcileAll().isEmpty());
+
+        assertEquals("PENDING", pending.getStatus());
+        verify(liveOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void aNullHistoryLeavesThePendingRowPending() {
         stubStrategyAndBot();
         LiveOrder pending = pendingRow("BUY", UUID.randomUUID(), Instant.ofEpochMilli(START + MINUTE));
         when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(pending));
@@ -254,8 +268,30 @@ class LiveOrderReconciliationServiceTest {
 
         service.reconcileAll();
 
-        assertEquals("FAILED", pending.getStatus());
-        assertEquals(LiveOrderReconciliationService.NOT_ACCEPTED_MESSAGE, pending.getErrorMessage());
+        assertEquals("PENDING", pending.getStatus());
+        verify(liveOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void aDryRunRowWithoutAClientOrderIdIsIgnored() {
+        stubStrategyAndBot();
+        LiveOrder dryRun = LiveOrder.builder()
+                .strategyId(STRATEGY_ID)
+                .market(MARKET)
+                .side("BUY")
+                .status("DRY_RUN")
+                .dryRun(true)
+                .createdTime(Instant.ofEpochMilli(START))
+                .build();
+        dryRun.setId("dry-run-1");
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(dryRun));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[0]);
+
+        service.reconcileAll();
+
+        assertEquals("DRY_RUN", dryRun.getStatus());
+        verify(liveOrderRepository, never()).save(any());
     }
 
     @Test
@@ -417,7 +453,17 @@ class LiveOrderReconciliationServiceTest {
     }
 
     private static String ordersEndpoint(String market) {
-        return "/orders?market=" + market + "&start=" + START + "&limit=100";
+        return "/orders?market=" + market + "&start=" + START
+                + "&limit=" + LiveOrderReconciliationService.ORDER_HISTORY_LIMIT;
+    }
+
+    private static OrderResponse[] fullHistory() {
+        OrderResponse[] history = new OrderResponse[LiveOrderReconciliationService.ORDER_HISTORY_LIMIT];
+        for (int i = 0; i < history.length; i++) {
+            history[i] = order(UUID.randomUUID(), "buy", "filled", START, UUID.randomUUID(),
+                    "0.001", "100.00", "0.2");
+        }
+        return history;
     }
 
     private static LiveStrategy strategy(boolean dryRun, String market) {
