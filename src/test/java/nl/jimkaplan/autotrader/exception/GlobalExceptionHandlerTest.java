@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -145,6 +146,7 @@ class GlobalExceptionHandlerTest {
                 new HttpRequestMethodNotSupportedException("PUT"), request());
 
         assertError(response, HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed");
+        assertNull(response.getHeaders().getFirst(HttpHeaders.ALLOW));
     }
 
     @Test
@@ -171,6 +173,15 @@ class GlobalExceptionHandlerTest {
                 new HttpMediaTypeNotSupportedException("text/plain"), request());
 
         assertError(response, HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported media type");
+    }
+
+    @Test
+    void handleMediaTypeNotSupportedException_withSupportedMediaTypes_setsAcceptHeader() {
+        ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleMediaTypeNotSupportedException(
+                new HttpMediaTypeNotSupportedException("text/plain", List.of(MediaType.APPLICATION_JSON)), request());
+
+        assertError(response, HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported media type");
+        assertEquals("application/json", response.getHeaders().getFirst(HttpHeaders.ACCEPT));
     }
 
     @Test
