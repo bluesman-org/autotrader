@@ -100,6 +100,7 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("Validate — held out")))
                 .andExpect(content().string(containsString("2026-09-01 10:00")))
                 .andExpect(content().string(containsString("INSUFFICIENT BALANCE")))
+                .andExpect(content().string(containsString("<b>1</b>Skipped")))
                 .andExpect(content().string(containsString("No trades on this side.")))
                 .andExpect(content().string(containsString("so the trades reproduce the ranked table's metrics.")))
                 .andExpect(content().string(not(containsString("The stored history changed"))))
@@ -127,7 +128,7 @@ class BacktestUiControllerRenderTest {
         SkippedSignal skipped = new SkippedSignal(5,
                 Instant.parse("2026-09-02T10:00:00Z").toEpochMilli(), SkipReason.INSUFFICIENT_BALANCE);
         return new BacktestEvaluation(
-                new BacktestResult(new BacktestMetrics(1003.1, 0.31, 1.28, 1, 100.0, 5.0, 0),
+                new BacktestResult(new BacktestMetrics(1003.1, 0.31, 1.28, 1, 100.0, 5.0, 1),
                         List.of(trade), List.of(skipped)),
                 new BacktestResult(new BacktestMetrics(1000.0, 0.0, 0.0, 0, 0.0, 0.0, 0),
                         List.of(), List.of()));

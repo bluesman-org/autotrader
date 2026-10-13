@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.model.document;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,7 +27,9 @@ public class BacktestRunMetrics {
     private double profitFactor;
 
     /**
-     * Entry signals that could not be filled; null in runs stored before the field existed.
+     * Entry signals that could not be filled; omitted from the API when unknown (runs stored
+     * before the field existed), matching how {@code BacktestRun.entries} handles its null form.
      */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private Integer skippedSignals;
 }
