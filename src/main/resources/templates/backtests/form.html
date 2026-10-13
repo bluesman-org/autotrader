@@ -68,6 +68,11 @@
             </div>
             <p class="muted">Max drawdown ranks ascending (smaller is better); the other metrics rank descending.
                 Blank optional fields take the documented defaults.</p>
+            <div class="banner warn" id="fee-hint" hidden
+                 th:data-default-capital="${defaults.initialCapital}"
+                 th:data-default-amount="${defaults.amountPerBuy}"
+                 th:data-default-fee-rate="${defaults.feeRate}"
+            ></div>
         </fieldset>
 
         <fieldset>
@@ -147,5 +152,40 @@
         </table>
     </div>
 </main>
+<script>
+    // Warn before running when the initial capital cannot cover a buy plus its fee: every entry
+    // signal would then skip as INSUFFICIENT_BALANCE. Blank fields fall back to the server-rendered
+    // defaults in the hint's data attributes, and the arithmetic mirrors BacktestEngine exactly.
+    (function () {
+        var capital = document.getElementById('initialCapital');
+        var amount = document.getElementById('amountPerBuy');
+        var feeRate = document.getElementById('feeRate');
+        var hint = document.getElementById('fee-hint');
+        if (!capital || !amount || !feeRate || !hint) {
+            return;
+        }
+        function value(field, fallback) {
+            var parsed = parseFloat(String(field.value).trim().replace(',', '.'));
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+        function update() {
+            var capitalValue = value(capital, parseFloat(hint.dataset.defaultCapital));
+            var amountValue = value(amount, parseFloat(hint.dataset.defaultAmount));
+            var feeValue = value(feeRate, parseFloat(hint.dataset.defaultFeeRate));
+            var needed = amountValue + amountValue * feeValue;
+            var short = capitalValue < needed;
+            hint.hidden = !short;
+            if (short) {
+                hint.textContent = 'Every entry signal would be skipped as INSUFFICIENT_BALANCE: a buy '
+                    + 'needs at least ' + needed.toFixed(2) + ' EUR (the amount per buy plus its fee), '
+                    + 'but the initial capital is ' + capitalValue.toFixed(2) + ' EUR.';
+            }
+        }
+        [capital, amount, feeRate].forEach(function (field) {
+            field.addEventListener('input', update);
+        });
+        update();
+    })();
+</script>
 </body>
 </html>

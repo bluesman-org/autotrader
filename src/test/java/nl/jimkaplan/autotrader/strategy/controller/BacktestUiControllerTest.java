@@ -51,6 +51,7 @@ class BacktestUiControllerTest {
 
         assertEquals("backtests/form", view);
         assertInstanceOf(BacktestRunForm.class, model.getAttribute("form"));
+        assertInstanceOf(BacktestRunForm.class, model.getAttribute("defaults"));
         assertNotNull(model.getAttribute("intervals"));
         assertNotNull(model.getAttribute("rankingMetrics"));
         assertNotNull(model.getAttribute("conditions"));

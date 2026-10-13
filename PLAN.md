@@ -131,9 +131,10 @@ follow-ups.
       `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
       handler is next touched)
 - [ ] UI improvements (TBD)
-- [ ] Warn on the backtest form when the initial capital cannot cover `amountPerBuy` plus its fee
-      (`amountPerBuy × (1 + feeRate)`) — otherwise every entry skips as `INSUFFICIENT_BALANCE` and the
-      run shows zero trades, which the skipped-signals table explains only after the fact
+- [x] Warn on the backtest form when the initial capital cannot cover `amountPerBuy` plus its fee —
+      a live hint under the simulation fields (blank fields fall back to the documented defaults),
+      verified in a real browser; without it every entry skips as `INSUFFICIENT_BALANCE` and the run
+      shows zero trades (PR #21)
 - [ ] Reconcile open orders after a crash between an order submission and its record (`live_orders`
       recorded what was sent; the exchange's order history is the source of truth)
 - [ ] Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
