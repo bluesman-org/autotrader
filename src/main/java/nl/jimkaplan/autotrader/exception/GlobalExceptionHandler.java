@@ -3,6 +3,8 @@ package nl.jimkaplan.autotrader.exception;
 import nl.jimkaplan.autotrader.model.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -21,6 +23,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Global exception handler for the application.
@@ -201,6 +205,8 @@ public class GlobalExceptionHandler {
 
     /**
      * Handle unsupported HTTP methods, which Spring maps to 405 by default.
+     * Carries the {@code Allow} header with the methods the endpoint does support, matching the
+     * header Spring's own resolver sets for this exception.
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupportedException(
@@ -214,7 +220,15 @@ public class GlobalExceptionHandler {
                 path
         );
 
-        return new ResponseEntity<>(errorResponse, HttpStatus.METHOD_NOT_ALLOWED);
+        HttpHeaders headers = new HttpHeaders();
+        Set<HttpMethod> supportedMethods = ex.getSupportedHttpMethods();
+        if (supportedMethods != null && !supportedMethods.isEmpty()) {
+            headers.set(HttpHeaders.ALLOW, supportedMethods.stream()
+                    .map(HttpMethod::name)
+                    .collect(Collectors.joining(", ")));
+        }
+
+        return new ResponseEntity<>(errorResponse, headers, HttpStatus.METHOD_NOT_ALLOWED);
     }
 
     /**
