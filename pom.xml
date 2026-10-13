@@ -135,8 +135,15 @@
                         </goals>
                         <configuration>
                             <target>
+                                <!-- overwrite: Maven 3.10 (see .mvn/wrapper/maven-wrapper.properties) enables
+                                     Reproducible Builds by default and the Super POM pins
+                                     project.build.outputTimestamp to 1980-02-01; spring-boot:repackage stamps
+                                     the built jar with it, so Ant would judge the fresh jar older than the
+                                     previous copy and skip it, leaving target/autotrader.jar stale for the
+                                     Docker image builds -->
                                 <copy file="${project.build.directory}/${project.build.finalName}.${project.packaging}"
-                                      tofile="${project.build.directory}/${package.final.name}.${project.packaging}"/>
+                                      tofile="${project.build.directory}/${package.final.name}.${project.packaging}"
+                                      overwrite="true"/>
                             </target>
                         </configuration>
                     </execution>
