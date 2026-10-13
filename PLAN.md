@@ -147,7 +147,12 @@ follow-ups.
    copied to Google Drive (mounted with `google-drive-ocamlfuse`), byte-verified and kept 90
    days offsite; a failed copy fails the nightly run loudly (PR #25)
 9. ⬜ Analyze and if there is useful stuff, move the remaining `.junie/` design docs under `docs/`
-10. ⬜ UI improvements (TBD)
+10. ⬜ UI improvements, starting from watching the live engine: a **live page** (per-strategy state —
+    running/connected/last error, the open position, recent orders; auto-refreshing; start/stop buttons
+    and an unrealized-P&L reading to decide) and an **account history page** (closed round trips with
+    realised P&L: a filterable list plus a per-position detail view, modelled on the broker-app
+    screenshots shared 2026-10-13; whether Bitvavo's own ledger (`GET /api/bots/{botId}/transactions`)
+    also gets a page is part of the discussion)
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed
