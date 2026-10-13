@@ -65,6 +65,8 @@ public class BacktestUiController {
         if (!model.containsAttribute("form")) {
             model.addAttribute("form", BacktestRunForm.defaults());
         }
+        // The fee-cover hint's blank-field fallbacks: the engine's own defaults, rendered into the page
+        model.addAttribute("defaults", BacktestRunForm.defaults());
         populate(model);
         return "backtests/form";
     }

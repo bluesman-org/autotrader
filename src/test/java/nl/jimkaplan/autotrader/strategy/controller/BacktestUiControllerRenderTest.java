@@ -58,8 +58,12 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 .andExpect(content().string(containsString("SAR BEARISH CROSSOVER")))
                 .andExpect(content().string(containsString("Run sweep")))
-                // The fee-cover hint and its script ship with the form
+                // The fee-cover hint, its default data attributes and the ids its script looks up
                 .andExpect(content().string(containsString("id=\"fee-hint\"")))
+                .andExpect(content().string(containsString("id=\"initialCapital\"")))
+                .andExpect(content().string(containsString("id=\"amountPerBuy\"")))
+                .andExpect(content().string(containsString("id=\"feeRate\"")))
+                .andExpect(content().string(containsString("data-default-fee-rate")))
                 .andExpect(content().string(containsString("INSUFFICIENT_BALANCE")));
     }
 
