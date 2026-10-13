@@ -197,8 +197,13 @@ public class LiveOrderReconciliationService {
             }
             highest = sequence;
             if (!"filled".equalsIgnoreCase(order.getStatus())) {
-                log.warn("Recoverable exchange order {} of strategy {} is {} (not filled); "
-                        + "left for a later boot", order.getOrderId(), strategy.getId(), order.getStatus());
+                // Persist it as PENDING exactly as the pre-write would have: the normal resolution
+                // then settles it from the exchange on a later boot, which a plain skip could
+                // never do once the sequence has advanced past it.
+                liveOrderRepository.save(recoveredPendingRow(strategy, order, candidate));
+                recovered = true;
+                log.info("Recovered unfilled live order {} of strategy {} from the exchange's history",
+                        order.getOrderId(), strategy.getId());
                 continue;
             }
             liveOrderRepository.save(recoveredRow(strategy, order, candidate));
@@ -231,6 +236,32 @@ public class LiveOrderReconciliationService {
                 .dryRun(false)
                 .signalOpenTime(0)
                 .reason("recovered after a restore: filled at the exchange but its record was lost")
+                .amountQuote(amountQuote)
+                .quantity(quantity)
+                .price(price)
+                .fee(order.getFeePaid() == null ? null : order.getFeePaid().doubleValue())
+                .orderId(String.valueOf(order.getOrderId()))
+                .clientOrderId(clientOrderId)
+                .createdTime(Instant.ofEpochMilli(order.getCreated()))
+                .build();
+    }
+
+    /**
+     * One {@code PENDING} row for a matched exchange order that has not filled yet, mirroring what
+     * the pre-write would have saved: the normal resolution settles it once the exchange fills it.
+     */
+    private static LiveOrder recoveredPendingRow(LiveStrategy strategy, OrderResponse order, String clientOrderId) {
+        Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
+        Double quantity = TradeMath.amount(order.getFilledAmount(), order.getAmount());
+        Double price = TradeMath.price(order.getFilledAmount(), order.getFilledAmountQuote());
+        return LiveOrder.builder()
+                .strategyId(strategy.getId())
+                .market(strategy.getMarket())
+                .side(order.getSide().toUpperCase(Locale.ROOT))
+                .status("PENDING")
+                .dryRun(false)
+                .signalOpenTime(0)
+                .reason("recovered unfilled after a restore: awaiting the exchange's fill")
                 .amountQuote(amountQuote)
                 .quantity(quantity)
                 .price(price)

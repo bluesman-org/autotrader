@@ -516,20 +516,33 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
-    void aRecoveredOrderStillOpenIsLeftForALaterBoot() {
+    void aRecoveredOrderStillOpenIsPersistedAsPending() {
         LiveStrategy strategy = strategy(false, MARKET);
         strategy.setNextOrderSequence(3);
         when(liveStrategyService.all()).thenReturn(List.of(strategy));
         when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(bot()));
+        UUID lostClientOrderId = ClientOrderIds.forSequence(STRATEGY_ID, 3);
         when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
                 .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy", "open", START + HOUR,
-                        ClientOrderIds.forSequence(STRATEGY_ID, 3), null, null, null)});
+                        lostClientOrderId, null, null, null)});
+        List<LiveOrder> stored = new ArrayList<>();
         when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
-                .thenReturn(List.of());
+                .thenAnswer(invocation -> new ArrayList<>(stored));
+        when(liveOrderRepository.save(any(LiveOrder.class))).thenAnswer(invocation -> {
+            LiveOrder row = invocation.getArgument(0);
+            stored.add(row);
+            return row;
+        });
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
 
         service.reconcileAll();
 
-        verify(liveOrderRepository, never()).save(any());
+        ArgumentCaptor<LiveOrder> saved = ArgumentCaptor.forClass(LiveOrder.class);
+        verify(liveOrderRepository).save(saved.capture());
+        assertEquals("PENDING", saved.getValue().getStatus());
+        assertEquals(lostClientOrderId.toString(), saved.getValue().getClientOrderId());
+        assertTrue(saved.getValue().getReason().contains("recovered"));
         verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
     }
 

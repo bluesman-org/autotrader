@@ -54,8 +54,8 @@ candle channel of its market and interval. Our own policies:
   is deterministic so the boot reconciliation can re-derive its own possible IDs and recognise
   orders whose records were lost to a restore; Bitvavo requires the value to be unique only across
   open orders, so a sequence number whose order was never accepted (or has long filled) is safe to
-  reuse. The persisted sequence is advanced before the pre-write, so a crash can skip a number but
-  never let a later order reuse one.
+  reuse. The persisted sequence is advanced (a monotonic update — it can never move backwards)
+  before the pre-write, so a crash can skip a number but never let a later order reuse one.
   The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee, or
   to `FAILED` with the error — so an ambiguous timeout between the write and the response stays
   reconcilable at the next boot (see "Reconciliation on startup"). An order rejected before it is
@@ -149,8 +149,9 @@ brings the two back together:
 - Rows that existed at the dump are settled by client order ID as usual (a `PENDING` that filled, a
   `FAILED` the exchange accepted).
 - Orders placed after the dump have no restored row — the recovery re-derives their IDs from the
-  strategy's sequence counter (which the dump itself carries), recreates the rows from the
-  exchange's figures, and lets the position sync close or reopen the position accordingly.
+  strategy's sequence counter (which the dump itself carries) and recreates the rows from the
+  exchange's figures; an order not yet filled is recorded as `PENDING`, so the normal resolution
+  settles it once it fills, and the position sync closes or reopens the position accordingly.
 - What it cannot see: orders pushed beyond the 1000-order history page, and anything not placed by
   the engine (manual trades, the legacy webhook) — those stay the operator's business. After a
   restore, check the recovery log lines and the exchange's balance view; decrypting restored bot

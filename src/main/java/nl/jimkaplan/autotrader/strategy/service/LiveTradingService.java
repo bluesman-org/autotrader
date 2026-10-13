@@ -182,12 +182,7 @@ public class LiveTradingService {
                 return;
             }
 
-            long sequence = strategy.getNextOrderSequence();
-            UUID clientOrderId = ClientOrderIds.forSequence(strategy.getId(), sequence);
-            // Advance the persisted sequence before anything can be sent: a crash may skip a
-            // number (harmless) but can never let a later order reuse one.
-            liveStrategyRepository.updateNextOrderSequence(strategy.getId(), sequence + 1);
-            strategy.setNextOrderSequence(sequence + 1);
+            UUID clientOrderId = nextClientOrderId(strategy);
             double estimatedQuantity = amountQuote.doubleValue() / price;
             double estimatedFee = amountQuote.doubleValue() * BacktestDefaults.FEE_RATE;
             pending = preWrite(strategy, decision.signalOpenTime(), "BUY", decision.reason(), clientOrderId,
@@ -269,12 +264,7 @@ public class LiveTradingService {
                 return;
             }
 
-            long sequence = strategy.getNextOrderSequence();
-            UUID clientOrderId = ClientOrderIds.forSequence(strategy.getId(), sequence);
-            // Advance the persisted sequence before anything can be sent: a crash may skip a
-            // number (harmless) but can never let a later order reuse one.
-            liveStrategyRepository.updateNextOrderSequence(strategy.getId(), sequence + 1);
-            strategy.setNextOrderSequence(sequence + 1);
+            UUID clientOrderId = nextClientOrderId(strategy);
             double estimatedProceeds = position.getQuantity() * price;
             pending = preWrite(strategy, decision.signalOpenTime(), "SELL", decision.reason(), clientOrderId,
                     estimatedProceeds, position.getQuantity(), price,
@@ -307,6 +297,19 @@ public class LiveTradingService {
                 applyFailure(pending, ex.getMessage());
             }
         }
+    }
+
+    /**
+     * The next client order ID for a real order, derived from the strategy's persisted sequence.
+     * The sequence advances first (a monotonic update, so a crash can only skip a number), the
+     * in-memory copy mirrors it, and the ID is derived from the consumed number — keeping the
+     * three steps in one place so no order path can break the recovery invariant silently.
+     */
+    private UUID nextClientOrderId(LiveStrategy strategy) {
+        long sequence = strategy.getNextOrderSequence();
+        liveStrategyRepository.updateNextOrderSequence(strategy.getId(), sequence + 1);
+        strategy.setNextOrderSequence(sequence + 1);
+        return ClientOrderIds.forSequence(strategy.getId(), sequence);
     }
 
     /**
