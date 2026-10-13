@@ -28,10 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * which is what the backtester does. A dry-run replay of a history therefore reproduces a backtest
  * over that history.
  *
- * <p>Two cases pin the two claims the runner relies on: prefix equality (candle-by-candle
- * evaluation) and the bounded window the runner actually uses — warm-up plus both MACD periods
- * plus {@link LiveStrategyRunner#CONVERGENCE_MARGIN_CANDLES} — whose front-truncation the margin
- * has to make invisible.</p>
+ * <p>The first case pins prefix equality (candle-by-candle evaluation) and the second that the
+ * seed margin — warm-up plus both MACD periods plus
+ * {@link LiveStrategyRunner#CONVERGENCE_MARGIN_CANDLES} — makes a front-truncated series converge
+ * to the whole series for a benign fixture with unambiguous flips. That convergence is what the
+ * runner's fixed anchor buys, and it is only guaranteed for clean flips: on noisy real data with
+ * borderline Parabolic SAR comparisons, near-identical series can still flip on different candles —
+ * which is exactly why the runner anchors its series instead of sliding a window (see
+ * {@code docs/live-engine.md}).</p>
  */
 class LiveSignalReplayTest {
 
@@ -74,7 +78,7 @@ class LiveSignalReplayTest {
     }
 
     @Test
-    void aFrontTruncatedWindowMatchesTheWholeSeries() {
+    void aFrontTruncatedWindowMatchesTheWholeSeriesForCleanFlips() {
         List<Candle> candles = wavySeries(1_600);
         StrategyDefinition definition = definition();
         CandleSeries full = CandleSeries.of(candles);

@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
@@ -70,7 +71,7 @@ class LiveStrategyRunnerTest {
     }
 
     @Test
-    void start_seedsTheWindowAndStartsTheStream() {
+    void start_seedsTheSeriesAndStartsTheStream() {
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(candles(300, 0));
 
@@ -79,6 +80,36 @@ class LiveStrategyRunnerTest {
         verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any());
         verify(stream).start();
         assertTrue(listenerCaptor.getValue() != null);
+    }
+
+    @Test
+    void start_persistsTheSeriesAnchorOnceAndSeedsFromIt() {
+        seedWith(candles(300, 0));
+        long beforeStart = System.currentTimeMillis();
+
+        runner.start();
+
+        ArgumentCaptor<Long> anchorCaptor = ArgumentCaptor.forClass(Long.class);
+        verify(liveStrategyRepository).updateSeriesStartTime(eq(STRATEGY_ID), anchorCaptor.capture());
+        long window = 1007L * HOUR; // warm-up 0 + MACD slow 5 + signal 2 + margin 1000, one-hour candles
+        long anchor = anchorCaptor.getValue();
+        assertTrue(anchor <= beforeStart - window && anchor > beforeStart - window - 60_000,
+                "the anchor should be the start time minus the seed window, but was " + anchor);
+        verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(anchor)), any());
+    }
+
+    @Test
+    void start_seedsFromTheStoredAnchorWithoutMovingIt() {
+        long anchor = START - 1007L * HOUR;
+        strategy.setSeriesStartTime(anchor);
+        seedWith(candles(300, 0));
+
+        runner.start();
+
+        verify(liveStrategyRepository, never()).updateSeriesStartTime(any(), anyLong());
+        verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(anchor)), any());
     }
 
     @Test
@@ -214,7 +245,7 @@ class LiveStrategyRunnerTest {
     }
 
     @Test
-    void theSeriesIsTrimmedToTheWindow() {
+    void theSeriesIsNeverTrimmed() {
         ReflectionTestUtils.setField(runner, "convergenceMarginCandles", 2);
         seedWith(List.of());
         for (int i = 0; i < 11; i++) {
@@ -230,10 +261,11 @@ class LiveStrategyRunnerTest {
         ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
         verify(liveTradingService, times(11)).decide(eq(strategy), seriesCaptor.capture());
         List<Candle> series = seriesCaptor.getValue();
-        // warm-up 0 + slow 5 + signal 2 + margin 2 = 9
-        assertEquals(9, series.size());
-        assertEquals(START + 2 * HOUR, series.get(0).getOpenTime());
-        assertEquals(START + 10 * HOUR, series.get(8).getOpenTime());
+        // warm-up 0 + slow 5 + signal 2 + margin 2 = 9; unlike the old sliding window, nothing is
+        // dropped — the anchored start must never move
+        assertEquals(11, series.size());
+        assertEquals(START, series.get(0).getOpenTime());
+        assertEquals(START + 10 * HOUR, series.get(10).getOpenTime());
     }
 
     @Test

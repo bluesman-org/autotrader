@@ -27,15 +27,18 @@ candle channel of its market and interval. Our own policies:
 
 ## Deciding and trading
 
-- The decision bar is the candle that just closed. The engine evaluates a **bounded window** of the
-  strategy's history for its market and interval — the warm-up plus the MACD slow and signal
-  periods plus a 1,000-candle convergence margin, seeded from the store — with the same rules,
-  parameters and sizing as a backtest. The MACD/PSAR recursions converge long before that margin,
-  so the decision at a bar matches what a whole-history evaluation produces there, without
-  re-reading or re-computing a history that grows for the life of the process. The replay gate
-  (`LiveSignalReplayTest`) pins both halves of that argument: one case asserts candle-by-candle
-  (prefix) equality of the signals and the MACD/SAR values, the other asserts that the exact window
-  the runner uses — front-truncated — still matches the whole-series values at its last bar.
+- The decision bar is the candle that just closed. The engine evaluates an **anchored series** for
+  its market and interval: on the first start it fixes the series start at the strategy's start
+  minus the seed window (warm-up plus the MACD slow and signal periods plus a 1,000-candle margin),
+  persists it as `seriesStartTime`, and from then on only appends closed candles — never truncating.
+  The anchor matters because the Parabolic SAR's flip timing is start-sensitive (the rehearsal of
+  2026-10-13 showed two near-identical backtests exiting on different candles): an append-only,
+  fixed-start series makes restarts replay the identical decisions, and a backtest started at the
+  same anchor with `warmUp` set to the window length reproduces them exactly. If the store cannot
+  reach back to the anchor (old data unavailable, e.g. right after a restore), the series starts
+  later and a warning says so. The replay gate (`LiveSignalReplayTest`) still pins the evaluator:
+  one case asserts candle-by-candle (prefix) equality of the signals and the MACD/SAR values, the
+  other that a front-truncated series matches the whole series at its last bar for its fixtures.
 - Signals inside the warm-up (`warmUpCandles`, default 200, as in a backtest) are ignored.
 - **No stale replay**: only candles that close while the strategy runs are acted on. The seed
   itself is never traded, so downtime is not replayed; a candle that closes during a brief stream

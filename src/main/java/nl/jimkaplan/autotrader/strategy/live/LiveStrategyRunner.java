@@ -15,12 +15,21 @@ import java.util.List;
 /**
  * The runtime of one live strategy.
  *
- * <p>At start it seeds a bounded candle window from the store — warm-up plus a convergence margin,
- * enough for the recursive indicators to have converged, so the decision matches what a whole
- * history produces at the same bar — and then listens to the stream's closed-candle boundaries.
- * Each closed candle is resolved from the store (the REST-filled candles are authoritative) and
+ * <p>At start it seeds the candle series from a fixed anchor — the strategy's first start minus the
+ * seed window (warm-up plus the MACD periods plus a convergence margin), persisted as
+ * {@code seriesStartTime} and never moved — and then listens to the stream's closed-candle
+ * boundaries, appending every closed candle to the same series. The series is append-only and
+ * identical across restarts. It is deliberately not truncated to a rolling window: the Parabolic
+ * SAR's flip timing is start-sensitive, so a window that slides (or is re-seeded at a different
+ * point) produces exits on slightly different candles for near-identical runs. A backtest started
+ * at the same anchor with the warm-up set to the window length therefore reproduces the live
+ * decisions exactly — for MACD and PSAR alike.</p>
+ *
+ * <p>Each closed candle is resolved from the store (the REST-filled candles are authoritative) and
  * appended; a boundary whose candle is missing (also after a long outage) is backfilled on the next
- * append so the in-memory series keeps matching the stored history.</p>
+ * append so the in-memory series keeps matching the stored history. If the store cannot reach back
+ * to the anchor (old data unavailable, e.g. after a restore), the series simply starts later and a
+ * warning says so.</p>
  *
  * <p>Decisions are filled immediately at the arriving candle's open — the stream passes the open
  * price of the candle that just started, so a live order goes out at the moment its recorded price
@@ -31,8 +40,11 @@ import java.util.List;
 public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
 
     /**
-     * Candles kept beyond the warm-up so the MACD/PSAR recursions have converged; both converge
-     * orders of magnitude faster than this margin.
+     * Candles of history before the strategy's start that the fixed series anchor includes, so the
+     * MACD recursion has converged and the Parabolic SAR has a stable trajectory to start from.
+     * MACD converges well within this margin; the SAR's trajectory only coincides with a longer
+     * history's when its flips are unambiguous, which is why the anchor is persisted and never
+     * re-derived (see {@code docs/live-engine.md}).
      */
     static final int CONVERGENCE_MARGIN_CANDLES = 1_000;
 
@@ -107,14 +119,26 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
 
     void seed() {
         Instant now = Instant.now();
-        Instant from = Instant.ofEpochMilli(now.toEpochMilli() - windowLength() * interval.getMillis());
+        long seriesStart = strategy.getSeriesStartTime();
+        if (seriesStart == 0) {
+            seriesStart = now.toEpochMilli() - (long) windowLength() * interval.getMillis();
+            strategy.setSeriesStartTime(seriesStart);
+            liveStrategyRepository.updateSeriesStartTime(strategy.getId(), seriesStart);
+        }
+        Instant from = Instant.ofEpochMilli(seriesStart);
         candleHistoryService.ensureRange(strategy.getMarket(), interval, from, now);
         series.addAll(candleHistoryService.getCandles(strategy.getMarket(), interval, from, now));
         if (!series.isEmpty()) {
             lastAppendedOpenTime = series.get(series.size() - 1).getOpenTime();
         }
-        log.info("Live strategy {} seeded with {} {} {} candles (window {})", strategy.getId(), series.size(),
-                strategy.getMarket(), strategy.getInterval(), windowLength());
+        long expected = (now.toEpochMilli() - seriesStart) / interval.getMillis();
+        if (series.size() < expected) {
+            log.warn("Live strategy {} is anchored at {} but the store has only {} of about {} {} {} candles; "
+                            + "the series starts later", strategy.getId(), from, series.size(), expected,
+                    strategy.getMarket(), strategy.getInterval());
+        }
+        log.info("Live strategy {} seeded with {} {} {} candles (anchor {})", strategy.getId(), series.size(),
+                strategy.getMarket(), strategy.getInterval(), from);
     }
 
     @Override
@@ -193,9 +217,10 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
                 && candle.getOpenTime() - lastAppendedOpenTime > interval.getMillis()) {
             backfill(lastAppendedOpenTime + interval.getMillis(), candle.getOpenTime() - interval.getMillis());
         }
+        // The series is append-only: its anchored start must never move, or the Parabolic SAR's
+        // flips — and with them the exits — shift for the very same candle history.
         series.add(candle);
         lastAppendedOpenTime = candle.getOpenTime();
-        trim();
     }
 
     /**
@@ -215,20 +240,12 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
                 appended++;
             }
         }
-        trim();
         if (appended > 0) {
             log.info("Backfilled {} skipped {} {} candles into the live series", appended, strategy.getMarket(),
                     strategy.getInterval());
         } else {
             log.warn("The store has no {} {} candles between {} and {} to backfill", strategy.getMarket(),
                     strategy.getInterval(), fromOpenTime, toOpenTime);
-        }
-    }
-
-    private void trim() {
-        int window = windowLength();
-        while (series.size() > window) {
-            series.remove(0);
         }
     }
 

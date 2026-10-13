@@ -54,4 +54,15 @@ public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, St
     @Query("{ '_id' : ?0 }")
     @Update("{ '$max' : { 'next_order_sequence' : ?1 } }")
     void updateNextOrderSequence(String id, long sequence);
+
+    /**
+     * Fix the runner's series anchor, written once on the first seed and never again; the seed
+     * always starts there so restarts replay the identical series.
+     *
+     * @param id              The strategy ID
+     * @param seriesStartTime The fixed series start, epoch millis
+     */
+    @Query("{ '_id' : ?0 }")
+    @Update("{ '$set' : { 'series_start_time' : ?1 } }")
+    void updateSeriesStartTime(String id, long seriesStartTime);
 }
