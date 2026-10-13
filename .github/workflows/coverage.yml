@@ -4,6 +4,14 @@ on:
   pull_request:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'wiki/**'
+      - 'improvement-plans/**'
+      - 'logs/**'
+      - '.idea/**'
+      - '.vscode/**'
 
 jobs:
   coverage:
