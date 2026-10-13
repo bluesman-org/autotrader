@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.model.document;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -106,6 +107,16 @@ public class LiveStrategy extends BaseDocument {
      */
     @Field("last_evaluated_open_time")
     private long lastEvaluatedOpenTime;
+
+    /**
+     * The sequence number of the next real order; feeds the deterministic client order ID so a
+     * record lost to a restore can be re-derived from the exchange. 0 when nothing was sent yet.
+     * Engine bookkeeping only: kept out of the API so the next order's ID is not derivable from
+     * the published strategy.
+     */
+    @JsonIgnore
+    @Field("next_order_sequence")
+    private long nextOrderSequence;
 
     /**
      * When the strategy was created.

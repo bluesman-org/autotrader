@@ -10,6 +10,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
@@ -64,6 +65,7 @@ public class LiveTradingService {
     private final BitvavoApiClient bitvavoApiClient;
     private final LiveOrderRepository liveOrderRepository;
     private final LivePositionRepository livePositionRepository;
+    private final LiveStrategyRepository liveStrategyRepository;
 
     /**
      * Decide what the last closed candle of the series asks for.
@@ -180,7 +182,7 @@ public class LiveTradingService {
                 return;
             }
 
-            UUID clientOrderId = UUID.randomUUID();
+            UUID clientOrderId = nextClientOrderId(strategy);
             double estimatedQuantity = amountQuote.doubleValue() / price;
             double estimatedFee = amountQuote.doubleValue() * BacktestDefaults.FEE_RATE;
             pending = preWrite(strategy, decision.signalOpenTime(), "BUY", decision.reason(), clientOrderId,
@@ -262,7 +264,7 @@ public class LiveTradingService {
                 return;
             }
 
-            UUID clientOrderId = UUID.randomUUID();
+            UUID clientOrderId = nextClientOrderId(strategy);
             double estimatedProceeds = position.getQuantity() * price;
             pending = preWrite(strategy, decision.signalOpenTime(), "SELL", decision.reason(), clientOrderId,
                     estimatedProceeds, position.getQuantity(), price,
@@ -295,6 +297,19 @@ public class LiveTradingService {
                 applyFailure(pending, ex.getMessage());
             }
         }
+    }
+
+    /**
+     * The next client order ID for a real order, derived from the strategy's persisted sequence.
+     * The sequence advances first (a monotonic update, so a crash can only skip a number), the
+     * in-memory copy mirrors it, and the ID is derived from the consumed number — keeping the
+     * three steps in one place so no order path can break the recovery invariant silently.
+     */
+    private UUID nextClientOrderId(LiveStrategy strategy) {
+        long sequence = strategy.getNextOrderSequence();
+        liveStrategyRepository.updateNextOrderSequence(strategy.getId(), sequence + 1);
+        strategy.setNextOrderSequence(sequence + 1);
+        return ClientOrderIds.forSequence(strategy.getId(), sequence);
     }
 
     /**

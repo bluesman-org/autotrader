@@ -41,4 +41,17 @@ public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, St
     @Query("{ '_id' : ?0 }")
     @Update("{ '$set' : { 'last_evaluated_open_time' : ?1 } }")
     void updateLastEvaluatedOpenTime(String id, long openTime);
+
+    /**
+     * Advance the order sequence without touching any other field. The update is a {@code $max},
+     * so it is monotonic: a concurrent caller whose value had lagged can never move the counter
+     * backwards onto an ID the exchange might still hold open. (The two callers — the runner and
+     * the boot reconciliation — are serialized by design; this makes the field safe regardless.)
+     *
+     * @param id       The strategy ID
+     * @param sequence The desired next sequence number; kept only when it exceeds the stored one
+     */
+    @Query("{ '_id' : ?0 }")
+    @Update("{ '$max' : { 'next_order_sequence' : ?1 } }")
+    void updateNextOrderSequence(String id, long sequence);
 }

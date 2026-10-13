@@ -8,6 +8,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
@@ -18,6 +19,7 @@ import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,7 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -61,6 +65,9 @@ class LiveTradingServiceTest {
 
     @Mock
     private LivePositionRepository livePositionRepository;
+
+    @Mock
+    private LiveStrategyRepository liveStrategyRepository;
 
     @InjectMocks
     private LiveTradingService liveTradingService;
@@ -327,6 +334,58 @@ class LiveTradingServiceTest {
         assertNull(order.getClientOrderId());
         assertEquals("connect timed out", order.getErrorMessage());
         verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveBuyDerivesTheClientOrderIdFromTheSequenceAndAdvancesIt() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(UUID.randomUUID());
+        response.setStatus("COMPLETED");
+        response.setFilledAmount(new BigDecimal("0.001"));
+        response.setFilledAmountQuote(new BigDecimal("100.00"));
+        response.setFeePaid(new BigDecimal("0.2"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        ArgumentCaptor<CreateOrderRequest> requestCaptor = ArgumentCaptor.forClass(CreateOrderRequest.class);
+        verify(bitvavoApiClient).post(eq("/order"), requestCaptor.capture(),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET));
+        assertEquals(ClientOrderIds.forSequence(STRATEGY_ID, 0).toString(),
+                requestCaptor.getValue().getClientOrderId().toString());
+        assertEquals(1L, strategy.getNextOrderSequence());
+        verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 1);
+    }
+
+    @Test
+    void fill_liveBuyAdvancesTheSequenceBeforeTheRowIsWritten() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(UUID.randomUUID());
+        response.setStatus("COMPLETED");
+        response.setFilledAmount(new BigDecimal("0.001"));
+        response.setFilledAmountQuote(new BigDecimal("100.00"));
+        response.setFeePaid(new BigDecimal("0.2"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        InOrder inOrder = inOrder(liveStrategyRepository, liveOrderRepository);
+        inOrder.verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 1);
+        inOrder.verify(liveOrderRepository, times(2)).save(any(LiveOrder.class));
     }
 
     @Test

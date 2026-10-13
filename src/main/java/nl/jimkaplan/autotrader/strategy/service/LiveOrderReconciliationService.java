@@ -7,6 +7,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BotConfigurationService;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
@@ -18,9 +19,12 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Reconciles the live engine's recorded orders and position with the exchange after a crash between
@@ -60,6 +64,14 @@ public class LiveOrderReconciliationService {
     static final int ORDER_HISTORY_LIMIT = 1000;
 
     /**
+     * How many sequence numbers the restore recovery derives beyond the strategy's counter. The
+     * bound matches the history page: a lost order cannot be recovered from a page that does not
+     * contain it, and an engine measured in trades per day never places more than this many
+     * orders between a dump and a restore.
+     */
+    static final int ORDER_RECOVERY_RANGE = 1000;
+
+    /**
      * The strategy's order history indexed by client order ID, with whether the page is known to be
      * complete. A complete page is non-null, shorter than the requested limit (so there are no more
      * pages) and had no entry that carries a client order ID skipped as incomplete. An entry without
@@ -74,6 +86,7 @@ public class LiveOrderReconciliationService {
     private final BitvavoApiClient bitvavoApiClient;
     private final LiveOrderRepository liveOrderRepository;
     private final LivePositionRepository livePositionRepository;
+    private final LiveStrategyRepository liveStrategyRepository;
 
     /**
      * Reconcile every non-dry-run strategy with a resolvable bot against the exchange.
@@ -117,6 +130,9 @@ public class LiveOrderReconciliationService {
         for (LiveOrder row : rows) {
             resolve(strategy, row, indexed);
         }
+        if (recoverLostOrders(strategy, indexed, rows)) {
+            rows = liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(strategy.getId());
+        }
         syncPosition(strategy, rows);
     }
 
@@ -154,6 +170,119 @@ public class LiveOrderReconciliationService {
             byClientOrderId.put(order.getClientOrderId().toString(), order);
         }
         return new History(byClientOrderId, complete);
+    }
+
+    /**
+     * Re-derive this strategy's own possible client order IDs for the sequence range starting at
+     * its persisted counter. An exchange order that matches and that no local row claims can only
+     * be one whose record was lost — the pre-write row of everything the engine sends survives on
+     * disk, so after a restore the derivation is the only way back to those orders. Every match
+     * whose row is recreated is rebuilt from the exchange's figures, and the sequence advances
+     * past every match.
+     *
+     * @return Whether a row was recovered (so the caller should re-read the rows)
+     */
+    private boolean recoverLostOrders(LiveStrategy strategy, History history, List<LiveOrder> rows) {
+        Set<String> claimed = rows.stream()
+                .map(LiveOrder::getClientOrderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        long from = strategy.getNextOrderSequence();
+        long highest = from - 1;
+        boolean recovered = false;
+        for (long sequence = from; sequence < from + ORDER_RECOVERY_RANGE; sequence++) {
+            String candidate = ClientOrderIds.forSequence(strategy.getId(), sequence).toString();
+            OrderResponse order = history.byClientOrderId().get(candidate);
+            if (order == null || claimed.contains(candidate)) {
+                continue;
+            }
+            highest = sequence;
+            if (!"filled".equalsIgnoreCase(order.getStatus())) {
+                boolean canStillFill = "open".equalsIgnoreCase(order.getStatus())
+                        || "partiallyFilled".equalsIgnoreCase(order.getStatus());
+                if (!canStillFill) {
+                    // Terminal (or unreadable): a PENDING row could never settle, so keep the
+                    // skip and warn — including about any part the exchange did fill.
+                    log.warn("Recoverable exchange order {} of strategy {} is {} (cannot still fill{})"
+                                    + "; left alone", order.getOrderId(), strategy.getId(),
+                            order.getStatus(), order.getFilledAmountQuote() == null
+                                    ? "" : ", partially filled " + order.getFilledAmountQuote());
+                    continue;
+                }
+                // Persist it as PENDING exactly as the pre-write would have: the normal resolution
+                // then settles it once it fills, which a plain skip could never do once the
+                // sequence has advanced past it.
+                liveOrderRepository.save(recoveredPendingRow(strategy, order, candidate));
+                recovered = true;
+                log.info("Recovered unfilled live order {} of strategy {} from the exchange's history",
+                        order.getOrderId(), strategy.getId());
+                continue;
+            }
+            liveOrderRepository.save(recoveredRow(strategy, order, candidate));
+            recovered = true;
+            log.info("Recovered live order {} of strategy {} from the exchange's history",
+                    order.getOrderId(), strategy.getId());
+        }
+        if (highest >= from) {
+            long next = highest + 1;
+            liveStrategyRepository.updateNextOrderSequence(strategy.getId(), next);
+            strategy.setNextOrderSequence(next);
+        }
+        return recovered;
+    }
+
+    /**
+     * One {@code FILLED} row rebuilt from the exchange's figures for an order whose record was
+     * lost. The trigger candle is unknowable, so the row carries no signal open time and says so
+     * in its reason; the position sync falls back to the exchange's creation instant.
+     */
+    private static LiveOrder recoveredRow(LiveStrategy strategy, OrderResponse order, String clientOrderId) {
+        Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
+        Double quantity = TradeMath.amount(order.getFilledAmount(), order.getAmount());
+        Double price = TradeMath.price(order.getFilledAmount(), order.getFilledAmountQuote());
+        return LiveOrder.builder()
+                .strategyId(strategy.getId())
+                .market(strategy.getMarket())
+                .side(order.getSide().toUpperCase(Locale.ROOT))
+                .status("FILLED")
+                .dryRun(false)
+                .signalOpenTime(0)
+                .reason("recovered after a restore: filled at the exchange but its record was lost")
+                .amountQuote(amountQuote)
+                .quantity(quantity)
+                .price(price)
+                .fee(order.getFeePaid() == null ? null : order.getFeePaid().doubleValue())
+                .orderId(String.valueOf(order.getOrderId()))
+                .clientOrderId(clientOrderId)
+                .createdTime(Instant.ofEpochMilli(order.getCreated()))
+                .build();
+    }
+
+    /**
+     * One {@code PENDING} row for a matched exchange order that can still fill, mirroring what the
+     * pre-write would have saved: the normal resolution settles it once it fills (an order that
+     * later turns terminal stays PENDING under the v1 filled-only resolution, warned each boot).
+     */
+    private static LiveOrder recoveredPendingRow(LiveStrategy strategy, OrderResponse order, String clientOrderId) {
+        Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
+        Double quantity = TradeMath.amount(order.getFilledAmount(), order.getAmount());
+        Double price = TradeMath.price(order.getFilledAmount(), order.getFilledAmountQuote());
+        return LiveOrder.builder()
+                .strategyId(strategy.getId())
+                .market(strategy.getMarket())
+                .side(order.getSide().toUpperCase(Locale.ROOT))
+                .status("PENDING")
+                .dryRun(false)
+                .signalOpenTime(0)
+                .reason("recovered unfilled after a restore: awaiting the exchange's fill")
+                .amountQuote(amountQuote)
+                .quantity(quantity)
+                .price(price)
+                .fee(order.getFeePaid() == null ? null : order.getFeePaid().doubleValue())
+                .orderId(String.valueOf(order.getOrderId()))
+                .clientOrderId(clientOrderId)
+                .createdTime(Instant.ofEpochMilli(order.getCreated()))
+                .build();
     }
 
     /**
