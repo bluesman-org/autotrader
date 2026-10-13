@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8081/autotrader",
+      "url": "http://localhost:8082/autotrader",
       "description": "Generated server url"
     }
   ],

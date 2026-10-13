@@ -5,7 +5,7 @@ info:
   description: "API for automating trading strategies"
   version: "1.0"
 servers:
-  - url: "http://localhost:8081/autotrader"
+  - url: "http://localhost:8082/autotrader"
     description: "Generated server url"
 tags:
   - name: "Live strategies"

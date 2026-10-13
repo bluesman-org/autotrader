@@ -68,6 +68,7 @@
             </div>
             <p class="muted">Max drawdown ranks ascending (smaller is better); the other metrics rank descending.
                 Blank optional fields take the documented defaults.</p>
+            <div class="banner warn" id="fee-hint" hidden></div>
         </fieldset>
 
         <fieldset>
@@ -147,5 +148,40 @@
         </table>
     </div>
 </main>
+<script>
+    // Warn before running when the initial capital cannot cover a buy plus its fee: every entry
+    // signal would then skip as INSUFFICIENT_BALANCE. The fallbacks mirror BacktestDefaults for
+    // blank optional fields.
+    (function () {
+        var capital = document.getElementById('initialCapital');
+        var amount = document.getElementById('amountPerBuy');
+        var feeRate = document.getElementById('feeRate');
+        var hint = document.getElementById('fee-hint');
+        if (!capital || !amount || !feeRate || !hint) {
+            return;
+        }
+        function value(field, fallback) {
+            var parsed = parseFloat(field.value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+        function update() {
+            var capitalValue = value(capital, 1000);
+            var amountValue = value(amount, 100);
+            var feeValue = value(feeRate, 0.002);
+            var needed = amountValue * (1 + feeValue);
+            var short = capitalValue < needed;
+            hint.hidden = !short;
+            if (short) {
+                hint.textContent = 'Every entry signal would be skipped as INSUFFICIENT_BALANCE: a buy '
+                    + 'needs at least ' + needed.toFixed(2) + ' EUR (the amount per buy plus its fee), '
+                    + 'but the initial capital is ' + capitalValue.toFixed(2) + ' EUR.';
+            }
+        }
+        [capital, amount, feeRate].forEach(function (field) {
+            field.addEventListener('input', update);
+        });
+        update();
+    })();
+</script>
 </body>
 </html>

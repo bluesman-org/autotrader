@@ -1,0 +1,263 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - link "📈 Autotrader" [ref=e3] [cursor=pointer]:
+      - /url: /autotrader/
+    - link "Backtests" [ref=e4] [cursor=pointer]:
+      - /url: /autotrader/ui/backtests
+    - link "API docs" [ref=e5] [cursor=pointer]:
+      - /url: /autotrader/swagger-ui.html
+  - main [ref=e6]:
+    - heading "Strategy backtests" [level=1] [ref=e7]
+    - paragraph [ref=e8]: Sweeps the entry × exit rule sets and the indicator parameter candidates over stored candles, optimises on the earlier part of the range and verifies on the held-out newer part. The top ranked combinations are kept; missing candles are fetched from Bitvavo first.
+    - generic [ref=e9]:
+      - group "Data" [ref=e10]:
+        - generic [ref=e12]:
+          - generic [ref=e13]:
+            - text: Market
+            - textbox "Market" [ref=e14]: BTC-EUR
+          - generic [ref=e15]:
+            - text: Interval
+            - combobox "Interval" [ref=e16]:
+              - option "1m"
+              - option "5m"
+              - option "15m"
+              - option "30m"
+              - option "1h" [selected]
+              - option "2h"
+              - option "4h"
+              - option "6h"
+              - option "8h"
+              - option "12h"
+              - option "1d"
+          - generic [ref=e17]:
+            - text: From (UTC)
+            - textbox "From (UTC)" [ref=e18]: 2026-07-05
+          - generic [ref=e19]:
+            - text: To (UTC, inclusive)
+            - textbox "To (UTC, inclusive)" [ref=e20]: 2026-10-13
+      - group "Simulation" [ref=e21]:
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - text: Initial capital (EUR)
+            - textbox "Initial capital (EUR)" [ref=e25]: "1000"
+          - generic [ref=e26]:
+            - text: Amount per buy (EUR)
+            - textbox "Amount per buy (EUR)" [ref=e27]: "100"
+          - generic [ref=e28]:
+            - text: Fee per side (fraction)
+            - textbox "Fee per side (fraction)" [ref=e29]: "0.002"
+          - generic [ref=e30]:
+            - text: Warm-up candles
+            - textbox "Warm-up candles" [ref=e31]: "200"
+          - generic [ref=e32]:
+            - text: Train ratio
+            - textbox "Train ratio" [ref=e33]: "0.7"
+          - generic [ref=e34]:
+            - text: Ranking metric
+            - combobox "Ranking metric" [ref=e35]:
+              - option "TOTAL RETURN" [selected]
+              - option "PROFIT FACTOR"
+              - option "MAX DRAWDOWN"
+              - option "WIN RATE"
+        - paragraph [ref=e36]: Max drawdown ranks ascending (smaller is better); the other metrics rank descending. Blank optional fields take the documented defaults.
+      - group "Indicator candidates" [ref=e37]:
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - text: MACD fast/slow/signal — comma-separate for a grid
+            - textbox "MACD fast/slow/signal — comma-separate for a grid" [ref=e41]:
+              - /placeholder: 12/26/9
+              - text: 12/26/9
+          - generic [ref=e42]:
+            - text: Parabolic SAR acceleration/maximum — comma-separate for a grid
+            - textbox "Parabolic SAR acceleration/maximum — comma-separate for a grid" [ref=e43]:
+              - /placeholder: 0.02/0.2
+              - text: 0.02/0.2
+      - group "Entry rules" [ref=e44]:
+        - generic [ref=e46]:
+          - text: Conditions combine with
+          - combobox "Conditions combine with" [ref=e47]:
+            - option "ALL" [selected]
+            - option "ANY"
+        - generic [ref=e48]:
+          - generic [ref=e49]:
+            - checkbox "MACD BULLISH CROSSOVER" [checked] [ref=e50]
+            - generic [ref=e51]: MACD BULLISH CROSSOVER
+          - generic [ref=e52]:
+            - checkbox "MACD BEARISH CROSSOVER" [ref=e53]
+            - generic [ref=e54]: MACD BEARISH CROSSOVER
+          - generic [ref=e55]:
+            - checkbox "MACD ABOVE SIGNAL" [ref=e56]
+            - generic [ref=e57]: MACD ABOVE SIGNAL
+          - generic [ref=e58]:
+            - checkbox "MACD BELOW SIGNAL" [ref=e59]
+            - generic [ref=e60]: MACD BELOW SIGNAL
+          - generic [ref=e61]:
+            - checkbox "HISTOGRAM POSITIVE" [ref=e62]
+            - generic [ref=e63]: HISTOGRAM POSITIVE
+          - generic [ref=e64]:
+            - checkbox "HISTOGRAM NEGATIVE" [ref=e65]
+            - generic [ref=e66]: HISTOGRAM NEGATIVE
+          - generic [ref=e67]:
+            - checkbox "PRICE ABOVE SAR" [ref=e68]
+            - generic [ref=e69]: PRICE ABOVE SAR
+          - generic [ref=e70]:
+            - checkbox "PRICE BELOW SAR" [ref=e71]
+            - generic [ref=e72]: PRICE BELOW SAR
+          - generic [ref=e73]:
+            - checkbox "SAR BULLISH CROSSOVER" [ref=e74]
+            - generic [ref=e75]: SAR BULLISH CROSSOVER
+          - generic [ref=e76]:
+            - checkbox "SAR BEARISH CROSSOVER" [ref=e77]
+            - generic [ref=e78]: SAR BEARISH CROSSOVER
+      - group "Exit rules" [ref=e79]:
+        - generic [ref=e81]:
+          - text: Conditions combine with
+          - combobox "Conditions combine with" [ref=e82]:
+            - option "ALL" [selected]
+            - option "ANY"
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - checkbox "MACD BULLISH CROSSOVER" [ref=e85]
+            - generic [ref=e86]: MACD BULLISH CROSSOVER
+          - generic [ref=e87]:
+            - checkbox "MACD BEARISH CROSSOVER" [ref=e88]
+            - generic [ref=e89]: MACD BEARISH CROSSOVER
+          - generic [ref=e90]:
+            - checkbox "MACD ABOVE SIGNAL" [ref=e91]
+            - generic [ref=e92]: MACD ABOVE SIGNAL
+          - generic [ref=e93]:
+            - checkbox "MACD BELOW SIGNAL" [ref=e94]
+            - generic [ref=e95]: MACD BELOW SIGNAL
+          - generic [ref=e96]:
+            - checkbox "HISTOGRAM POSITIVE" [ref=e97]
+            - generic [ref=e98]: HISTOGRAM POSITIVE
+          - generic [ref=e99]:
+            - checkbox "HISTOGRAM NEGATIVE" [ref=e100]
+            - generic [ref=e101]: HISTOGRAM NEGATIVE
+          - generic [ref=e102]:
+            - checkbox "PRICE ABOVE SAR" [ref=e103]
+            - generic [ref=e104]: PRICE ABOVE SAR
+          - generic [ref=e105]:
+            - checkbox "PRICE BELOW SAR" [ref=e106]
+            - generic [ref=e107]: PRICE BELOW SAR
+          - generic [ref=e108]:
+            - checkbox "SAR BULLISH CROSSOVER" [ref=e109]
+            - generic [ref=e110]: SAR BULLISH CROSSOVER
+          - generic [ref=e111]:
+            - checkbox "SAR BEARISH CROSSOVER" [checked] [ref=e112]
+            - generic [ref=e113]: SAR BEARISH CROSSOVER
+      - generic [ref=e114]:
+        - button "Run sweep" [ref=e115] [cursor=pointer]
+        - generic [ref=e116]: "Runs synchronously: a wide range or a large grid takes longer."
+    - heading "Recent runs" [level=2] [ref=e117]
+    - table [ref=e119]:
+      - rowgroup [ref=e120]:
+        - row [ref=e121]:
+          - columnheader "Run (UTC)" [ref=e122]
+          - columnheader "Market" [ref=e123]
+          - columnheader "Range (UTC)" [ref=e124]
+          - columnheader "Bars" [ref=e125]
+          - columnheader "Combinations" [ref=e126]
+          - columnheader "Ranking" [ref=e127]
+          - columnheader [ref=e128]
+      - rowgroup [ref=e129]:
+        - row [ref=e130]:
+          - cell "2026-10-13 05:51" [ref=e131]
+          - cell "BTC-EUR 1h" [ref=e132]
+          - cell "2026-07-05 → 2026-10-13" [ref=e133]
+          - cell "2405" [ref=e134]
+          - cell "1" [ref=e135]
+          - cell "TOTAL RETURN" [ref=e136]
+          - cell [ref=e137]:
+            - link "Open" [ref=e138] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acdc6d3626f556f01ede51e
+        - row [ref=e139]:
+          - cell "2026-10-12 20:33" [ref=e140]
+          - cell "BTC-EUR 1h" [ref=e141]
+          - cell "2026-07-04 → 2026-10-12" [ref=e142]
+          - cell "2420" [ref=e143]
+          - cell "1" [ref=e144]
+          - cell "TOTAL RETURN" [ref=e145]
+          - cell [ref=e146]:
+            - link "Open" [ref=e147] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acd442165c6bf446ee5779a
+        - row [ref=e148]:
+          - cell "2026-10-12 20:31" [ref=e149]
+          - cell "BTC-EUR 1h" [ref=e150]
+          - cell "2026-07-04 → 2026-10-12" [ref=e151]
+          - cell "2420" [ref=e152]
+          - cell "1" [ref=e153]
+          - cell "TOTAL RETURN" [ref=e154]
+          - cell [ref=e155]:
+            - link "Open" [ref=e156] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acd438565c6bf446ee57799
+        - row [ref=e157]:
+          - cell "2026-10-12 20:20" [ref=e158]
+          - cell "BTC-EUR 2h" [ref=e159]
+          - cell "2026-07-04 → 2026-10-12" [ref=e160]
+          - cell "1210" [ref=e161]
+          - cell "1" [ref=e162]
+          - cell "TOTAL RETURN" [ref=e163]
+          - cell [ref=e164]:
+            - link "Open" [ref=e165] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acd4121e3aca0329941296c
+        - row [ref=e166]:
+          - cell "2026-10-12 20:19" [ref=e167]
+          - cell "BTC-EUR 2h" [ref=e168]
+          - cell "2026-07-04 → 2026-10-12" [ref=e169]
+          - cell "1210" [ref=e170]
+          - cell "1" [ref=e171]
+          - cell "TOTAL RETURN" [ref=e172]
+          - cell [ref=e173]:
+            - link "Open" [ref=e174] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acd40b8e3aca0329941296b
+        - row [ref=e175]:
+          - cell "2026-10-12 20:14" [ref=e176]
+          - cell "BTC-EUR 1h" [ref=e177]
+          - cell "2026-07-04 → 2026-10-12" [ref=e178]
+          - cell "2420" [ref=e179]
+          - cell "1" [ref=e180]
+          - cell "TOTAL RETURN" [ref=e181]
+          - cell [ref=e182]:
+            - link "Open" [ref=e183] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acd3fa853e0b773c2e2925c
+        - row [ref=e184]:
+          - cell "2026-10-12 19:48" [ref=e185]
+          - cell "BTC-EUR 1h" [ref=e186]
+          - cell "2026-07-04 → 2026-10-12" [ref=e187]
+          - cell "2419" [ref=e188]
+          - cell "1" [ref=e189]
+          - cell "TOTAL RETURN" [ref=e190]
+          - cell [ref=e191]:
+            - link "Open" [ref=e192] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acd39a7711a5712c1e1adeb
+        - row [ref=e193]:
+          - cell "2026-10-11 18:56" [ref=e194]
+          - cell "BTC-EUR 1h" [ref=e195]
+          - cell "2026-10-05 → 2026-10-09" [ref=e196]
+          - cell "120" [ref=e197]
+          - cell "1" [ref=e198]
+          - cell "TOTAL RETURN" [ref=e199]
+          - cell [ref=e200]:
+            - link "Open" [ref=e201] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acbdbe1ee9d657dfd91b3e5
+        - row [ref=e202]:
+          - cell "2026-10-11 18:50" [ref=e203]
+          - cell "BTC-EUR 2h" [ref=e204]
+          - cell "2026-03-01 → 2026-10-11" [ref=e205]
+          - cell "2697" [ref=e206]
+          - cell "1" [ref=e207]
+          - cell "TOTAL RETURN" [ref=e208]
+          - cell [ref=e209]:
+            - link "Open" [ref=e210] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acbda840284d34f7fa414e4
+        - row [ref=e211]:
+          - cell "2026-10-11 18:29" [ref=e212]
+          - cell "BTC-EUR 1h" [ref=e213]
+          - cell "2026-10-05 → 2026-10-05" [ref=e214]
+          - cell "24" [ref=e215]
+          - cell "1" [ref=e216]
+          - cell "TOTAL RETURN" [ref=e217]
+          - cell [ref=e218]:
+            - link "Open" [ref=e219] [cursor=pointer]:
+              - /url: /autotrader/ui/backtests/6acbd58f0284d34f7fa40a5a
