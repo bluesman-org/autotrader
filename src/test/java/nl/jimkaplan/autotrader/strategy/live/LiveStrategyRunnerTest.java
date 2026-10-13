@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,6 +29,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -66,6 +68,8 @@ class LiveStrategyRunnerTest {
         strategy = strategy(0);
         when(streamFactory.create(eq("BTC-EUR"), eq("1h"), eq(HOUR), listenerCaptor.capture()))
                 .thenReturn(stream);
+        lenient().when(liveStrategyRepository.updateSeriesStartTime(any(), anyLong()))
+                .thenReturn(1L);
         runner = new LiveStrategyRunner(strategy, CandleInterval.ONE_HOUR, candleHistoryService,
                 liveTradingService, liveStrategyRepository, streamFactory);
     }
@@ -100,6 +104,54 @@ class LiveStrategyRunnerTest {
     }
 
     @Test
+    void aLostAnchorRaceSeedsFromTheStoredAnchor() {
+        seedWith(candles(300, 0));
+        long storedAnchor = START - 2000L * HOUR;
+        when(liveStrategyRepository.updateSeriesStartTime(eq(STRATEGY_ID), anyLong())).thenReturn(0L);
+        LiveStrategy stored = strategy(0);
+        stored.setSeriesStartTime(storedAnchor);
+        when(liveStrategyRepository.findById(STRATEGY_ID)).thenReturn(Optional.of(stored));
+
+        runner.start();
+
+        verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
+                eq(at(storedAnchor)), any());
+        assertEquals(storedAnchor, strategy.getSeriesStartTime());
+    }
+
+    @Test
+    void aLaterStartEvaluatesTheSameBoundaryWithTheSameSeries() {
+        strategy.setSeriesStartTime(START);
+        LiveStrategy restarted = strategy(0);
+        restarted.setSeriesStartTime(START);
+        seedWith(candles(6, 0));
+        runner.start();
+        BitvavoCandleStream.CandleListener keptRunning = listenerCaptor.getValue();
+        for (int i = 6; i <= 7; i++) {
+            stubResolved(START + i * HOUR, candle(i));
+            keptRunning.onCandleClosed(START + i * HOUR, 0);
+        }
+
+        // The same strategy starts later: the store already holds what the first runner appended
+        // candle by candle, and the boundary must be evaluated on the identical series.
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
+                .thenReturn(candles(8, 0));
+        LiveStrategyRunner restartedRunner = new LiveStrategyRunner(restarted, CandleInterval.ONE_HOUR,
+                candleHistoryService, liveTradingService, liveStrategyRepository, streamFactory);
+        restartedRunner.start();
+        long boundary = START + 7 * HOUR;
+        stubResolved(boundary, candle(7));
+        listenerCaptor.getValue().onCandleClosed(boundary, 0);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(liveTradingService, times(3)).decide(any(), seriesCaptor.capture());
+        List<List<Candle>> decidedOn = seriesCaptor.getAllValues();
+        assertEquals(decidedOn.get(1), decidedOn.get(2));
+        assertEquals(8, decidedOn.get(2).size());
+    }
+
+    @Test
     void start_seedsFromTheStoredAnchorWithoutMovingIt() {
         long anchor = START - 1007L * HOUR;
         strategy.setSeriesStartTime(anchor);
@@ -110,6 +162,20 @@ class LiveStrategyRunnerTest {
         verify(liveStrategyRepository, never()).updateSeriesStartTime(any(), anyLong());
         verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
                 eq(at(anchor)), any());
+
+        // The store reaches back only 300 candles, so the series starts later than the anchor; it
+        // still runs and keeps appending from what it has.
+        long closed = START + 300 * HOUR;
+        stubResolved(closed, candle(300));
+        listenerCaptor.getValue().onCandleClosed(closed, 0);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(liveTradingService).decide(eq(strategy), seriesCaptor.capture());
+        List<Candle> series = seriesCaptor.getValue();
+        assertEquals(301, series.size());
+        assertEquals(START, series.get(0).getOpenTime());
+        assertEquals(closed, series.get(300).getOpenTime());
     }
 
     @Test

@@ -172,8 +172,9 @@ first — then the follow-ups.
     first seed and never truncates the series afterwards, because Parabolic SAR's flip timing is
     start-sensitive (the 2026-10-13 rehearsal showed near-identical runs exiting on different
     candles). A backtest started at the anchor with `warmUp` set to the window length reproduces the
-    engine exactly, and the convergence claims in `docs/live-engine.md` now carry the right scope
-    (PR #27)
+    engine's decisions bar for bar (it does not replay the seed range or downtime, so after a gap
+    the position path can differ), and the convergence claims in `docs/live-engine.md` now carry the
+    right scope (PR #27)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

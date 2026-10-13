@@ -273,6 +273,7 @@ class LiveStrategyServiceTest {
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(good));
         when(liveStrategyRepository.findById("strategy-2")).thenReturn(Optional.of(bad));
         when(candleHistoryService.getCandles(any(), any(), any(), any())).thenReturn(List.of());
+        when(liveStrategyRepository.updateSeriesStartTime(any(), anyLong())).thenReturn(1L);
         when(streamFactory.create(eq("BTC-EUR"), any(), anyLong(), any())).thenReturn(stream);
         when(streamFactory.create(eq("ETH-EUR"), any(), anyLong(), any()))
                 .thenThrow(new RuntimeException("no stream"));
@@ -305,6 +306,7 @@ class LiveStrategyServiceTest {
     private void stubRunnerConstruction() {
         when(candleHistoryService.getCandles(any(), any(), any(), any())).thenReturn(List.of());
         when(streamFactory.create(any(), any(), anyLong(), any())).thenReturn(stream);
+        when(liveStrategyRepository.updateSeriesStartTime(any(), anyLong())).thenReturn(1L);
     }
 
     private void assertMessage(String expected, LiveStrategyRequest request) {

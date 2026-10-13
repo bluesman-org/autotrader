@@ -23,7 +23,9 @@ import java.util.List;
  * SAR's flip timing is start-sensitive, so a window that slides (or is re-seeded at a different
  * point) produces exits on slightly different candles for near-identical runs. A backtest started
  * at the same anchor with the warm-up set to the window length therefore reproduces the live
- * decisions exactly — for MACD and PSAR alike.</p>
+ * decisions on every bar the engine evaluated — for MACD and PSAR alike. It does not reproduce a
+ * gap: the engine never replays the seed or downtime, so after one the backtest can hold a position
+ * the engine never opened.</p>
  *
  * <p>Each closed candle is resolved from the store (the REST-filled candles are authoritative) and
  * appended; a boundary whose candle is missing (also after a long outage) is backfilled on the next
@@ -122,8 +124,16 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
         long seriesStart = strategy.getSeriesStartTime();
         if (seriesStart == 0) {
             seriesStart = now.toEpochMilli() - (long) windowLength() * interval.getMillis();
+            long modified = liveStrategyRepository.updateSeriesStartTime(strategy.getId(), seriesStart);
+            if (modified == 0) {
+                // The race for the one value that must never move was lost (or the strategy is
+                // gone): an anchor is already fixed, so the stored value wins over our derivation.
+                seriesStart = liveStrategyRepository.findById(strategy.getId())
+                        .map(LiveStrategy::getSeriesStartTime)
+                        .filter(stored -> stored > 0)
+                        .orElse(seriesStart);
+            }
             strategy.setSeriesStartTime(seriesStart);
-            liveStrategyRepository.updateSeriesStartTime(strategy.getId(), seriesStart);
         }
         Instant from = Instant.ofEpochMilli(seriesStart);
         candleHistoryService.ensureRange(strategy.getMarket(), interval, from, now);
