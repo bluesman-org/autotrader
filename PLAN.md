@@ -175,6 +175,12 @@ first — then the follow-ups.
     engine's decisions bar for bar (it does not replay the seed range or downtime, so after a gap
     the position path can differ), and the convergence claims in `docs/live-engine.md` now carry the
     right scope (PR #27)
+18. ⬜ Bound the live series' per-decision cost: it is append-only by design (the fixed anchor), so
+    every closed candle re-evaluates the whole history — linear per decision, quadratic over uptime,
+    with the retained heap growing the same way (about 8.8k candles a year on `1h`, 525k on `1m`).
+    Carry the indicator state forward (both recursions stream) or find another way to bound
+    `decide` while keeping the anchor semantics; the seed line logs the series length (flagged in
+    the PR #27 review)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
