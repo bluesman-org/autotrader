@@ -1,5 +1,9 @@
 package nl.jimkaplan.autotrader.strategy.service;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
@@ -15,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.math.BigDecimal;
@@ -198,18 +203,24 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
-    void aFailedRowWithoutAClientOrderIdIsLeftAlone() {
+    void aFailedRowWithoutAClientOrderIdIsWarnedAndLeftAlone() {
         stubStrategyAndBot();
         LiveOrder failed = failedRow("BUY", null, Instant.ofEpochMilli(START), "entry ALL [TEST]");
         when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(failed));
         when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
                 .thenReturn(new OrderResponse[0]);
 
-        service.reconcileAll();
+        ListAppender<ILoggingEvent> warnings = attachWarnings();
+        try {
+            service.reconcileAll();
+        } finally {
+            detachWarnings(warnings);
+        }
 
         assertEquals("FAILED", failed.getStatus());
         assertNull(failed.getClientOrderId());
         verify(liveOrderRepository, never()).save(any());
+        assertTrue(warnedAboutMissingClientOrderId(warnings));
     }
 
     @Test
@@ -238,6 +249,37 @@ class LiveOrderReconciliationServiceTest {
                         order(null, "buy", "filled", START, UUID.randomUUID(), "0.001", "100.00", "0.2"),
                         order(UUID.randomUUID(), null, "filled", START, UUID.randomUUID(), "0.001", "100.00", "0.2"),
                         order(UUID.randomUUID(), "buy", "filled", START, null, "0.001", "100.00", "0.2")});
+
+        assertTrue(service.reconcileAll().isEmpty());
+
+        assertEquals("PENDING", pending.getStatus());
+        verify(liveOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void anExchangeEntryWithoutAClientOrderIdDoesNotMakeThePageIncomplete() {
+        stubStrategyAndBot();
+        LiveOrder pending = pendingRow("BUY", UUID.randomUUID(), Instant.ofEpochMilli(START + MINUTE));
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(pending));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{
+                        order(UUID.randomUUID(), "buy", "filled", START, null, "0.001", "100.00", "0.2")});
+
+        assertTrue(service.reconcileAll().isEmpty());
+
+        assertEquals("FAILED", pending.getStatus());
+        assertEquals(LiveOrderReconciliationService.NOT_ACCEPTED_MESSAGE, pending.getErrorMessage());
+    }
+
+    @Test
+    void anExchangeEntryWithAClientOrderIdMissingAFieldMakesThePageIncomplete() {
+        stubStrategyAndBot();
+        LiveOrder pending = pendingRow("BUY", UUID.randomUUID(), Instant.ofEpochMilli(START + MINUTE));
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(pending));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{
+                        order(UUID.randomUUID(), "buy", "filled", null, UUID.randomUUID(),
+                                "0.001", "100.00", "0.2")});
 
         assertTrue(service.reconcileAll().isEmpty());
 
@@ -288,10 +330,44 @@ class LiveOrderReconciliationServiceTest {
         when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
                 .thenReturn(new OrderResponse[0]);
 
-        service.reconcileAll();
+        ListAppender<ILoggingEvent> warnings = attachWarnings();
+        try {
+            service.reconcileAll();
+        } finally {
+            detachWarnings(warnings);
+        }
 
         assertEquals("DRY_RUN", dryRun.getStatus());
         verify(liveOrderRepository, never()).save(any());
+        assertFalse(warnedAboutMissingClientOrderId(warnings));
+    }
+
+    @Test
+    void aRejectedRowWithoutAClientOrderIdIsIgnored() {
+        stubStrategyAndBot();
+        LiveOrder rejected = LiveOrder.builder()
+                .strategyId(STRATEGY_ID)
+                .market(MARKET)
+                .side("BUY")
+                .status("REJECTED")
+                .dryRun(false)
+                .createdTime(Instant.ofEpochMilli(START))
+                .build();
+        rejected.setId("rejected-1");
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(rejected));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[0]);
+
+        ListAppender<ILoggingEvent> warnings = attachWarnings();
+        try {
+            service.reconcileAll();
+        } finally {
+            detachWarnings(warnings);
+        }
+
+        assertEquals("REJECTED", rejected.getStatus());
+        verify(liveOrderRepository, never()).save(any());
+        assertFalse(warnedAboutMissingClientOrderId(warnings));
     }
 
     @Test
@@ -440,6 +516,27 @@ class LiveOrderReconciliationServiceTest {
                         "0.001", "100.00", "0.2")});
         stubOpenPosition(0.001, 100000.0, 0.2);
         return filledRow("BUY", clientOrderId, orderId, Instant.ofEpochMilli(START), 0.001, 100.0, 100000.0, 0.2);
+    }
+
+    private static ListAppender<ILoggingEvent> attachWarnings() {
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        reconciliationLogger().addAppender(appender);
+        return appender;
+    }
+
+    private static void detachWarnings(ListAppender<ILoggingEvent> appender) {
+        reconciliationLogger().detachAppender(appender);
+    }
+
+    private static Logger reconciliationLogger() {
+        return (Logger) LoggerFactory.getLogger(LiveOrderReconciliationService.class);
+    }
+
+    private static boolean warnedAboutMissingClientOrderId(ListAppender<ILoggingEvent> warnings) {
+        return warnings.list.stream()
+                .anyMatch(event -> event.getLevel() == Level.WARN
+                        && event.getFormattedMessage().contains("no client order ID"));
     }
 
     private void stubStrategyAndBot() {

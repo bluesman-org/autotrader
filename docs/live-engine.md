@@ -52,8 +52,9 @@ candle channel of its market and interval. Our own policies:
   client order ID (`clientOrderId`), which is sent to Bitvavo with the order and kept on the row.
   The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee, or
   to `FAILED` with the error — so an ambiguous timeout between the write and the response stays
-  reconcilable at the next boot (see "Reconciliation on startup"). Dry-run rows, and failures
-  caught before anything is sent, carry no client order ID.
+  reconcilable at the next boot (see "Reconciliation on startup"). An order rejected before it is
+  sent (no active bot, insufficient balance, below the market minimum, an exchange error before the
+  pre-write) is recorded as `REJECTED` with no client order ID; dry-run rows carry none either.
 - One position at a time: entry signals are ignored while a position is open, exit signals while
   flat.
 - **Sizing**: a fixed EUR amount per buy (`amountPerBuy`, default 100, minimum 5 EUR), rounded down
@@ -72,10 +73,11 @@ candle channel of its market and interval. Our own policies:
   placed, so a crash costs a trade instead of duplicating one, and evaluation is idempotent across
   restarts.
 - `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent),
-  `DRY_RUN`, `FILLED` or `FAILED`, with the signal's candle open time, the rule set that fired,
-  amounts, the fill or estimated price, the fee, the exchange order ID for live fills and the client
-  order ID the pre-write sent. A boundary whose candle could not be resolved is recorded as
-  `SKIPPED`, so a missed signal window is visible through the API.
+  `DRY_RUN`, `REJECTED` (a local, pre-flight rejection that never reached the exchange), `FILLED` or
+  `FAILED`, with the signal's candle open time, the rule set that fired, amounts, the fill or
+  estimated price, the fee, the exchange order ID for live fills and the client order ID the
+  pre-write sent. A boundary whose candle could not be resolved is recorded as `SKIPPED`, so a
+  missed signal window is visible through the API.
 - `live_positions` — the position, closed in place (`OPEN` → `CLOSED`) with the realised profit
   after fees.
 
@@ -109,18 +111,22 @@ which holds them back rather than let them trade on stale state.
   accepted the order despite the recorded failure. A `PENDING` row the exchange does not know is
   marked `FAILED` ("not found in the exchange's order history within the strategy's lifetime;
   treated as never accepted") — but only when the page is known to be complete: a non-null page
-  shorter than the limit with no entry skipped as incomplete. When the page is not complete (the
-  limit was reached, the response was null, or an entry could not be read) such a row is left
-  `PENDING` and retried at the next boot, since "not in this page" is not "never accepted". A
-  `FAILED` row the exchange does not know is left as it is either way.
+  shorter than the limit with no client-order-ID entry skipped as incomplete. When the page is not
+  complete (the limit was reached, the response was null, or an entry with a client order ID could
+  not be read) such a row is left `PENDING` and retried at the next boot, since "not in this page"
+  is not "never accepted". A `FAILED` row the exchange does not know is left as it is either way.
 - **Filled only**: only `filled` entries are acted on. An order still `open`, `partiallyFilled`,
   `canceled` or `expired` is logged and left alone (v1 does not reconcile partial or abandoned
-  orders), as is a history entry missing its order ID, creation time, side or client order ID.
+  orders). An entry without a client order ID (the legacy webhook path, the exchange UI) cannot be
+  the row being searched and is skipped at debug without affecting completeness; an entry that has a
+  client order ID but is missing its order ID, creation time or side is warned and marks the page
+  incomplete.
 - **Upgrade note**: a real `FAILED` order recorded before the engine sent a client order ID cannot be
   attributed to this strategy, and reconciliation has no safe heuristic for it (an earlier design
   guessed by side and time, reintroducing exactly the cross-strategy misattribution the client order
-  ID removes). Such a row is skipped and warned about at boot for a manual check. This deployment has
-  only ever run dry-run, so no real order predates the change.
+  ID removes). Such a row is skipped and warned about at boot for a manual check. Locally rejected
+  orders are now recorded as `REJECTED`, so a `FAILED` row without a client order ID is exactly a
+  pre-change row; this deployment has only ever run dry-run, so no real order predates the change.
 - **Position sync**: the strategy's filled non-dry-run orders are walked in creation order — a buy
   opens, a sell closes — and the stored open position is brought in line: a position that should be
   closed is closed in place with the last sell's price, time and realised profit, and a position

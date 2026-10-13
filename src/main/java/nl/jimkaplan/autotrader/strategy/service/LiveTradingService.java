@@ -156,7 +156,7 @@ public class LiveTradingService {
 
         BotConfiguration bot = activeBot(strategy);
         if (bot == null) {
-            recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+            recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                     null, null, null, "No active bot configuration for " + strategy.getBotId());
             return;
         }
@@ -164,7 +164,7 @@ public class LiveTradingService {
         try {
             double eur = eurBalance(bot);
             if (eur < strategy.getAmountPerBuy() || eur < MINIMUM_ORDER_EUR) {
-                recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                         null, null, null, "Insufficient EUR balance: " + eur);
                 return;
             }
@@ -175,7 +175,7 @@ public class LiveTradingService {
                     .setScale(notionalDecimals, RoundingMode.DOWN);
             if (market.getMinOrderInQuoteAsset() != null
                     && amountQuote.compareTo(market.getMinOrderInQuoteAsset()) < 0) {
-                recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                         null, null, null, "Below the market minimum of " + market.getMinOrderInQuoteAsset() + " EUR");
                 return;
             }
@@ -214,7 +214,7 @@ public class LiveTradingService {
             log.warn("Buying {} for strategy {} failed: {}", strategy.getMarket(), strategy.getId(),
                     ex.getMessage());
             if (pending == null) {
-                recordOrder(strategy, decision.signalOpenTime(), "BUY", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                         null, null, null, ex.getMessage());
             } else {
                 applyFailure(pending, ex.getMessage());
@@ -244,7 +244,7 @@ public class LiveTradingService {
 
         BotConfiguration bot = activeBot(strategy);
         if (bot == null) {
-            recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+            recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
                     null, null, null, "No active bot configuration for " + strategy.getBotId());
             return;
         }
@@ -256,7 +256,7 @@ public class LiveTradingService {
             BigDecimal amount = BigDecimal.valueOf(position.getQuantity())
                     .setScale(quantityDecimals, RoundingMode.DOWN);
             if (amount.signum() <= 0) {
-                recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
                         null, null, null,
                         "Position quantity rounds to zero at " + quantityDecimals + " decimals");
                 return;
@@ -289,7 +289,7 @@ public class LiveTradingService {
             log.warn("Selling {} for strategy {} failed: {}", strategy.getMarket(), strategy.getId(),
                     ex.getMessage());
             if (pending == null) {
-                recordOrder(strategy, decision.signalOpenTime(), "SELL", "FAILED", decision.reason(), null, null,
+                recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
                         null, null, null, ex.getMessage());
             } else {
                 applyFailure(pending, ex.getMessage());

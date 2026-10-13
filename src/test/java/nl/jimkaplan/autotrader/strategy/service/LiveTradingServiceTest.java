@@ -203,7 +203,7 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void fill_liveBuyWithoutAnActiveBot_recordsAFailure() {
+    void fill_liveBuyWithoutAnActiveBot_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.empty());
 
@@ -211,14 +211,15 @@ class LiveTradingServiceTest {
 
         LiveOrder order = captureSingleOrder();
         assertEquals("BUY", order.getSide());
-        assertEquals("FAILED", order.getStatus());
+        assertEquals("REJECTED", order.getStatus());
+        assertNull(order.getClientOrderId());
         assertTrue(order.getErrorMessage().contains("No active bot configuration"));
         verify(livePositionRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient);
     }
 
     @Test
-    void fill_liveBuyWithInsufficientBalance_recordsAFailure() {
+    void fill_liveBuyWithInsufficientBalance_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
@@ -227,7 +228,8 @@ class LiveTradingServiceTest {
         liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         LiveOrder order = captureSingleOrder();
-        assertEquals("FAILED", order.getStatus());
+        assertEquals("REJECTED", order.getStatus());
+        assertNull(order.getClientOrderId());
         assertTrue(order.getErrorMessage().contains("Insufficient EUR balance: 1.0"));
         verify(livePositionRepository, never()).save(any());
     }
@@ -294,7 +296,7 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void fill_liveBuyBelowTheMarketMinimum_recordsAFailure() {
+    void fill_liveBuyBelowTheMarketMinimum_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
@@ -305,14 +307,14 @@ class LiveTradingServiceTest {
         liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         LiveOrder order = captureSingleOrder();
-        assertEquals("FAILED", order.getStatus());
+        assertEquals("REJECTED", order.getStatus());
         assertTrue(order.getErrorMessage().contains("Below the market minimum"));
         verify(bitvavoApiClient, never()).post(any(), any(), any(), any(), any());
         verify(livePositionRepository, never()).save(any());
     }
 
     @Test
-    void fill_liveBuyWhenTheExchangeFails_recordsAFailure() {
+    void fill_liveBuyWhenTheBalanceCallFails_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
@@ -321,7 +323,8 @@ class LiveTradingServiceTest {
         liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         LiveOrder order = captureSingleOrder();
-        assertEquals("FAILED", order.getStatus());
+        assertEquals("REJECTED", order.getStatus());
+        assertNull(order.getClientOrderId());
         assertEquals("connect timed out", order.getErrorMessage());
         verify(livePositionRepository, never()).save(any());
     }
@@ -378,7 +381,7 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void fill_liveSellWhenTheQuantityRoundsToZero_recordsAFailure() {
+    void fill_liveSellWhenTheQuantityRoundsToZero_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.000_000_001, 100000.0, 0.2)));
@@ -389,7 +392,8 @@ class LiveTradingServiceTest {
         liveTradingService.fill(strategy, decision("SELL"), 160.0);
 
         LiveOrder order = captureSingleOrder();
-        assertEquals("FAILED", order.getStatus());
+        assertEquals("REJECTED", order.getStatus());
+        assertNull(order.getClientOrderId());
         assertTrue(order.getErrorMessage().contains("rounds to zero"));
         verify(bitvavoApiClient, never()).post(any(), any(), any(), any(), any());
         verify(livePositionRepository, never()).save(any());

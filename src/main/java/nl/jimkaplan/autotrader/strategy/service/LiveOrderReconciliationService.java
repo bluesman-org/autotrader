@@ -62,7 +62,9 @@ public class LiveOrderReconciliationService {
     /**
      * The strategy's order history indexed by client order ID, with whether the page is known to be
      * complete. A complete page is non-null, shorter than the requested limit (so there are no more
-     * pages) and had no entry skipped as incomplete.
+     * pages) and had no entry that carries a client order ID skipped as incomplete. An entry without
+     * a client order ID cannot be the row being searched, so it is skipped without affecting
+     * completeness.
      */
     private record History(Map<String, OrderResponse> byClientOrderId, boolean complete) {
     }
@@ -126,8 +128,10 @@ public class LiveOrderReconciliationService {
     }
 
     /**
-     * Index the history by client order ID. An entry missing any of the fields reconciliation keys
-     * on is warned and skipped rather than trusted, and marks the page incomplete.
+     * Index the history by client order ID. An entry that carries a client order ID but is missing
+     * one of the other fields reconciliation keys on is warned and skipped, and marks the page
+     * incomplete; an entry without a client order ID (the legacy or exchange-UI path) is skipped
+     * without affecting completeness, since it can never be the row being searched.
      */
     private History history(OrderResponse[] history, String strategyId) {
         Map<String, OrderResponse> byClientOrderId = new LinkedHashMap<>();
@@ -136,10 +140,14 @@ public class LiveOrderReconciliationService {
         }
         boolean complete = history.length < ORDER_HISTORY_LIMIT;
         for (OrderResponse order : history) {
-            if (order.getOrderId() == null || order.getCreated() == null
-                    || order.getSide() == null || order.getClientOrderId() == null) {
+            if (order.getClientOrderId() == null) {
+                log.debug("Exchange order {} of strategy {} has no client order ID; skipped",
+                        order.getOrderId(), strategyId);
+                continue;
+            }
+            if (order.getOrderId() == null || order.getCreated() == null || order.getSide() == null) {
                 log.warn("Exchange order entry for strategy {} is incomplete "
-                        + "(orderId/created/side/clientOrderId missing); skipped", strategyId);
+                        + "(orderId/created/side missing); skipped", strategyId);
                 complete = false;
                 continue;
             }
