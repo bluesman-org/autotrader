@@ -2,9 +2,12 @@ package nl.jimkaplan.autotrader.strategy.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
 import nl.jimkaplan.autotrader.strategy.backtest.RankingMetric;
 import nl.jimkaplan.autotrader.strategy.model.CandleInterval;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
+import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
@@ -114,6 +117,60 @@ public class BacktestUiController {
         model.addAttribute("runAtText", TIMESTAMP.format(run.getRunAt()));
         model.addAttribute("rangeText", rangeText(run));
         return "backtests/run";
+    }
+
+    /**
+     * One stored entry's individual trades, recomputed from the same candles and rules.
+     *
+     * @param id                 The run ID
+     * @param entryNumber        The entry's number in the ranked table, starting at 1
+     * @param model              The model
+     * @param redirectAttributes Carries the error back when the run, entry or candles cannot be used
+     * @return The trades view, or a redirect to the run page or the form
+     */
+    @GetMapping("/{id}/entries/{entryNumber}")
+    public String trades(@PathVariable String id, @PathVariable int entryNumber, Model model,
+                         RedirectAttributes redirectAttributes) {
+        Optional<BacktestEntryTrades> evaluated;
+        try {
+            evaluated = backtestService.trades(id, entryNumber);
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            log.warn("Trades view rejected: {}", ex.getMessage());
+            redirectAttributes.addFlashAttribute("error", ex.getMessage());
+            return "redirect:/ui/backtests/" + id;
+        } catch (RestClientException ex) {
+            log.warn("Candle fetch failed for the trades view", ex);
+            redirectAttributes.addFlashAttribute("error", CANDLE_FETCH_ERROR);
+            return "redirect:/ui/backtests/" + id;
+        }
+        if (evaluated.isEmpty()) {
+            redirectAttributes.addFlashAttribute("error", "No backtest run with ID " + id);
+            return "redirect:/ui/backtests";
+        }
+        BacktestEntryTrades trades = evaluated.get();
+        BacktestRun run = trades.run();
+        model.addAttribute("run", run);
+        model.addAttribute("entryNumber", trades.entryNumber());
+        model.addAttribute("entry", run.getEntries().get(trades.entryNumber() - 1));
+        model.addAttribute("rangeText", rangeText(run));
+        model.addAttribute("historyChanged", trades.historyChanged());
+        model.addAttribute("candleCount", trades.candleCount());
+        model.addAttribute("trainTrades", tradeViews(trades.evaluation().train()));
+        model.addAttribute("trainMetrics", trades.evaluation().train().metrics());
+        model.addAttribute("trainSkipped", skippedViews(trades.evaluation().train()));
+        model.addAttribute("validateTrades", tradeViews(trades.evaluation().validate()));
+        model.addAttribute("validateMetrics", trades.evaluation().validate().metrics());
+        model.addAttribute("validateSkipped", skippedViews(trades.evaluation().validate()));
+        return "backtests/trades";
+    }
+
+    private static List<BacktestTradeView> tradeViews(BacktestResult result) {
+        return result.trades().stream().map(trade -> BacktestTradeView.of(trade, TIMESTAMP)).toList();
+    }
+
+    private static List<SkippedSignalView> skippedViews(BacktestResult result) {
+        return result.skippedSignals().stream()
+                .map(skipped -> SkippedSignalView.of(skipped, TIMESTAMP)).toList();
     }
 
     private void populate(Model model) {

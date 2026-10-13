@@ -6,7 +6,10 @@ import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.repository.BacktestRunRepository;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestConfig;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestSplit;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestSweep;
 import nl.jimkaplan.autotrader.strategy.backtest.SweepDefinition;
 import nl.jimkaplan.autotrader.strategy.backtest.SweepEntry;
@@ -21,10 +24,13 @@ import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunMetrics;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.rule.CandleSeries;
+import nl.jimkaplan.autotrader.strategy.rule.IndicatorSeries;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.MacdParameters;
 import nl.jimkaplan.autotrader.strategy.rule.ParabolicSarParameters;
+import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
 import nl.jimkaplan.autotrader.strategy.rule.RuleGroup;
+import nl.jimkaplan.autotrader.strategy.rule.StrategyEvaluator;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -139,6 +145,80 @@ public class BacktestService {
     public List<BacktestRun> recent(int limit) {
         return backtestRunRepository.findSummaries(
                 PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "runAt")));
+    }
+
+    /**
+     * Re-simulate one stored entry and return its trades and skipped signals.
+     *
+     * <p>A stored run keeps only metrics. Re-simulating a single combination over the same candles
+     * with the same rules and split is deterministic and cheap, while stored trades for up to
+     * fifty entries could outgrow MongoDB's document limit, so the trades are recomputed on
+     * demand. The result reproduces the stored metrics as long as the candle history inside the
+     * run's range has not changed since the run; the returned value carries the store's current
+     * bar count and whether it differs, so callers can say so instead of only logging it. Runs are
+     * read in full, so their entries are present.</p>
+     *
+     * @param id          The run ID
+     * @param entryNumber The entry's number in the ranked table, starting at 1
+     * @return The run, the entry's recomputed results and the history comparison, or empty when
+     *         the run does not exist
+     * @throws IllegalArgumentException if the entry number is out of range
+     * @throws IllegalStateException    if the run's stored settings no longer resolve, or the
+     *                                  candles for its range are no longer stored
+     */
+    public Optional<BacktestEntryTrades> trades(String id, int entryNumber) {
+        Optional<BacktestRun> storedRun = backtestRunRepository.findById(id);
+        if (storedRun.isEmpty()) {
+            return Optional.empty();
+        }
+        BacktestRun run = storedRun.get();
+        if (entryNumber < 1 || entryNumber > run.getEntries().size()) {
+            throw new IllegalArgumentException("Entry " + entryNumber + " does not exist; valid entries are 1 to "
+                    + run.getEntries().size());
+        }
+        BacktestRunEntry entry = run.getEntries().get(entryNumber - 1);
+        CandleInterval interval;
+        RuleGroup entryRules;
+        RuleGroup exitRules;
+        try {
+            interval = CandleInterval.fromCode(run.getInterval());
+            entryRules = storedRuleGroup(entry.getEntryOperator(), entry.getEntryConditions());
+            exitRules = storedRuleGroup(entry.getExitOperator(), entry.getExitConditions());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException("The stored run's interval or rule names no longer resolve", ex);
+        }
+        candleHistoryService.ensureRange(run.getMarket(), interval,
+                Instant.ofEpochMilli(run.getFromTime()), Instant.ofEpochMilli(run.getToTime()));
+        List<Candle> candles = candleHistoryService.getCandles(run.getMarket(), interval,
+                Instant.ofEpochMilli(run.getFromTime()), Instant.ofEpochMilli(run.getToTime()));
+        if (candles.isEmpty()) {
+            throw new IllegalStateException("No candles are stored for the run's range");
+        }
+        boolean historyChanged = candles.size() != run.getCandleCount();
+        if (historyChanged) {
+            // The request-supplied run id stays out of the log line (CRLF-injection hygiene)
+            log.warn("The stored {} {} history changed: {} bars now, {} recorded by the run; recomputing "
+                            + "from the current candles",
+                    run.getMarket(), interval.getCode(), candles.size(), run.getCandleCount());
+        }
+
+        CandleSeries series = CandleSeries.of(candles);
+        MacdParameters macd = new MacdParameters(entry.getFastPeriod(), entry.getSlowPeriod(),
+                entry.getSignalPeriod());
+        ParabolicSarParameters sar = new ParabolicSarParameters(entry.getAcceleration(), entry.getMaximum());
+        BacktestConfig config = new BacktestConfig(run.getInitialCapital(), run.getAmountPerBuy(),
+                run.getFeeRate(), run.getWarmUpCandles());
+        IndicatorSeries indicators = IndicatorSeries.of(series, macd, sar);
+        boolean[] entrySignals = StrategyEvaluator.evaluate(entryRules, series, indicators);
+        boolean[] exitSignals = StrategyEvaluator.evaluate(exitRules, series, indicators);
+        BacktestEvaluation evaluation = BacktestSplit.of(series, config, run.getTrainRatio())
+                .evaluate(entrySignals, exitSignals);
+        return Optional.of(new BacktestEntryTrades(run, entryNumber, candles.size(), historyChanged, evaluation));
+    }
+
+    private static RuleGroup storedRuleGroup(String operator, List<String> conditions) {
+        return new RuleGroup(LogicalOperator.valueOf(operator),
+                conditions.stream().map(RuleCondition::valueOf).toList());
     }
 
     private static BacktestConfig config(BacktestRunRequest request) {

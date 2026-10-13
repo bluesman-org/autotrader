@@ -1,6 +1,7 @@
 package nl.jimkaplan.autotrader.strategy.service;
 
 import nl.jimkaplan.autotrader.repository.BacktestRunRepository;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.RankingMetric;
 import nl.jimkaplan.autotrader.strategy.controller.BacktestRunRequest;
 import nl.jimkaplan.autotrader.strategy.controller.MacdParametersRequest;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -245,6 +247,118 @@ class BacktestServiceTest {
         assertThrows(IllegalArgumentException.class, () -> backtestService.run(preEpoch));
         assertThrows(IllegalArgumentException.class, () -> backtestService.run(extreme));
         verifyNoInteractions(candleHistoryService);
+    }
+
+    @Test
+    void trades_recomputesTheStoredEntryAndReproducesItsMetrics() {
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
+                .thenReturn(candles(140));
+        when(backtestRunRepository.save(any(BacktestRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        BacktestRun run = backtestService.run(minimalRequest());
+        run.setId("run-1");
+        when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
+
+        BacktestEntryTrades result = backtestService.trades("run-1", 1).orElseThrow();
+
+        assertEquals(run, result.run());
+        assertEquals(1, result.entryNumber());
+        assertEquals(140, result.candleCount());
+        assertFalse(result.historyChanged());
+        BacktestRunEntry entry = run.getEntries().get(0);
+        assertEquals(entry.getTrain().getTradeCount(), result.evaluation().train().trades().size());
+        assertEquals(entry.getTrain().getFinalEquity(),
+                result.evaluation().train().metrics().finalEquity(), 1e-9);
+        assertEquals(entry.getValidate().getTradeCount(), result.evaluation().validate().trades().size());
+        assertEquals(entry.getValidate().getFinalEquity(),
+                result.evaluation().validate().metrics().finalEquity(), 1e-9);
+        // Deterministic: the same read returns the same trades
+        assertEquals(result, backtestService.trades("run-1", 1).orElseThrow());
+    }
+
+    @Test
+    void trades_returnsEmptyForAnUnknownRun() {
+        when(backtestRunRepository.findById("missing")).thenReturn(Optional.empty());
+
+        assertTrue(backtestService.trades("missing", 1).isEmpty());
+        verifyNoInteractions(candleHistoryService);
+    }
+
+    @Test
+    void trades_rejectsEntryNumbersOutsideTheStoredEntries() {
+        BacktestRun run = storedRun(List.of(storedEntry()));
+        when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
+
+        assertThrows(IllegalArgumentException.class, () -> backtestService.trades("run-1", 0));
+        assertThrows(IllegalArgumentException.class, () -> backtestService.trades("run-1", 2));
+        verifyNoInteractions(candleHistoryService);
+    }
+
+    @Test
+    void trades_rejectsStoredRunsWhoseRulesNoLongerResolve() {
+        BacktestRunEntry entry = BacktestRunEntry.builder()
+                .fastPeriod(12).slowPeriod(26).signalPeriod(9)
+                .acceleration(0.02).maximum(0.2)
+                .entryOperator("ALL").entryConditions(List.of("NOT_A_RULE"))
+                .exitOperator("ALL").exitConditions(List.of("SAR_BEARISH_CROSSOVER"))
+                .build();
+        BacktestRun run = storedRun(List.of(entry));
+        when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
+
+        // Stored data that no longer resolves is a server-side condition, not a client error
+        assertThrows(IllegalStateException.class, () -> backtestService.trades("run-1", 1));
+        verifyNoInteractions(candleHistoryService);
+    }
+
+    @Test
+    void trades_rejectsRangesWithoutCandles() {
+        BacktestRun run = storedRun(List.of(storedEntry()));
+        when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
+                .thenReturn(List.of());
+
+        assertThrows(IllegalStateException.class, () -> backtestService.trades("run-1", 1));
+    }
+
+    @Test
+    void trades_reportsAChangedHistoryRatherThanOnlyLoggingIt() {
+        BacktestRun run = storedRun(List.of(storedEntry()));
+        when(backtestRunRepository.findById("run-1")).thenReturn(Optional.of(run));
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
+                .thenReturn(candles(139));
+
+        // The run recorded 140 bars; the trades follow what is stored now, and the caller is told
+        BacktestEntryTrades result = backtestService.trades("run-1", 1).orElseThrow();
+
+        assertTrue(result.historyChanged());
+        assertEquals(139, result.candleCount());
+        assertTrue(result.evaluation().train().trades().size() > 0);
+    }
+
+    private static BacktestRun storedRun(List<BacktestRunEntry> entries) {
+        BacktestRun run = BacktestRun.builder()
+                .market("BTC-EUR")
+                .interval("1h")
+                .fromTime(FROM)
+                .toTime(TO)
+                .candleCount(140)
+                .initialCapital(1000.0)
+                .amountPerBuy(100.0)
+                .feeRate(0.002)
+                .warmUpCandles(0)
+                .trainRatio(0.7)
+                .entries(entries)
+                .build();
+        run.setId("run-1");
+        return run;
+    }
+
+    private static BacktestRunEntry storedEntry() {
+        return BacktestRunEntry.builder()
+                .fastPeriod(12).slowPeriod(26).signalPeriod(9)
+                .acceleration(0.02).maximum(0.2)
+                .entryOperator("ALL").entryConditions(List.of("MACD_BULLISH_CROSSOVER"))
+                .exitOperator("ALL").exitConditions(List.of("SAR_BEARISH_CROSSOVER"))
+                .build();
     }
 
     private static BacktestRunRequest minimalRequest() {

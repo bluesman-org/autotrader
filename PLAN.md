@@ -138,7 +138,11 @@ follow-ups.
       recorded what was sent; the exchange's order history is the source of truth)
 - [ ] Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
       run where half the entries were skipped currently looks identical to one with none, and that
-      matters more once Phase 5 trades live
+      matters more once Phase 5 trades live. The per-entry trades page lists them for the viewed
+      entry; the ranked table still cannot show them without storing counts
+- [x] Per-entry trade lists: the ranked table links each entry to a page (and
+      `GET /api/backtests/{id}/entries/{n}/trades`) that recomputes it over the same candles and lists
+      its train/validate trades and skipped signals (PR #19)
 - [ ] Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
 - [ ] Optionally move the remaining `.junie/` design docs under `docs/`
 - [ ] Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump belongs

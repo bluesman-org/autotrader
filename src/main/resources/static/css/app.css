@@ -169,6 +169,12 @@ button.primary:hover {
     border: 1px solid #f5c6c0;
 }
 
+.banner.warn {
+    background: #fef9e7;
+    color: #9a7d0a;
+    border: 1px solid #f7dc6f;
+}
+
 .table-wrap {
     overflow-x: auto;
     background: var(--card);

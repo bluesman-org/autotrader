@@ -6,10 +6,8 @@ import nl.jimkaplan.autotrader.strategy.rule.MacdParameters;
 import nl.jimkaplan.autotrader.strategy.rule.ParabolicSarParameters;
 import nl.jimkaplan.autotrader.strategy.rule.RuleGroup;
 import nl.jimkaplan.autotrader.strategy.rule.StrategyEvaluator;
-import nl.jimkaplan.autotrader.strategy.rule.StrategySignals;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -18,7 +16,8 @@ import java.util.List;
  * the range and verifying on the held-out newer part ({@code docs/backtest.md}).
  *
  * <p>Indicators and signals are computed once per indicator parameter set and reused across the
- * rule combinations; the simulation is the same deterministic engine used by single runs.</p>
+ * rule combinations; the simulation is the same deterministic engine used for single runs, split
+ * by {@link BacktestSplit}.</p>
  */
 public final class BacktestSweep {
 
@@ -52,17 +51,7 @@ public final class BacktestSweep {
                         + " combinations");
             }
         }
-        int splitIndex = (int) Math.floor(series.length() * definition.trainRatio());
-        if (splitIndex < 1 || splitIndex >= series.length()) {
-            throw new IllegalArgumentException("trainRatio leaves no bars on one side of the split");
-        }
-
-        CandleSeries trainSeries = slice(series, 0, splitIndex);
-        CandleSeries validateSeries = slice(series, splitIndex, series.length());
-        // The validate side's indicators are warm from the earlier data, so it trades from its
-        // first bar instead of repeating the warm-up
-        BacktestConfig validateConfig = new BacktestConfig(config.initialCapital(), config.amountPerBuy(),
-                config.feeRate(), 0);
+        BacktestSplit split = BacktestSplit.of(series, config, definition.trainRatio());
 
         List<SweepEntry> entries = new ArrayList<>((int) combinations);
         for (MacdParameters macd : definition.macdParameters()) {
@@ -78,18 +67,11 @@ public final class BacktestSweep {
                 }
                 for (int entryIndex = 0; entryIndex < definition.entryRules().size(); entryIndex++) {
                     for (int exitIndex = 0; exitIndex < definition.exitRules().size(); exitIndex++) {
-                        boolean[] entrySignals = entrySignalSets.get(entryIndex);
-                        boolean[] exitSignals = exitSignalSets.get(exitIndex);
-                        BacktestMetrics train = BacktestEngine.run(trainSeries,
-                                new StrategySignals(Arrays.copyOfRange(entrySignals, 0, splitIndex),
-                                        Arrays.copyOfRange(exitSignals, 0, splitIndex)),
-                                config).metrics();
-                        BacktestMetrics validate = BacktestEngine.run(validateSeries,
-                                new StrategySignals(Arrays.copyOfRange(entrySignals, splitIndex, entrySignals.length),
-                                        Arrays.copyOfRange(exitSignals, splitIndex, exitSignals.length)),
-                                validateConfig).metrics();
+                        BacktestEvaluation evaluation = split.evaluate(entrySignalSets.get(entryIndex),
+                                exitSignalSets.get(exitIndex));
                         entries.add(new SweepEntry(macd, sar, definition.entryRules().get(entryIndex),
-                                definition.exitRules().get(exitIndex), train, validate));
+                                definition.exitRules().get(exitIndex), evaluation.train().metrics(),
+                                evaluation.validate().metrics()));
                     }
                 }
             }
@@ -107,13 +89,5 @@ public final class BacktestSweep {
                 .thenComparing(byMetric);
         entries.sort(comparator);
         return new SweepResult(entries.size(), List.copyOf(entries));
-    }
-
-    private static CandleSeries slice(CandleSeries series, int from, int to) {
-        return new CandleSeries(Arrays.copyOfRange(series.opens(), from, to),
-                Arrays.copyOfRange(series.highs(), from, to),
-                Arrays.copyOfRange(series.lows(), from, to),
-                Arrays.copyOfRange(series.closes(), from, to),
-                Arrays.copyOfRange(series.times(), from, to));
     }
 }

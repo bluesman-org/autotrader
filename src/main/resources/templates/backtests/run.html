@@ -14,6 +14,8 @@
     <p><a th:href="@{/ui/backtests}">← All backtests</a></p>
     <h1 th:text="|Backtest ${run.market} ${run.interval}|">Backtest BTC-EUR 1h</h1>
 
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+
     <div class="card">
         <div class="stat-row">
             <div class="stat"><b th:text="${runAtText}">2026-10-11 17:40</b>Run (UTC)</div>
@@ -35,7 +37,8 @@
     <h2>Ranked combinations</h2>
     <p class="muted">
         Ranked by <span th:text="${#strings.replace(run.rankingMetric, '_', ' ')}">TOTAL RETURN</span> on the
-        train side; only the best 50 combinations are stored per run.
+        train side; only the best 50 combinations are stored per run. Click a row number to see that
+        entry's individual trades.
     </p>
     <p class="muted" th:if="${#lists.isEmpty(run.entries)}">No ranked combinations were stored for this run.</p>
     <div class="table-wrap" th:unless="${#lists.isEmpty(run.entries)}">
@@ -65,7 +68,10 @@
             </thead>
             <tbody>
             <tr th:each="entry, iter : ${run.entries}">
-                <td th:text="${iter.count}">1</td>
+                <td>
+                    <a th:href="@{/ui/backtests/{id}/entries/{n}(id=${run.id}, n=${iter.count})}"
+                       th:text="${iter.count}">1</a>
+                </td>
                 <td class="left" th:text="${entry.fastPeriod + '/' + entry.slowPeriod + '/' + entry.signalPeriod}">12/26/9</td>
                 <td class="left" th:text="${entry.acceleration + '/' + entry.maximum}">0.02/0.2</td>
                 <td class="left">

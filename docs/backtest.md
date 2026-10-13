@@ -91,3 +91,13 @@ fetched). Only the best 50 entries are stored. `GET /api/backtests/{id}` reads a
 `GET /api/backtests?limit=20` lists the most recent runs **without their entries** (the list is
 projected, so payloads stay small). A `profitFactor` of infinity is serialized as the JSON
 string `"Infinity"` (Jackson's standard handling of non-finite numbers).
+
+`GET /api/backtests/{id}/entries/{n}/trades` re-simulates one stored entry — same market, range,
+rules, parameters and split — and returns the stored run, its train and validate trades and
+skipped signals, and the candle store's current bar count with a `historyChanged` flag when it
+differs from what the run recorded. A run stores only metrics: recomputing a single combination
+is deterministic and cheap, while storing trades for up to fifty entries could outgrow MongoDB's
+document limit. Entries are numbered as shown in the ranked table, starting at 1. The
+recomputation reproduces the stored metrics as long as the candle history inside the range has
+not changed since the run; when it has, the trades follow the current history and the entry's
+page says so.

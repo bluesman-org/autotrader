@@ -13,6 +13,10 @@
   ],
   "tags": [
     {
+      "name": "Live strategies",
+      "description": "API for running strategies live on closed candles"
+    },
+    {
       "name": "TradingView Webhook",
       "description": "API for receiving and processing TradingView alerts"
     },
@@ -100,6 +104,127 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/live-strategies": {
+      "get": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "List live strategies",
+        "operationId": "all",
+        "responses": {
+          "200": {
+            "description": "Strategies returned",
+            "content": {
+              "application/json": { }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "Create a live strategy",
+        "description": "Creates a strategy from the same rules, parameters and sizing a backtest uses. Dry-run defaults to true; live orders need an active bot configuration's credentials and operator ID.",
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveStrategyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Strategy created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStrategy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        }
+      }
+    },
+    "/api/live-strategies/{id}/stop": {
+      "post": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "Stop a live strategy",
+        "operationId": "stop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the live strategy",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStrategyView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No strategy with that ID"
+          }
+        }
+      }
+    },
+    "/api/live-strategies/{id}/start": {
+      "post": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "Start a live strategy",
+        "description": "Seeds the strategy's candle history, subscribes to its candle stream and evaluates every candle that closes while it runs. Old candles are never replayed.",
+        "operationId": "start",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the live strategy",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStrategyView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No strategy with that ID"
           }
         }
       }
@@ -311,6 +436,73 @@
         }
       }
     },
+    "/api/live-strategies/{id}": {
+      "get": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "Get a live strategy",
+        "operationId": "getLiveStrategy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the live strategy",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStrategyView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No strategy with that ID"
+          }
+        }
+      }
+    },
+    "/api/live-strategies/{id}/orders": {
+      "get": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "List a strategy's orders",
+        "description": "Dry-run fills, live fills and failures, newest first.",
+        "operationId": "orders",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the live strategy",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders returned",
+            "content": {
+              "application/json": { }
+            }
+          },
+          "404": {
+            "description": "No strategy with that ID"
+          }
+        }
+      }
+    },
     "/api/bots": {
       "get": {
         "tags": [
@@ -479,7 +671,7 @@
         ],
         "summary": "Get a backtest run",
         "description": "Returns a stored backtest run and its ranked entries.",
-        "operationId": "get",
+        "operationId": "getBacktestRun",
         "parameters": [
           {
             "name": "id",
@@ -501,6 +693,55 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "No run with that ID"
+          }
+        }
+      }
+    },
+    "/api/backtests/{id}/entries/{entryNumber}/trades": {
+      "get": {
+        "tags": [
+          "Backtests"
+        ],
+        "summary": "Get one entry's individual trades",
+        "description": "Re-simulates the stored entry over the same market, range, rules, parameters and split, deterministically, and returns the stored run, its recomputed train and validate trades and skipped signals, and whether the candle history changed since the run. A run stores only metrics, so the trades are recomputed on demand. Entries are numbered as shown in the ranked table, starting at 1.",
+        "operationId": "trades",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the backtest run",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entryNumber",
+            "in": "path",
+            "description": "Entry number in the ranked table (1-based)",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trades returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestEntryTrades"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "entryNumber is out of range"
           },
           "404": {
             "description": "No run with that ID"
@@ -529,6 +770,237 @@
           },
           "dryRun": {
             "type": "boolean"
+          }
+        }
+      },
+      "LiveStrategyRequest": {
+        "type": "object",
+        "properties": {
+          "botId": {
+            "type": "string",
+            "description": "Bot configuration whose credentials and operator ID are used when dry-run is off; required then",
+            "example": "abc123"
+          },
+          "market": {
+            "type": "string",
+            "description": "Market in Bitvavo format",
+            "example": "BTC-EUR"
+          },
+          "interval": {
+            "type": "string",
+            "description": "Candlestick interval code",
+            "example": "1h"
+          },
+          "amountPerBuy": {
+            "type": "number",
+            "format": "double",
+            "description": "Fixed EUR amount per buy, before fees",
+            "example": 100
+          },
+          "warmUpCandles": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Leading candles the strategy never trades; defaults to 200",
+            "example": 200
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Record orders without sending them; defaults to true",
+            "example": true
+          },
+          "macdParameters": {
+            "$ref": "#/components/schemas/MacdParametersRequest",
+            "description": "MACD parameters; defaults to 12/26/9"
+          },
+          "sarParameters": {
+            "$ref": "#/components/schemas/SarParametersRequest",
+            "description": "Parabolic SAR parameters; defaults to 0.02/0.2"
+          },
+          "entryRules": {
+            "$ref": "#/components/schemas/RuleSetRequest",
+            "description": "Entry rule set; defaults to a MACD bullish crossover"
+          },
+          "exitRules": {
+            "$ref": "#/components/schemas/RuleSetRequest",
+            "description": "Exit rule set; defaults to a bearish SAR crossover"
+          }
+        }
+      },
+      "MacdParametersRequest": {
+        "type": "object",
+        "properties": {
+          "fastPeriod": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Fast EMA period",
+            "example": 12
+          },
+          "slowPeriod": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Slow EMA period",
+            "example": 26
+          },
+          "signalPeriod": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Signal EMA period",
+            "example": 9
+          }
+        }
+      },
+      "RuleSetRequest": {
+        "type": "object",
+        "properties": {
+          "operator": {
+            "type": "string",
+            "description": "How the conditions combine",
+            "enum": [
+              "ALL",
+              "ANY"
+            ],
+            "example": "ALL"
+          },
+          "conditions": {
+            "type": "array",
+            "description": "The conditions",
+            "example": [
+              "MACD_BULLISH_CROSSOVER"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "MACD_BULLISH_CROSSOVER",
+                "MACD_BEARISH_CROSSOVER",
+                "MACD_ABOVE_SIGNAL",
+                "MACD_BELOW_SIGNAL",
+                "HISTOGRAM_POSITIVE",
+                "HISTOGRAM_NEGATIVE",
+                "PRICE_ABOVE_SAR",
+                "PRICE_BELOW_SAR",
+                "SAR_BULLISH_CROSSOVER",
+                "SAR_BEARISH_CROSSOVER"
+              ]
+            }
+          }
+        }
+      },
+      "SarParametersRequest": {
+        "type": "object",
+        "properties": {
+          "acceleration": {
+            "type": "number",
+            "format": "double",
+            "description": "Acceleration factor",
+            "example": 0.02
+          },
+          "maximum": {
+            "type": "number",
+            "format": "double",
+            "description": "Maximum acceleration factor",
+            "example": 0.2
+          }
+        }
+      },
+      "LiveStrategy": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "botId": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "macdFastPeriod": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "macdSlowPeriod": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "macdSignalPeriod": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sarAcceleration": {
+            "type": "number",
+            "format": "double"
+          },
+          "sarMaximum": {
+            "type": "number",
+            "format": "double"
+          },
+          "entryOperator": {
+            "type": "string"
+          },
+          "entryConditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exitOperator": {
+            "type": "string"
+          },
+          "exitConditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "amountPerBuy": {
+            "type": "number",
+            "format": "double"
+          },
+          "warmUpCandles": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "lastEvaluatedOpenTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LiveStrategyView": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "$ref": "#/components/schemas/LiveStrategy"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "lastError": {
+            "type": "string"
           }
         }
       },
@@ -670,82 +1142,6 @@
             "items": {
               "$ref": "#/components/schemas/RuleSetRequest"
             }
-          }
-        }
-      },
-      "MacdParametersRequest": {
-        "type": "object",
-        "properties": {
-          "fastPeriod": {
-            "type": "integer",
-            "format": "int32",
-            "description": "Fast EMA period",
-            "example": 12
-          },
-          "slowPeriod": {
-            "type": "integer",
-            "format": "int32",
-            "description": "Slow EMA period",
-            "example": 26
-          },
-          "signalPeriod": {
-            "type": "integer",
-            "format": "int32",
-            "description": "Signal EMA period",
-            "example": 9
-          }
-        }
-      },
-      "RuleSetRequest": {
-        "type": "object",
-        "properties": {
-          "operator": {
-            "type": "string",
-            "description": "How the conditions combine",
-            "enum": [
-              "ALL",
-              "ANY"
-            ],
-            "example": "ALL"
-          },
-          "conditions": {
-            "type": "array",
-            "description": "The conditions",
-            "example": [
-              "MACD_BULLISH_CROSSOVER"
-            ],
-            "items": {
-              "type": "string",
-              "enum": [
-                "MACD_BULLISH_CROSSOVER",
-                "MACD_BEARISH_CROSSOVER",
-                "MACD_ABOVE_SIGNAL",
-                "MACD_BELOW_SIGNAL",
-                "HISTOGRAM_POSITIVE",
-                "HISTOGRAM_NEGATIVE",
-                "PRICE_ABOVE_SAR",
-                "PRICE_BELOW_SAR",
-                "SAR_BULLISH_CROSSOVER",
-                "SAR_BEARISH_CROSSOVER"
-              ]
-            }
-          }
-        }
-      },
-      "SarParametersRequest": {
-        "type": "object",
-        "properties": {
-          "acceleration": {
-            "type": "number",
-            "format": "double",
-            "description": "Acceleration factor",
-            "example": 0.02
-          },
-          "maximum": {
-            "type": "number",
-            "format": "double",
-            "description": "Maximum acceleration factor",
-            "example": 0.2
           }
         }
       },
@@ -960,6 +1356,148 @@
           },
           "address": {
             "type": "string"
+          }
+        }
+      },
+      "BacktestEntryTrades": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/BacktestRun"
+          },
+          "entryNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "candleCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "historyChanged": {
+            "type": "boolean"
+          },
+          "evaluation": {
+            "$ref": "#/components/schemas/BacktestEvaluation"
+          }
+        }
+      },
+      "BacktestEvaluation": {
+        "type": "object",
+        "properties": {
+          "train": {
+            "$ref": "#/components/schemas/BacktestResult"
+          },
+          "validate": {
+            "$ref": "#/components/schemas/BacktestResult"
+          }
+        }
+      },
+      "BacktestMetrics": {
+        "type": "object",
+        "properties": {
+          "finalEquity": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalReturnPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxDrawdownPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "tradeCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "winRatePercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "profitFactor": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "BacktestResult": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "$ref": "#/components/schemas/BacktestMetrics"
+          },
+          "trades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BacktestTrade"
+            }
+          },
+          "skippedSignals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedSignal"
+            }
+          }
+        }
+      },
+      "BacktestTrade": {
+        "type": "object",
+        "properties": {
+          "entryTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "entryPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "exitTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "exitPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "entryFee": {
+            "type": "number",
+            "format": "double"
+          },
+          "exitFee": {
+            "type": "number",
+            "format": "double"
+          },
+          "profit": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "SkippedSignal": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "INSUFFICIENT_BALANCE"
+            ]
           }
         }
       }

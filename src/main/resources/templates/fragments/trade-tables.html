@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- The train and validate sides render the same tables, so they live here once. -->
+<div th:fragment="tradeTable(trades)">
+    <p class="muted" th:if="${#lists.isEmpty(trades)}">No trades on this side.</p>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(trades)}">
+        <table>
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Entry (UTC)</th>
+                <th>Buy price</th>
+                <th>Exit (UTC)</th>
+                <th>Sell price</th>
+                <th>Quantity</th>
+                <th>Amount EUR</th>
+                <th>Fee in</th>
+                <th>Fee out</th>
+                <th>Net EUR</th>
+                <th>Net %</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="trade, iter : ${trades}">
+                <td th:text="${iter.count}">1</td>
+                <td th:text="${trade.entryTimeText}">2026-09-01 10:00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryPrice, 1, 2)}">0.00</td>
+                <td th:text="${trade.exitTimeText}">2026-09-02 10:00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitPrice, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.quantity, 1, 8)}">0.00000000</td>
+                <td th:text="${#numbers.formatDecimal(trade.amount, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryFee, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitFee, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit / trade.amount * 100, 1, 2)}">0.00</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div th:fragment="skippedSignals(skipped)" th:unless="${#lists.isEmpty(skipped)}">
+    <h3>Skipped entry signals</h3>
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>Bar time (UTC)</th>
+                <th class="left">Reason</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="skipped : ${skipped}">
+                <td th:text="${skipped.timeText}">2026-09-01 10:00</td>
+                <td class="left" th:text="${#strings.replace(skipped.reason.name(), '_', ' ')}">INSUFFICIENT
+                    BALANCE
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>
