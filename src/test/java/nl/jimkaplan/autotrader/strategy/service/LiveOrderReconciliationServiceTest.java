@@ -547,6 +547,26 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
+    void aTerminalMatchIsWarnedAndNotPersisted() {
+        LiveStrategy strategy = strategy(false, MARKET);
+        strategy.setNextOrderSequence(3);
+        when(liveStrategyService.all()).thenReturn(List.of(strategy));
+        when(botConfigurationService.getBotConfiguration(BOT_ID)).thenReturn(Optional.of(bot()));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy", "canceled", START + HOUR,
+                        ClientOrderIds.forSequence(STRATEGY_ID, 3), "0.005", "310.00", "0.62")});
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        service.reconcileAll();
+
+        verify(liveOrderRepository, never()).save(any());
+        verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
+    }
+
+    @Test
     void anOrderWithAnUnrelatedClientOrderIdIsNotAdopted() {
         LiveStrategy strategy = strategy(false, MARKET);
         when(liveStrategyService.all()).thenReturn(List.of(strategy));

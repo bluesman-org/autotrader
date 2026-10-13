@@ -197,9 +197,20 @@ public class LiveOrderReconciliationService {
             }
             highest = sequence;
             if (!"filled".equalsIgnoreCase(order.getStatus())) {
+                boolean canStillFill = "open".equalsIgnoreCase(order.getStatus())
+                        || "partiallyFilled".equalsIgnoreCase(order.getStatus());
+                if (!canStillFill) {
+                    // Terminal (or unreadable): a PENDING row could never settle, so keep the
+                    // skip and warn — including about any part the exchange did fill.
+                    log.warn("Recoverable exchange order {} of strategy {} is {} (cannot still fill{})"
+                                    + "; left alone", order.getOrderId(), strategy.getId(),
+                            order.getStatus(), order.getFilledAmountQuote() == null
+                                    ? "" : ", partially filled " + order.getFilledAmountQuote());
+                    continue;
+                }
                 // Persist it as PENDING exactly as the pre-write would have: the normal resolution
-                // then settles it from the exchange on a later boot, which a plain skip could
-                // never do once the sequence has advanced past it.
+                // then settles it once it fills, which a plain skip could never do once the
+                // sequence has advanced past it.
                 liveOrderRepository.save(recoveredPendingRow(strategy, order, candidate));
                 recovered = true;
                 log.info("Recovered unfilled live order {} of strategy {} from the exchange's history",
@@ -247,8 +258,9 @@ public class LiveOrderReconciliationService {
     }
 
     /**
-     * One {@code PENDING} row for a matched exchange order that has not filled yet, mirroring what
-     * the pre-write would have saved: the normal resolution settles it once the exchange fills it.
+     * One {@code PENDING} row for a matched exchange order that can still fill, mirroring what the
+     * pre-write would have saved: the normal resolution settles it once it fills (an order that
+     * later turns terminal stays PENDING under the v1 filled-only resolution, warned each boot).
      */
     private static LiveOrder recoveredPendingRow(LiveStrategy strategy, OrderResponse order, String clientOrderId) {
         Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());

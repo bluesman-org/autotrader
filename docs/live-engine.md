@@ -123,8 +123,10 @@ which holds them back rather than let them trade on stale state.
   not be read) such a row is left `PENDING` and retried at the next boot, since "not in this page"
   is not "never accepted". A `FAILED` row the exchange does not know is left as it is either way.
 - **Filled only**: only `filled` entries are acted on. An order still `open`, `partiallyFilled`,
-  `canceled` or `expired` is logged and left alone (v1 does not reconcile partial or abandoned
-  orders). An entry without a client order ID (the legacy webhook path, the exchange UI) cannot be
+  `canceled` or `expired` is logged and left alone by the normal resolution (v1 does not reconcile
+  partial or abandoned orders); in the restore recovery below, a matched order that can still fill
+  is instead recorded as `PENDING` so it settles once it fills, and a terminal match is skipped
+  with a warning. An entry without a client order ID (the legacy webhook path, the exchange UI) cannot be
   the row being searched and is skipped at debug without affecting completeness; an entry that has a
   client order ID but is missing its order ID, creation time or side is warned and marks the page
   incomplete.
