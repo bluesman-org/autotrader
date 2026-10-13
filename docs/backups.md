@@ -5,12 +5,24 @@ into Google Drive.
 
 ## What is kept where
 
+The dumps carry the app's own data — the `autotrader` database in full, minus `candles`:
+
+- `bot_configurations` — bot settings, including the Bitvavo API key and secret (stored
+  AES-GCM-encrypted with `ENCRYPTION_MASTER_KEY`; the key itself is deliberately not part
+  of the dump).
+- `live_strategies`, `live_orders`, `live_positions` — the live engine's state: strategies,
+  every intended or executed order (dry-run rows included) and positions.
+- `backtest_runs` — stored backtest configurations and metrics.
+- `orders`, `tradingview_alerts` — records of the legacy TradingView integration.
+- `candles` — excluded by design: the cached OHLCV history is re-downloadable from Bitvavo
+  and would dominate the dump.
+
+Copies:
+
 - Local: `~/backups/autotrader/autotrader-<stamp>.archive.gz` on the host running the
   MongoDB container, 30 days retained (`AUTOTRADER_BACKUP_KEEP_DAYS`).
 - Offsite: every archive is additionally copied to `autotrader-backups/` inside a mounted
   Google Drive, 90 days retained (`AUTOTRADER_BACKUP_GDRIVE_KEEP_DAYS`).
-- The `autotrader` database only, excluding the `candles` collection — candles are
-  re-downloadable from Bitvavo and excluded by design.
 
 ## How it runs
 
