@@ -149,10 +149,11 @@ follow-ups.
 9. ⬜ Analyze and if there is useful stuff, move the remaining `.junie/` design docs under `docs/`
 10. ⬜ UI improvements, starting from watching the live engine: a **live page** (per-strategy state —
     running/connected/last error, the open position, recent orders; auto-refreshing; start/stop buttons
-    and an unrealized-P&L reading to decide) and an **account history page** (closed round trips with
-    realised P&L: a filterable list plus a per-position detail view, modelled on the broker-app
-    screenshots shared 2026-10-13; whether Bitvavo's own ledger (`GET /api/bots/{botId}/transactions`)
-    also gets a page is part of the discussion)
+    and an unrealized-P&L reading to decide) and an **account history page** with two clearly separated
+    sections — the engine's closed round trips (filterable list with realised P&L, dry-run/real badged;
+    details expand inside the row, no separate detail screen) and Bitvavo's account ledger (over the
+    existing `GET /api/bots/{botId}/transactions`) — modelled on the broker-app screenshots shared
+    2026-10-13
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed
