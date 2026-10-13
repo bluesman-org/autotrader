@@ -43,18 +43,31 @@ find "$BACKUP_DIR" \( -name 'autotrader-*.archive.gz' -mtime +"$KEEP_DAYS" \
 # Offsite copy to a mounted Google Drive (google-drive-ocamlfuse). Opt-in: set
 # AUTOTRADER_BACKUP_GDRIVE_DIR to the mountpoint. When set, every failure is
 # loud — the local dump above is already on disk, so a silently missing offsite
-# copy is the one thing this must never do. Every check and step that touches
-# the mount is bounded by a timeout: a mount whose daemon is up but wedged makes
-# even the stat() behind `mountpoint` hang, and without the bounds the cron run
-# would hang instead of failing.
+# copy is the one thing this must never do. The steps are bounded by timeouts
+# for answered-but-slow I/O, and the block by a watchdog: a task parked on an
+# unanswered FUSE request cannot be woken by a signal, so `timeout` alone cannot
+# promise the run ends — the watchdog kills the run instead, so a hung mount
+# never leaves a stale run behind for the next night to pile onto.
 if [ -n "$GDRIVE_DIR" ]; then
+  # The sleeper lives in the subshell so the cleanup TERM trap can kill it —
+  # killing the subshell alone would orphan the sleep, which would then hold
+  # this run's stdout (the cron log pipe) open for the full five minutes.
+  (
+    sleep 300 & WATCHDOG_SLEEP=$!
+    trap 'kill "$WATCHDOG_SLEEP" 2>/dev/null; exit 0' TERM
+    wait "$WATCHDOG_SLEEP"
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: the Drive mount did not respond within 5 minutes" >&2
+    kill -0 "$$" 2>/dev/null && kill -TERM "$$"
+  ) &
+  WATCHDOG=$!
+  trap 'kill "$WATCHDOG" 2>/dev/null || true' EXIT
   if ! timeout 60 mountpoint -q "$GDRIVE_DIR"; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite: $GDRIVE_DIR is not mounted, attempting to mount"
     # google-drive-ocamlfuse 0.8+ never returns from the mount; detach it and
     # keep the child's output so the reason for a failed mount survives.
     setsid google-drive-ocamlfuse "$GDRIVE_DIR" </dev/null >>"$BACKUP_DIR/gdrive-mount.log" 2>&1 &
     for _ in $(seq 1 15); do
-      timeout 60 mountpoint -q "$GDRIVE_DIR" && break
+      timeout 10 mountpoint -q "$GDRIVE_DIR" && break
       sleep 2
     done
   fi
@@ -64,31 +77,33 @@ if [ -n "$GDRIVE_DIR" ]; then
   fi
   DEST="$GDRIVE_DIR/$GDRIVE_SUBDIR"
   DEST_FILE="$DEST/$(basename "$OUT")"
-  if ! timeout 5m mkdir -p "$DEST"; then
+  if ! timeout 60 mkdir -p "$DEST"; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: could not reach $DEST" >&2
     exit 1
   fi
   # Stage under .part and rename only after the comparison: a truncated file
   # must never carry the final name the restore runbook picks archives by.
-  if ! timeout 15m cp "$OUT" "$DEST_FILE.part"; then
+  if ! timeout 240 cp "$OUT" "$DEST_FILE.part"; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: copy timed out or errored" >&2
     exit 1
   fi
-  if timeout 5m cmp -s "$OUT" "$DEST_FILE.part"; then
-    if ! timeout 5m mv "$DEST_FILE.part" "$DEST_FILE"; then
+  if timeout 60 cmp -s "$OUT" "$DEST_FILE.part"; then
+    if ! timeout 60 mv "$DEST_FILE.part" "$DEST_FILE"; then
       echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: could not finalize $DEST_FILE" >&2
       exit 1
     fi
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy written: $DEST_FILE"
   else
-    timeout 5m rm -f "$DEST_FILE.part" || true
+    timeout 60 rm -f "$DEST_FILE.part" || true
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: verification mismatch" >&2
     exit 1
   fi
-  if ! timeout 5m find "$DEST" \
+  if ! timeout 60 find "$DEST" \
       \( -name 'autotrader-*.archive.gz' -mtime +"$GDRIVE_KEEP_DAYS" \
       -o -name 'autotrader-*.archive.gz.part' -mtime +0 \) -delete; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite prune FAILED: old copies not removed" >&2
     exit 1
   fi
+  kill "$WATCHDOG" 2>/dev/null || true
+  trap - EXIT
 fi

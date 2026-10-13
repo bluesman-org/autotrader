@@ -13,7 +13,7 @@ The dumps carry the app's own data — the `autotrader` database in full, minus 
 - `live_strategies`, `live_orders`, `live_positions` — the live engine's state: strategies,
   every intended or executed order (dry-run rows included) and positions.
 - `backtest_runs` — stored backtest configurations and metrics.
-- `orders`, `tradingview_alerts` — records of the legacy TradingView integration.
+- `positions`, `orders`, `tradingview_alerts` — records of the legacy TradingView integration.
 - `candles` — excluded by design: the cached OHLCV history is re-downloadable from Bitvavo
   and would dominate the dump.
 
@@ -34,16 +34,20 @@ Drive if needed, stages the offsite copy the same way, byte-verifies it through 
 side: the mount uploads asynchronously, so the 2026-10-13 drill — not the nightly check —
 is the evidence that the bytes land in Drive.
 
-Every mount check and operation is bounded by a timeout, and any offsite failure
-(unmountable Drive, copy or comparison error, failed prune) exits non-zero. **That is also
-how failures are noticed**: the cron line redirects the run's output to
-`~/backups/autotrader/backup.log`, and on a host with the offsite copy enabled a healthy
-run's last line is `offsite copy written: …` — so
-`tail -n 1 ~/backups/autotrader/backup.log` is the check (it also catches runs that die
-before the offsite block, e.g. Mongo down or a missing `.env`, which leave no `FAILED`
-line). `grep FAILED ~/backups/autotrader/backup.log` complements it by naming which step
-gave up. Worth checking after any Drive-side change (revoked grant, quota, password
-change). The mount's own startup output goes to `~/backups/autotrader/gdrive-mount.log`.
+Every mount check and operation is bounded by a timeout, and the whole offsite block by a
+five-minute watchdog — an unanswered FUSE request cannot be interrupted by a timeout, so
+the watchdog kills the run instead of letting it (and every following night's run) hang.
+Any offsite failure (unmountable Drive, copy or comparison error, failed prune, watchdog)
+exits non-zero; if the mount stops answering entirely, lazy-unmount it
+(`fusermount3 -uz ~/GoogleDrive`) and the next run remounts it. **That is also how failures
+are noticed**: the cron line redirects the run's output to `~/backups/autotrader/backup.log`,
+and on a host with the offsite copy enabled a healthy run's last line is
+`offsite copy written: …` — so `tail -n 1 ~/backups/autotrader/backup.log` is the check (it
+also catches runs that die before the offsite block, e.g. Mongo down or a missing `.env`,
+which leave no `FAILED` line). `grep FAILED ~/backups/autotrader/backup.log` complements it
+by naming which step gave up. Worth checking after any Drive-side change (revoked grant,
+quota, password change). The mount's own startup output goes to
+`~/backups/autotrader/gdrive-mount.log`.
 
 ## The Google Drive mount
 
