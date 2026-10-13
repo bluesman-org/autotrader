@@ -132,7 +132,8 @@ local builds, and `-Ddocker.platforms=linux/arm64` (buildx) in the deploy workfl
 deployment host.
 
 Historical candles are cached in this database. They are excluded from
-`scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo. Indexes are created
+`scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo; the nightly dumps
+are also copied offsite to a mounted Google Drive — see `docs/backups.md`. Indexes are created
 at startup by `MongoIndexInitializer`, explicitly, so that the duplicate-`botId` check runs
 before the unique index and reports an actionable error. `MongoConfig` honors
 `spring.data.mongodb.auto-index-creation`; it is off by default (and not set in
