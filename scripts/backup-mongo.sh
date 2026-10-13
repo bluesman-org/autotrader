@@ -30,31 +30,35 @@ OUT="$BACKUP_DIR/autotrader-$STAMP.archive.gz"
 
 docker exec "$CONTAINER" mongodump \
   "mongodb://root:${MONGO_ROOT_PASSWORD}@localhost:27017/?authSource=admin" \
-  --db autotrader --excludeCollection candles --archive --gzip > "$OUT"
+  --db autotrader --excludeCollection candles --archive --gzip > "$OUT.part"
+# Rename only after the dump exits 0: a failed dump must not leave a partial
+# archive under the final name the restore runbook picks by.
+mv "$OUT.part" "$OUT"
 
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) backup written: $OUT ($(du -h "$OUT" | cut -f1))"
 
-find "$BACKUP_DIR" -name 'autotrader-*.archive.gz' -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" \( -name 'autotrader-*.archive.gz' -mtime +"$KEEP_DAYS" \
+  -o -name 'autotrader-*.archive.gz.part' -mtime +0 \) -delete
 
 # Offsite copy to a mounted Google Drive (google-drive-ocamlfuse). Opt-in: set
 # AUTOTRADER_BACKUP_GDRIVE_DIR to the mountpoint. When set, every failure is
 # loud — the local dump above is already on disk, so a silently missing offsite
-# copy is the one thing this must never do. Every step that touches the mount is
-# bounded by a timeout: a mount whose daemon is up but wedged passes
-# `mountpoint -q`, and without the bounds the cron run would hang instead of
-# failing.
+# copy is the one thing this must never do. Every check and step that touches
+# the mount is bounded by a timeout: a mount whose daemon is up but wedged makes
+# even the stat() behind `mountpoint` hang, and without the bounds the cron run
+# would hang instead of failing.
 if [ -n "$GDRIVE_DIR" ]; then
-  if ! mountpoint -q "$GDRIVE_DIR"; then
+  if ! timeout 60 mountpoint -q "$GDRIVE_DIR"; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite: $GDRIVE_DIR is not mounted, attempting to mount"
     # google-drive-ocamlfuse 0.8+ never returns from the mount; detach it and
     # keep the child's output so the reason for a failed mount survives.
     setsid google-drive-ocamlfuse "$GDRIVE_DIR" </dev/null >>"$BACKUP_DIR/gdrive-mount.log" 2>&1 &
     for _ in $(seq 1 15); do
-      mountpoint -q "$GDRIVE_DIR" && break
+      timeout 60 mountpoint -q "$GDRIVE_DIR" && break
       sleep 2
     done
   fi
-  if ! mountpoint -q "$GDRIVE_DIR"; then
+  if ! timeout 60 mountpoint -q "$GDRIVE_DIR"; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) offsite copy FAILED: $GDRIVE_DIR is not mounted (see gdrive-mount.log)" >&2
     exit 1
   fi
