@@ -77,6 +77,34 @@ transitions are serialized: two concurrent starts can never create two runners f
 and the enabled flag is written with a targeted field update, so a concurrent last-evaluated write
 or stop can never be clobbered by a stale document copy.
 
+## Reconciliation on startup
+
+Before any strategy is started, `LiveOrderReconciliationService` brings the recorded orders and
+the open position in line with the exchange, so a crash between an order submission and its record
+is repaired from the exchange's order history — the source of truth — at the next boot.
+
+- **Scope**: every non-dry-run strategy with a resolvable bot. Order history is read with
+  `GET /orders?market={market}&limit=100`; a failure for one strategy is logged and the next one
+  still runs, and reconciliation never throws out of `reconcileAll()`.
+- **Filled only**: an exchange order is acted on only when its status is `filled`. An order that is
+  still `open`, `partiallyFilled`, `canceled` or `expired` is logged and left alone — v1 does not
+  reconcile partial or abandoned orders.
+- **Ambiguous failures**: a local `FAILED` buy or sell row with no order ID is corrected in place
+  when an unclaimed filled order of the same side was created between ten minutes before and one
+  minute after the row: the row is marked `FILLED` with the exchange's amounts, price and fee, the
+  error is cleared, and the reason records that the exchange had accepted the order despite the
+  recorded failure.
+- **Missing rows**: a filled order no local row accounts for (by order ID, or as an ambiguous
+  failure) is stored as a new `FILLED` row, mirroring the fields the engine records when it places
+  an order: `signalOpenTime` 0, the exchange's amounts, price and fee, and a reason that says it
+  was reconciled from the order history.
+- **Position sync**: the strategy's filled non-dry-run orders are walked in creation order — a buy
+  opens, a sell closes — and the stored open position is brought in line: a position that should be
+  closed is closed in place with the last sell's price, time and realised profit, and a position
+  that should be open is created from the last buy. When they already agree, nothing is written.
+- **Idempotent**: the order IDs adopted on the first run are matched by ID and never adopted twice,
+  so re-running reconciliation is a no-op beyond reads.
+
 ## API
 
 | Endpoint | Purpose |
@@ -103,6 +131,8 @@ strategy:
 - The TradingView webhook path still exists as the legacy fallback: PLAN.md's Phase 6 records the
   decision to keep it until the engine has traded live, and to revisit its removal then.
 - Open-order reconciliation after a crash between an order and its record: the engine records what
-  it sent, and the exchange's order history stays the source of truth.
+  it sent, and the exchange's order history stays the source of truth (see "Reconciliation on
+  startup"). The startup reconciliation adopts `filled` orders only; an order that is still open,
+  partially filled, canceled or expired at boot is logged and left alone.
 - Partial fills are recorded as the order response reports them (`filledAmount`,
   `filledAmountQuote`, `feePaid`), and the position uses those figures.
