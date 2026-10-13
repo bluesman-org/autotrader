@@ -152,8 +152,9 @@ brings the two back together:
   `FAILED` the exchange accepted).
 - Orders placed after the dump have no restored row — the recovery re-derives their IDs from the
   strategy's sequence counter (which the dump itself carries) and recreates the rows from the
-  exchange's figures; an order not yet filled is recorded as `PENDING`, so the normal resolution
-  settles it once it fills, and the position sync closes or reopens the position accordingly.
+  exchange's figures: a match that can still fill is recorded as `PENDING`, so the normal
+  resolution settles it once it fills, and a terminal one (`canceled`/`expired`) is skipped with a
+  warning. The position sync closes or reopens the position accordingly.
 - What it cannot see: orders pushed beyond the 1000-order history page, and anything not placed by
   the engine (manual trades, the legacy webhook) — those stay the operator's business. After a
   restore, check the recovery log lines and the exchange's balance view; decrypting restored bot
@@ -188,6 +189,7 @@ strategy:
   the order with a client order ID, and the exchange's order history stays the source of truth (see
   "Reconciliation on startup"). Startup reconciliation settles only the strategy's own rows against
   `filled` orders; an order that is still open, partially filled, canceled or expired at boot is
-  logged and left alone.
+  left alone — except a lost match the recovery recorded as `PENDING`, which settles when it fills
+  (see "Restoring from a backup").
 - Partial fills are recorded as the order response reports them (`filledAmount`,
   `filledAmountQuote`, `feePaid`), and the position uses those figures.

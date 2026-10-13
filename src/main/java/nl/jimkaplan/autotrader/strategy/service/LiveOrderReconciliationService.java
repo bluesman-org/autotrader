@@ -176,8 +176,9 @@ public class LiveOrderReconciliationService {
      * Re-derive this strategy's own possible client order IDs for the sequence range starting at
      * its persisted counter. An exchange order that matches and that no local row claims can only
      * be one whose record was lost — the pre-write row of everything the engine sends survives on
-     * disk, so after a restore the derivation is the only way back to those orders. Matching rows
-     * are recreated from the exchange's figures and the sequence advances past every match.
+     * disk, so after a restore the derivation is the only way back to those orders. Every match
+     * whose row is recreated is rebuilt from the exchange's figures, and the sequence advances
+     * past every match.
      *
      * @return Whether a row was recovered (so the caller should re-read the rows)
      */
