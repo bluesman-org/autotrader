@@ -127,9 +127,8 @@ follow-ups.
 2. ✅ **Quality gates hardened** — boot-context test (`AutotraderApplicationTests`), SpotBugs with
    FindSecBugs at `verify` (accepted findings reasoned in `config/spotbugs-exclude.xml`),
    Dependabot for Maven/actions/Docker, and a Docker image + compose validation workflow
-3. ⬜ 405 responses should carry the `Allow` header that Spring's default resolver sets from
-   `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
-   handler is next touched)
+3. ✅ 405 responses carry the `Allow` header that Spring's default resolver sets from
+   `getSupportedMethods()` (PR #22)
 4. ✅ Warn on the backtest form when the initial capital cannot cover `amountPerBuy` plus its fee —
    a live hint under the simulation fields (blank fields fall back to the documented defaults),
    verified in a real browser; without it every entry skips as `INSUFFICIENT_BALANCE` and the run
@@ -154,6 +153,8 @@ follow-ups.
 14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
     (Ant skipped it because reproducible-build timestamps made every fresh jar look older than the
     previous copy, silently shipping stale code into the Docker image) (PR #20)
+15. ⬜ Handle `HttpMediaTypeNotAcceptableException` so 406 responses come from this advice like the
+    other client errors instead of the catch-all's 500 (flagged in the PR #22 review)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
