@@ -120,37 +120,41 @@ follow-ups.
 
 ## Follow-ups
 
-1. [x] **Coverage** — raised to the AGENTS.md rule (95% line / 100% method / 85% branch, POJOs and
+1. ✅ **Coverage** — raised to the AGENTS.md rule (95% line / 100% method / 85% branch, POJOs and
    bootstrap classes excluded) and enforced in CI on every PR and main push
    (`.github/workflows/coverage.yml`, `./mvnw verify -Ddocker.skip=true`); includes the
    `GlobalExceptionHandler` null-cause fix
-2. [x] **Quality gates hardened** — boot-context test (`AutotraderApplicationTests`), SpotBugs with
+2. ✅ **Quality gates hardened** — boot-context test (`AutotraderApplicationTests`), SpotBugs with
    FindSecBugs at `verify` (accepted findings reasoned in `config/spotbugs-exclude.xml`),
    Dependabot for Maven/actions/Docker, and a Docker image + compose validation workflow
-3. [ ] 405 responses should carry the `Allow` header that Spring's default resolver sets from
+3. ⬜ 405 responses should carry the `Allow` header that Spring's default resolver sets from
    `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
    handler is next touched)
-4. [ ] UI improvements (TBD)
-5. [x] Warn on the backtest form when the initial capital cannot cover `amountPerBuy` plus its fee —
+4. ⬜ UI improvements (TBD)
+5. ✅ Warn on the backtest form when the initial capital cannot cover `amountPerBuy` plus its fee —
    a live hint under the simulation fields (blank fields fall back to the documented defaults),
    verified in a real browser; without it every entry skips as `INSUFFICIENT_BALANCE` and the run
    shows zero trades (PR #21)
-6. [ ] Reconcile open orders after a crash between an order submission and its record (`live_orders`
+6. ⬜ Reconcile open orders after a crash between an order submission and its record (`live_orders`
    recorded what was sent; the exchange's order history is the source of truth)
-7. [ ] Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
+7. ⬜ Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
    run where half the entries were skipped currently looks identical to one with none, and that
    matters more once Phase 5 trades live. The per-entry trades page lists them for the viewed
    entry; the ranked table still cannot show them without storing counts
-8. [x] Per-entry trade lists: the ranked table links each entry to a page (and
+8. ✅ Per-entry trade lists: the ranked table links each entry to a page (and
    `GET /api/backtests/{id}/entries/{n}/trades`) that recomputes it over the same candles and lists
    its train/validate trades and skipped signals (PR #19)
-9. [ ] Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
-10. [ ] Optionally move the remaining `.junie/` design docs under `docs/`
-11. [ ] Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
+9. ⬜ Offsite MongoDB backups (e.g. S3) in addition to `~/backups/autotrader`
+10. ⬜ Optionally move the remaining `.junie/` design docs under `docs/`
+11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed
-12. [x] Duplicate `botId` on create returns a clear 400 (PR #4)
-13. [x] Inclusive boundary records for order/alert time-range queries (PR #4)
-14. [x] `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
+12. ✅ Duplicate `botId` on create returns a clear 400 (PR #4)
+13. ✅ Inclusive boundary records for order/alert time-range queries (PR #4)
+14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
     (Ant skipped it because reproducible-build timestamps made every fresh jar look older than the
     previous copy, silently shipping stale code into the Docker image) (PR #20)
+
+Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
+(e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
+suppresses the list marker, so the numbers vanish.
