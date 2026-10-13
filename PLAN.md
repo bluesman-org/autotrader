@@ -127,9 +127,8 @@ follow-ups.
 2. ✅ **Quality gates hardened** — boot-context test (`AutotraderApplicationTests`), SpotBugs with
    FindSecBugs at `verify` (accepted findings reasoned in `config/spotbugs-exclude.xml`),
    Dependabot for Maven/actions/Docker, and a Docker image + compose validation workflow
-3. ⬜ 405 responses should carry the `Allow` header that Spring's default resolver sets from
-   `getSupportedMethods()` (flagged in the PR #9 review; not a regression, restore it when the
-   handler is next touched)
+3. ✅ 405 responses carry the `Allow` header that Spring's default resolver sets from
+   `getSupportedMethods()` (PR #22)
 4. ✅ Warn on the backtest form when the initial capital cannot cover `amountPerBuy` plus its fee —
    a live hint under the simulation fields (blank fields fall back to the documented defaults),
    verified in a real browser; without it every entry skips as `INSUFFICIENT_BALANCE` and the run
@@ -138,10 +137,9 @@ follow-ups.
    are pre-written as `PENDING` with a client order ID and looked up in the exchange's history at
    boot; the position is synced and unreconcilable strategies are held back (v1: `filled` orders
    only) (PR #24)
-6. ⬜ Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — a
-   run where half the entries were skipped currently looks identical to one with none, and that
-   matters more once Phase 5 trades live. The per-entry trades page lists them for the viewed
-   entry; the ranked table still cannot show them without storing counts
+6. ✅ Surface skipped buys (`INSUFFICIENT_BALANCE`) in the stored run and on the results page — the
+   engine's metrics carry the count, runs store it (absent `—` for older runs), the ranked table
+   has a Skipped column per side and the trades page a Skipped stat (PR #23)
 7. ✅ Per-entry trade lists: the ranked table links each entry to a page (and
    `GET /api/backtests/{id}/entries/{n}/trades`) that recomputes it over the same candles and lists
    its train/validate trades and skipped signals (PR #19)
@@ -156,6 +154,8 @@ follow-ups.
 14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
     (Ant skipped it because reproducible-build timestamps made every fresh jar look older than the
     previous copy, silently shipping stale code into the Docker image) (PR #20)
+15. ⬜ Handle `HttpMediaTypeNotAcceptableException` so 406 responses come from this advice like the
+    other client errors instead of the catch-all's 500 (flagged in the PR #22 review)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

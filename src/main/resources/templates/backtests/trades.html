@@ -69,6 +69,7 @@
                 <b th:text="${#numbers.formatDecimal(trainMetrics.maxDrawdownPercent, 1, 2)}">0.00</b>Max DD %
             </div>
             <div class="stat"><b th:text="${trainMetrics.tradeCount}">0</b>Trades</div>
+            <div class="stat"><b th:text="${trainMetrics.skippedSignals}">0</b>Skipped</div>
             <div class="stat">
                 <b th:text="${#numbers.formatDecimal(trainMetrics.winRatePercent, 1, 1)}">0.0</b>Win %
             </div>
@@ -94,6 +95,7 @@
                 <b th:text="${#numbers.formatDecimal(validateMetrics.maxDrawdownPercent, 1, 2)}">0.00</b>Max DD %
             </div>
             <div class="stat"><b th:text="${validateMetrics.tradeCount}">0</b>Trades</div>
+            <div class="stat"><b th:text="${validateMetrics.skippedSignals}">0</b>Skipped</div>
             <div class="stat">
                 <b th:text="${#numbers.formatDecimal(validateMetrics.winRatePercent, 1, 1)}">0.0</b>Win %
             </div>

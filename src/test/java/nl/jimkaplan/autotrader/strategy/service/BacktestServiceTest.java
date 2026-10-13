@@ -87,12 +87,30 @@ class BacktestServiceTest {
         assertEquals(List.of("SAR_BEARISH_CROSSOVER"), entry.getExitConditions());
         // The rising series crosses once, so the train side has a trade and the validate side none
         assertTrue(entry.getTrain().getTradeCount() > 0);
+        assertEquals(0, entry.getTrain().getSkippedSignals());
         assertEquals(0, entry.getValidate().getTradeCount());
         assertEquals(1000.0, entry.getValidate().getFinalEquity(), 1e-9);
 
         verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
                 eq(Instant.ofEpochMilli(FROM)), eq(Instant.ofEpochMilli(TO)));
         verify(backtestRunRepository).save(any(BacktestRun.class));
+    }
+
+    @Test
+    void run_recordsSkippedSignalsWhenTheCapitalCannotCoverTheBuy() {
+        when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
+                .thenReturn(candles(140));
+        when(backtestRunRepository.save(any(BacktestRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // The user-visible trap: buy equals capital, so the fee can never be covered
+        BacktestRunRequest request = minimalRequest();
+        request.setAmountPerBuy(1000.0);
+        BacktestRun run = backtestService.run(request);
+
+        BacktestRunEntry entry = run.getEntries().get(0);
+        assertEquals(0, entry.getTrain().getTradeCount());
+        assertTrue(entry.getTrain().getSkippedSignals() > 0);
+        assertEquals(0, entry.getValidate().getTradeCount());
     }
 
     @Test

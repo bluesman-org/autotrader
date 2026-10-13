@@ -200,7 +200,9 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Handle unsupported HTTP methods, which Spring maps to 405 by default.
+     * Handle unsupported HTTP methods, which Spring maps to 405 by default. The exception's own
+     * headers carry the {@code Allow} values Spring's resolver would set, so parity holds by
+     * construction.
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupportedException(
@@ -214,11 +216,13 @@ public class GlobalExceptionHandler {
                 path
         );
 
-        return new ResponseEntity<>(errorResponse, HttpStatus.METHOD_NOT_ALLOWED);
+        return new ResponseEntity<>(errorResponse, ex.getHeaders(), HttpStatus.METHOD_NOT_ALLOWED);
     }
 
     /**
-     * Handle unsupported request media types, which Spring maps to 415 by default.
+     * Handle unsupported request media types, which Spring maps to 415 by default. The exception's
+     * own headers carry the {@code Accept} (and {@code Accept-Patch}) values Spring's resolver
+     * would set.
      */
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMediaTypeNotSupportedException(
@@ -232,7 +236,7 @@ public class GlobalExceptionHandler {
                 path
         );
 
-        return new ResponseEntity<>(errorResponse, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+        return new ResponseEntity<>(errorResponse, ex.getHeaders(), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
     }
 
     /**
