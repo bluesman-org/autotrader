@@ -182,6 +182,7 @@ brings the two back together:
 | `POST /api/live-strategies/{id}/start` | Seed the history, subscribe, evaluate closed candles |
 | `POST /api/live-strategies/{id}/stop` | Disconnect and clear `enabled` |
 | `GET /api/live-strategies/{id}/orders` | The strategy's orders, newest first |
+| `GET /ui/live` | The live page: one card per strategy, refreshed in place every 10 seconds |
 
 ## Configuration
 
@@ -191,7 +192,13 @@ strategy:
     websocket-url: wss://ws.bitvavo.com/v2/
     keepalive-seconds: 30
     reconnect-delay-millis: 5000
+autotrader:
+  ui:
+    time-zone:      # optional; e.g. Europe/Amsterdam — the machine's zone when unset
 ```
+
+The pages show times in `autotrader.ui.time-zone` — the machine's zone when unset — and label them
+with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken for UTC.
 
 ## Out of scope
 

@@ -74,7 +74,7 @@ class LiveViewServiceTest {
         when(bitvavoApiClient.getPublic(eq("/ticker/book?market=BTC-EUR"), eq(GetBookResponse.class)))
                 .thenReturn(new GetBookResponse("BTC-EUR", new BigDecimal("74562"),
                         BigDecimal.ONE, new BigDecimal("74578"), BigDecimal.ONE));
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(
                 order("BUY", SIGNAL_ENTRY, Instant.parse("2020-01-02T03:04:00Z"), 0.00134403, 74_403, "DRY_RUN"),
                 order("SELL", SIGNAL_EXIT, Instant.parse("2020-01-02T03:05:00Z"), 0.00134403, 74_412, "DRY_RUN"),
                 skippedOrder()));
@@ -130,7 +130,7 @@ class LiveViewServiceTest {
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
         when(bitvavoApiClient.getPublic(any(), eq(GetBookResponse.class)))
                 .thenThrow(new RestClientException("connect timed out"));
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
 
         LiveCardView card = service.cards().get(0);
 
@@ -148,7 +148,7 @@ class LiveViewServiceTest {
         when(liveStrategyService.all()).thenReturn(List.of(strategy()));
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
 
         LiveCardView card = service.cards().get(0);
 
@@ -165,7 +165,7 @@ class LiveViewServiceTest {
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
                 .thenReturn(List.of(closedPosition(0.12), closedPosition(-0.11)));
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
 
         LiveCardView card = service.cards().get(0);
 
@@ -182,7 +182,7 @@ class LiveViewServiceTest {
         when(liveStrategyService.isRunning(STRATEGY_ID)).thenReturn(true);
         when(livePositionRepository.findAllByStrategyIdAndStatus(any(), eq("CLOSED"))).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(any(), eq("OPEN"))).thenReturn(Optional.empty());
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(any())).thenReturn(List.of());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(any())).thenReturn(List.of());
         when(bitvavoApiClient.getPublic(any(), eq(GetBookResponse.class)))
                 .thenThrow(new RestClientException("connect timed out"));
 

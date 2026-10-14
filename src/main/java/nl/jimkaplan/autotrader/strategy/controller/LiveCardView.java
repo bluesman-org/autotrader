@@ -11,15 +11,14 @@ import java.util.List;
  * @param running    Whether the engine has a runner for it
  * @param connected  Whether its candle stream is up (never true when stopped)
  * @param dryRun     Whether its orders are simulated
- * @param lastError  The stream's last error, or null
  * @param parameters One-line summary of the decision parameters and sizing
- * @param statusLine Created/running-since/last-evaluated/freshness summary
+ * @param statusLine Created/running-since/last-evaluated/freshness summary, ending in the last error
  * @param position   The open position, or null
  * @param statsLine  The realised round-trip statistics line
  * @param orders     The most recent orders, newest first
  */
 public record LiveCardView(String id, String market, String interval, boolean running, boolean connected,
-                           boolean dryRun, String lastError, String parameters, String statusLine,
+                           boolean dryRun, String parameters, String statusLine,
                            PositionView position, String statsLine, List<OrderView> orders) {
 
     /** Copy the orders so the card's list cannot be mutated from outside. */

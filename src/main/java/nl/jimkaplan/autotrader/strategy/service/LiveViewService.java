@@ -42,7 +42,6 @@ import java.util.stream.Collectors;
 @Service
 public class LiveViewService {
 
-    private static final int RECENT_ORDERS = 8;
     private static final double FEE_RATE = BacktestDefaults.FEE_RATE;
     private static final String DASH = "—";
 
@@ -113,18 +112,19 @@ public class LiveViewService {
     private LiveCardView card(LiveStrategy strategy, GetBookResponse book, Instant now) {
         boolean running = liveStrategyService.isRunning(strategy.getId());
         boolean connected = running && liveStrategyService.isConnected(strategy.getId());
+        String lastError = running ? liveStrategyService.lastError(strategy.getId()) : null;
         List<LivePosition> closed = livePositionRepository
                 .findAllByStrategyIdAndStatus(strategy.getId(), "CLOSED");
         LivePosition position = livePositionRepository
                 .findByStrategyIdAndStatus(strategy.getId(), "OPEN").orElse(null);
         return new LiveCardView(strategy.getId(), strategy.getMarket(), strategy.getInterval(),
                 running, connected, strategy.isDryRun(),
-                running ? liveStrategyService.lastError(strategy.getId()) : null,
-                parameters(strategy), statusLine(strategy, running, now), position(position, book, strategy),
-                statsLine(closed), orders(strategy.getId(), position, closed));
+                parameters(strategy), statusLine(strategy, running, lastError, now),
+                position(position, book, strategy), statsLine(closed),
+                orders(strategy.getId(), position, closed));
     }
 
-    private String statusLine(LiveStrategy strategy, boolean running, Instant now) {
+    private String statusLine(LiveStrategy strategy, boolean running, String lastError, Instant now) {
         StringBuilder line = new StringBuilder();
         if (running && strategy.getLastStartedTime() != null) {
             line.append("Running since ").append(minuteFormat.format(strategy.getLastStartedTime()))
@@ -139,8 +139,8 @@ public class LiveViewService {
                 line.append(" (").append(age(evaluated.plusMillis(intervalMillis(strategy)), now)).append(" ago)");
             }
         }
-        String error = running ? liveStrategyService.lastError(strategy.getId()) : null;
-        return line.append(" · Last error: ").append(error == null || error.isBlank() ? DASH : error).toString();
+        return line.append(" · Last error: ")
+                .append(lastError == null || lastError.isBlank() ? DASH : lastError).toString();
     }
 
     private String parameters(LiveStrategy strategy) {
@@ -191,14 +191,19 @@ public class LiveViewService {
             ifClosedClass = result >= 0 ? "pos" : "neg";
         }
         Instant filled = Instant.ofEpochMilli(position.getEntryTime() + intervalMillis(strategy));
+        String asset = strategy.getMarket().split("-")[0];
         return new LiveCardView.PositionView(
-                String.format(Locale.ENGLISH, "LONG %.8f BTC", position.getQuantity()),
+                String.format(Locale.ENGLISH, "LONG %.8f %s", position.getQuantity(), asset),
                 minuteFormat.format(filled) + " · " + euro(position.getEntryPrice()),
                 buyText, sellText, valueText, ifClosedText, ifClosedClass,
                 position.getEntryFee() == null ? DASH : euro(position.getEntryFee()));
     }
 
     private String statsLine(List<LivePosition> closed) {
+        // The whole round-trip history is walked in memory here, four passes over one document per
+        // round trip. Fine while it is tens of rows — a 1m strategy does tens per day — but the
+        // read grows with the strategy's age; the Mongo-side aggregation that keeps it flat is
+        // PLAN item 21.
         if (closed.isEmpty()) {
             return "No completed round trips yet.";
         }
@@ -235,8 +240,7 @@ public class LiveViewService {
                 resultByExitSignal.put(position.getExitTime(), profit(position));
             }
         }
-        return liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(strategyId).stream()
-                .limit(RECENT_ORDERS)
+        return liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(strategyId).stream()
                 .map(order -> orderView(order, openPosition, resultByExitSignal))
                 .toList();
     }

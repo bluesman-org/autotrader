@@ -124,7 +124,6 @@ class LiveUiControllerRenderTest {
                         "Skipped — candle unavailable", "", "—", "", false))
                 : List.of();
         return new LiveCardView("6ace5dbf7b4e0870883058cb", "BTC-EUR", "1m", running, running, true,
-                null,
                 "MACD 12/26/9 · SAR 0.02/0.2 · entry: MACD bullish crossover · exit: SAR bearish "
                         + "crossover · €100 per buy · warm-up 60 bars",
                 running

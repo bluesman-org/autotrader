@@ -41,6 +41,10 @@
         }
 
         function refresh() {
+            if (document.hidden) {
+                // Nothing to keep current for an unwatched tab; it refreshes on the way back.
+                return;
+            }
             fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
                 .then(function (response) { return response.ok ? response.text() : null; })
                 .then(function (html) {
@@ -59,6 +63,12 @@
                 })
                 .catch(function () { /* keep the last state */ });
         }
+
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                refresh();
+            }
+        });
 
         window.setInterval(refresh, 10000);
     })();
