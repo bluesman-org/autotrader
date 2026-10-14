@@ -167,7 +167,7 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
     column sorts on the underlying value, never the displayed text — and Bitvavo's account ledger:
     per-order rows with the order's total fee (`feePaid`) expanding into their fills, plus the raw
     transactions (deposits, withdrawals, staking, rebates) — modelled on the broker-app screenshots
-    shared 2026-10-13
+    shared 2026-10-13. The live page landed as its first part (PR #30); the history tabs follow
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed
