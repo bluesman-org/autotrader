@@ -184,6 +184,11 @@ first — then the follow-ups.
     Carry the indicator state forward (both recursions stream) or find another way to bound
     `decide` while keeping the anchor semantics; the seed line logs the series length (flagged in
     the PR #27 review)
+19. ⬜ Make the TradingView webhook's timestamp contract honest: validation accepts a `Z`-less
+    offset (`DateTimeFormatter.ISO_OFFSET_DATE_TIME`), but `saveAlert` then parses with
+    `Instant.parse`, so `2026-10-04T12:00:00+02:00` fails later as a 500 instead of the promised
+    400. Either normalise with `OffsetDateTime.parse` or reject non-`Z` values up front (flagged in
+    the PR #29 review)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
