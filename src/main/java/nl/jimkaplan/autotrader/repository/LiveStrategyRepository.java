@@ -54,4 +54,18 @@ public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, St
     @Query("{ '_id' : ?0 }")
     @Update("{ '$max' : { 'next_order_sequence' : ?1 } }")
     void updateNextOrderSequence(String id, long sequence);
+
+    /**
+     * Fix the runner's series anchor, written at most once: the condition matches only a document
+     * whose anchor is still absent or 0, so a second writer — another process, an operator, an
+     * older restored copy — cannot move the one value that must never move. The seed re-reads the
+     * stored anchor when this reports no modification, so a lost race seeds from the winner's.
+     *
+     * @param id              The strategy ID
+     * @param seriesStartTime The fixed series start, epoch millis
+     * @return The number of modified documents; 0 means an anchor is already fixed
+     */
+    @Query("{ '_id' : ?0, 'series_start_time' : { $in : [ null, 0 ] } }")
+    @Update("{ '$set' : { 'series_start_time' : ?1 } }")
+    long updateSeriesStartTime(String id, long seriesStartTime);
 }

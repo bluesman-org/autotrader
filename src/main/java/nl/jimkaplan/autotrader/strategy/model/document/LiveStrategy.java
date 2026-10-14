@@ -119,6 +119,17 @@ public class LiveStrategy extends BaseDocument {
     private long nextOrderSequence;
 
     /**
+     * The fixed start of the runner's candle series: the strategy's first start minus the seed
+     * window, persisted on the first seed and never moved, so restarts — and backtests started at
+     * the same anchor with the warm-up set to the window length — replay exactly the same series.
+     * This matters because the Parabolic SAR's flip timing is start-sensitive. 0 until the first
+     * seed. Engine bookkeeping only: kept out of the API.
+     */
+    @JsonIgnore
+    @Field("series_start_time")
+    private long seriesStartTime;
+
+    /**
      * When the strategy was created.
      */
     @Field("created_time")

@@ -15,7 +15,13 @@ import nl.jimkaplan.autotrader.strategy.rule.StrategyEvaluator;
 import nl.jimkaplan.autotrader.strategy.rule.StrategySignals;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,10 +34,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * which is what the backtester does. A dry-run replay of a history therefore reproduces a backtest
  * over that history.
  *
- * <p>Two cases pin the two claims the runner relies on: prefix equality (candle-by-candle
- * evaluation) and the bounded window the runner actually uses — warm-up plus both MACD periods
- * plus {@link LiveStrategyRunner#CONVERGENCE_MARGIN_CANDLES} — whose front-truncation the margin
- * has to make invisible.</p>
+ * <p>The first case pins prefix equality (candle-by-candle evaluation) and the second that the
+ * seed margin — warm-up plus both MACD periods plus
+ * {@link LiveStrategyRunner#CONVERGENCE_MARGIN_CANDLES} — makes a front-truncated series converge
+ * to the whole series for a benign fixture with unambiguous flips. That convergence is what the
+ * runner's fixed anchor buys, and it is only guaranteed for clean flips: on noisy real data with
+ * borderline Parabolic SAR comparisons, near-identical series can still flip on different candles —
+ * which is exactly why the runner anchors its series instead of sliding a window (see
+ * {@code docs/live-engine.md}).</p>
  */
 class LiveSignalReplayTest {
 
@@ -74,7 +84,7 @@ class LiveSignalReplayTest {
     }
 
     @Test
-    void aFrontTruncatedWindowMatchesTheWholeSeries() {
+    void aFrontTruncatedWindowMatchesTheWholeSeriesForCleanFlips() {
         List<Candle> candles = wavySeries(1_600);
         StrategyDefinition definition = definition();
         CandleSeries full = CandleSeries.of(candles);
@@ -117,6 +127,85 @@ class LiveSignalReplayTest {
                 ParabolicSarParameters.defaults(),
                 new RuleGroup(LogicalOperator.ALL, List.of(RuleCondition.MACD_BULLISH_CROSSOVER)),
                 new RuleGroup(LogicalOperator.ALL, List.of(RuleCondition.SAR_BEARISH_CROSSOVER)));
+    }
+
+    /**
+     * The rehearsal's start-sensitivity, quantified on production-like data: the frozen 500-bar
+     * BTC-EUR 1h fixture evaluated from front-truncated windows against the whole series. A
+     * different start is not a no-op on real data, so the live series is anchored rather than
+     * re-windowed on every restart. The frozen counts are the regression baseline.
+     */
+    @Test
+    void aFrontTruncatedWindowCanChangeDecisionsOnRealData() {
+        List<Candle> candles = realSeries();
+        StrategyDefinition definition = definition();
+        StrategySignals full = StrategyEvaluator.evaluate(CandleSeries.of(candles), definition);
+        MacdParameters macd = MacdParameters.defaults();
+
+        Divergence shortWindow = divergence(candles, definition, full, 60);
+        Divergence seedWindow = divergence(candles, definition, full,
+                BacktestDefaults.WARM_UP_CANDLES + macd.slowPeriod() + macd.signalPeriod());
+
+        // At a 60-bar history a different start really does decide differently: 1 of 441 entries
+        // and 3 of 441 exits diverge from the whole series' answer.
+        assertEquals(1, shortWindow.entries(), "60-bar entry mismatches (frozen baseline)");
+        assertEquals(3, shortWindow.exits(), "60-bar exit mismatches (frozen baseline)");
+        // At the old design's window minus its 1,000-candle margin (warm-up + both MACD periods =
+        // 235) this fixture happens to converge — but the rehearsal's live 1m run showed the margin
+        // is no guarantee, which is why the series is anchored instead of re-windowed.
+        assertEquals(0, seedWindow.entries(), "235-bar entry mismatches (frozen baseline)");
+        assertEquals(0, seedWindow.exits(), "235-bar exit mismatches (frozen baseline)");
+    }
+
+    private record Divergence(int entries, int exits) {
+    }
+
+    private static Divergence divergence(List<Candle> candles, StrategyDefinition definition,
+                                         StrategySignals full, int window) {
+        int entryMismatches = 0;
+        int exitMismatches = 0;
+        for (int i = window - 1; i < candles.size(); i++) {
+            CandleSeries truncated = CandleSeries.of(candles.subList(i - window + 1, i + 1));
+            StrategySignals truncatedSignals = StrategyEvaluator.evaluate(truncated, definition);
+            if (full.entry()[i] != truncatedSignals.entry()[window - 1]) {
+                entryMismatches++;
+            }
+            if (full.exit()[i] != truncatedSignals.exit()[window - 1]) {
+                exitMismatches++;
+            }
+        }
+        return new Divergence(entryMismatches, exitMismatches);
+    }
+
+    private static List<Candle> realSeries() {
+        try (InputStream stream = LiveSignalReplayTest.class
+                .getResourceAsStream("/indicators/btc_eur_1h_ohlc.csv")) {
+            if (stream == null) {
+                throw new IllegalStateException("The frozen BTC-EUR fixture is missing");
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                return reader.lines()
+                        .skip(1)
+                        .filter(line -> !line.isBlank())
+                        .map(line -> line.split(","))
+                        .map(row -> {
+                            double close = Double.parseDouble(row[3]);
+                            return Candle.builder()
+                                    .market("BTC-EUR")
+                                    .interval("1h")
+                                    .openTime(Long.parseLong(row[0]))
+                                    .open(BigDecimal.valueOf(close))
+                                    .high(BigDecimal.valueOf(Double.parseDouble(row[1])))
+                                    .low(BigDecimal.valueOf(Double.parseDouble(row[2])))
+                                    .close(BigDecimal.valueOf(close))
+                                    .volume(BigDecimal.ONE)
+                                    .build();
+                        })
+                        .toList();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static List<Candle> wavySeries(int count) {
