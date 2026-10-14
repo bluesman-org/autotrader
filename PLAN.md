@@ -200,6 +200,10 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
     `Instant.parse`, so `2026-10-04T12:00:00+02:00` fails later as a 500 instead of the promised
     400. Either normalise with `OffsetDateTime.parse` or reject non-`Z` values up front (flagged in
     the PR #29 review)
+20. ⬜ Strategy management UI: create, edit and delete live strategies from the UI — the REST API
+    still needs update and delete endpoints (create exists; today the UI has none, so strategies can
+    only be created via the API). Scoped out of item 10 on 2026-10-14; the endpoints and the form
+    land together.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
