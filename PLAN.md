@@ -147,7 +147,10 @@ first — then the follow-ups.
 8. ✅ Offsite MongoDB backups in addition to `~/backups/autotrader` — every nightly dump is
    copied to Google Drive (mounted with `google-drive-ocamlfuse`), byte-verified and kept 90
    days offsite; a failed copy fails the nightly run loudly (PR #25)
-9. ⬜ Analyze and if there is useful stuff, move the remaining `.junie/` design docs under `docs/`
+9. ✅ Retire the `.junie/` design notes into `docs/`: `docs/tradingview.md` describes the legacy
+   webhook path as built (plus the proposed pieces that were never implemented) and
+   `docs/archive/user-system-design.md` keeps the unimplemented user-system design with a status
+   header (PR #29)
 10. ⬜ UI improvements, starting from watching the live engine: a **live page** (per-strategy state —
     running/connected/last error, the open position, recent orders; auto-refreshing; start/stop buttons
     and an unrealized-P&L reading to decide) and an **account history page** with two clearly separated
