@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -182,6 +183,15 @@ class GlobalExceptionHandlerTest {
 
         assertError(response, HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported media type");
         assertEquals("application/json", response.getHeaders().getFirst(HttpHeaders.ACCEPT));
+    }
+
+    @Test
+    void handleMediaTypeNotAcceptableException_returnsNotAcceptableWithoutABody() {
+        ResponseEntity<Void> response = globalExceptionHandler.handleMediaTypeNotAcceptableException(
+                new HttpMediaTypeNotAcceptableException(List.of(MediaType.APPLICATION_JSON)), request());
+
+        assertEquals(HttpStatus.NOT_ACCEPTABLE, response.getStatusCode());
+        assertNull(response.getBody());
     }
 
     @Test

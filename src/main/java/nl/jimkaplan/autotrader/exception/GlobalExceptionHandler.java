@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -237,6 +238,20 @@ public class GlobalExceptionHandler {
         );
 
         return new ResponseEntity<>(errorResponse, ex.getHeaders(), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    /**
+     * Handle responses no acceptable media type can carry, which Spring maps to 406 by default.
+     * The response is deliberately empty: the client's {@code Accept} header rejected every type
+     * the endpoint can produce, so an error body could not be rendered either — the catch-all's
+     * JSON body would fail negotiation and the request would degrade to a 500.
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<Void> handleMediaTypeNotAcceptableException(
+            HttpMediaTypeNotAcceptableException ex, WebRequest request) {
+        log.warn("Not acceptable: {} at {}", ex.getMessage(), getRequestPath(request));
+
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
     }
 
     /**
