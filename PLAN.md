@@ -153,13 +153,21 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
    webhook path as built (plus the proposed pieces that were never implemented) and
    `docs/archive/user-system-design.md` keeps the unimplemented user-system design with a status
    header (PR #29)
-10. ⬜ UI improvements, starting from watching the live engine: a **live page** (per-strategy state —
-    running/connected/last error, the open position, recent orders; auto-refreshing; start/stop buttons
-    and an unrealized-P&L reading to decide) and an **account history page** with two clearly separated
-    sections — the engine's closed round trips (filterable list with realised P&L, dry-run/real badged;
-    details expand inside the row, no separate detail screen) and Bitvavo's account ledger (over the
-    existing `GET /api/bots/{botId}/transactions`) — modelled on the broker-app screenshots shared
-    2026-10-13
+10. ⬜ UI improvements, starting from watching the live engine (spec agreed 2026-10-14; mock-ups to be
+    approved first): a **live page** (`/ui/live`) with one card per strategy — running/connected and
+    dry-run/real badges, the last error, how fresh the last evaluated candle is, the open position
+    with the result "if closed now" after both fees, realised totals, the last few orders, Start/Stop
+    buttons, and an in-place self-refresh that keeps the scroll position; times in local time,
+    labelled. An **account history page** (`/ui/history`) with two clearly separated tabs: the
+    engine's closed round trips — columns # (row number in the current view), Entry and Exit (each
+    with date and time), Strategy (a stable colour per strategy), Type (dry/real), Price, Qty,
+    Result; details expand inside the row; filters for strategy, type, result (wins/losses/all, 0
+    counts as a win) and time (rolling 1h/2h/4h/8h/24h/3/7/14/30 days, calendar last week/last two
+    weeks/last month/year-to-date/last year, and a custom start–end range; all by entry time); every
+    column sorts on the underlying value, never the displayed text — and Bitvavo's account ledger:
+    per-order rows with the order's total fee (`feePaid`) expanding into their fills, plus the raw
+    transactions (deposits, withdrawals, staking, rebates) — modelled on the broker-app screenshots
+    shared 2026-10-13
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed
