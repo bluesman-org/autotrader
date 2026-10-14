@@ -147,7 +147,10 @@ first — then the follow-ups.
 8. ✅ Offsite MongoDB backups in addition to `~/backups/autotrader` — every nightly dump is
    copied to Google Drive (mounted with `google-drive-ocamlfuse`), byte-verified and kept 90
    days offsite; a failed copy fails the nightly run loudly (PR #25)
-9. ⬜ Analyze and if there is useful stuff, move the remaining `.junie/` design docs under `docs/`
+9. ✅ Retire the `.junie/` design notes into `docs/`: `docs/tradingview.md` describes the legacy
+   webhook path as built (plus the proposed pieces that were never implemented) and
+   `docs/archive/user-system-design.md` keeps the unimplemented user-system design with a status
+   header (PR #29)
 10. ⬜ UI improvements, starting from watching the live engine: a **live page** (per-strategy state —
     running/connected/last error, the open position, recent orders; auto-refreshing; start/stop buttons
     and an unrealized-P&L reading to decide) and an **account history page** with two clearly separated
@@ -181,6 +184,11 @@ first — then the follow-ups.
     Carry the indicator state forward (both recursions stream) or find another way to bound
     `decide` while keeping the anchor semantics; the seed line logs the series length (flagged in
     the PR #27 review)
+19. ⬜ Make the TradingView webhook's timestamp contract honest: validation accepts a `Z`-less
+    offset (`DateTimeFormatter.ISO_OFFSET_DATE_TIME`), but `saveAlert` then parses with
+    `Instant.parse`, so `2026-10-04T12:00:00+02:00` fails later as a 500 instead of the promised
+    400. Either normalise with `OffsetDateTime.parse` or reject non-`Z` values up front (flagged in
+    the PR #29 review)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

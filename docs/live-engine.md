@@ -196,7 +196,8 @@ strategy:
 ## Out of scope
 
 - The TradingView webhook path still exists as the legacy fallback: PLAN.md's Phase 6 records the
-  decision to keep it until the engine has traded live, and to revisit its removal then.
+  decision to keep it until the engine has traded live, and to revisit its removal then. It is
+  documented in `docs/tradingview.md`.
 - Open-order reconciliation after a crash between an order and its response: the engine pre-writes
   the order with a client order ID, and the exchange's order history stays the source of truth (see
   "Reconciliation on startup"). Startup reconciliation settles only the strategy's own rows against

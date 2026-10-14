@@ -1,3 +1,11 @@
+> **Status: proposed, never implemented.** Written 2026-10-04 for the requirement "Design user
+> system and document it, do not implement it yet. A user can have 1 or more bots, maximum 100
+> bots." Nothing here is built — the application has no user model and its REST API is
+> deliberately unauthenticated (`AGENTS.md`). Kept for reference in case a user system is wanted;
+> the companion summary proposed the phases: user model and repository, Spring Security/JWT
+> authentication, bot ownership (`userId` on `bot_configurations`), user management endpoints,
+> then authorization on the bot endpoints. Original document follows unchanged.
+
 # User System Design Document
 
 ## Overview
