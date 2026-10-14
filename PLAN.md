@@ -166,8 +166,9 @@ first — then the follow-ups.
 14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
     (Ant skipped it because reproducible-build timestamps made every fresh jar look older than the
     previous copy, silently shipping stale code into the Docker image) (PR #20)
-15. ⬜ Handle `HttpMediaTypeNotAcceptableException` so 406 responses come from this advice like the
-    other client errors instead of the catch-all's 500 (flagged in the PR #22 review)
+15. ✅ Handle `HttpMediaTypeNotAcceptableException`: a 406 with an empty body comes from this advice
+    instead of the catch-all's 500 (the empty body is the only response that can always be written
+    when the client's `Accept` rejects every producible type; flagged in the PR #22 review) (PR #28)
 16. ✅ Make restores self-healing: deterministic client order IDs (derived from the strategy and a
     persisted sequence) so boot reconciliation can recover orders whose records were lost to a
     backup restore — a lost buy reopens the position, a lost sell closes it (PR #26)
