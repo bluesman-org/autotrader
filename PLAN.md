@@ -5,12 +5,14 @@ indicators. TradingView is kept as a legacy fallback (Phase 6 records that decis
 file with every PR**: check off completed steps, add new follow-ups, and keep the status line
 current.
 
-**Status (2026-10-13):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
+**Status (2026-10-14):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
-default, replay gate); the live series is anchored to a fixed start (PR #27) so restarts and
-backtests replay identical decisions. Quality gates hardened (PR #13). TradingView is kept as a
-legacy fallback (Phase 6, decision of 2026-10-12); next: a live-run trial of the engine — dry-run
-first — then the follow-ups.
+default, replay gate); the live series is anchored to a fixed start (PR #27) and the anchored
+design is verified live — restarts kept the same anchor and the engine's trades matched a
+from-anchor backtest exactly. The `.junie/` design notes live under `docs/` (PR #29) and 406
+responses come from the advice (PR #28). Quality gates hardened (PR #13). TradingView is kept as a
+legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: the live/history UI
+(item 10), then the small live-run trial of the engine.
 
 ## Objective
 
