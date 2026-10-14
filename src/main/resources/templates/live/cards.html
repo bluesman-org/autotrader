@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="cards">
+    <p class="muted" th:if="${#lists.isEmpty(cards)}">
+        No live strategies yet — create one through the API (see the API docs) and it appears here.
+    </p>
+
+    <div class="card" th:each="card : ${cards}">
+        <div class="card-head">
+            <h2 th:text="|${card.market} · ${card.interval}|">BTC-EUR · 1m</h2>
+            <span class="mono muted" th:text="${#strings.substring(card.id, 0, 8)}">6ace5dbf</span>
+            <span class="badge" th:classappend="${card.running} ? 'ok'"
+                  th:text="${card.running} ? '● Running' : 'Stopped'">Stopped</span>
+            <span class="badge ok" th:if="${card.connected}">Connected</span>
+            <span class="badge dry" th:if="${card.dryRun}">DRY RUN</span>
+            <span class="badge real" th:unless="${card.dryRun}">REAL</span>
+            <span class="spacer"></span>
+            <form th:if="${card.running}" th:action="@{/ui/live/{id}/stop(id=${card.id})}" method="post">
+                <button class="secondary" type="submit">Stop</button>
+            </form>
+            <form th:unless="${card.running}" th:action="@{/ui/live/{id}/start(id=${card.id})}" method="post">
+                <button class="primary small" type="submit">Start</button>
+            </form>
+        </div>
+
+        <p class="muted card-meta" th:text="${card.statusLine}">Running since 13 Oct 16:35 (1 d 22 h) ·
+            Last evaluated 14 Oct 14:48:00 (12 s ago) · Last error: —</p>
+        <p class="muted card-meta tight" th:text="${card.parameters}">MACD 12/26/9 · SAR 0.02/0.2 · …</p>
+
+        <div class="position" th:if="${card.position}">
+            <div class="pos-line">
+                <div class="kv">Position<b th:text="${card.position.quantityText}">LONG 0.00134403 BTC</b></div>
+                <div class="kv">Bought<b th:text="${card.position.entryText}">14 Oct 14:45 · €74,403.00</b></div>
+                <div class="kv">Buy<b class="pos" th:text="${card.position.buyText}"
+                                      th:attr="data-live='buy-' + ${card.id}">€74,578.00</b></div>
+                <div class="kv">Sell<b class="neg" th:text="${card.position.sellText}"
+                                       th:attr="data-live='sell-' + ${card.id}">€74,562.00</b></div>
+                <div class="kv">Value now (at sell)<b th:text="${card.position.valueNowText}"
+                                                      th:attr="data-live='value-' + ${card.id}">€100.21</b></div>
+                <div class="kv">If closed now (after fees)
+                    <b th:classappend="${card.position.ifClosedNowClass}"
+                       th:text="${card.position.ifClosedNowText}"
+                       th:attr="data-live='ifclosed-' + ${card.id}">−€0.19</b></div>
+                <div class="kv">Entry fee<b th:text="${card.position.entryFeeText}">€0.20</b></div>
+            </div>
+        </div>
+        <p class="muted card-meta" th:unless="${card.position}">No open position.</p>
+
+        <p class="muted card-meta tight" th:text="${card.statsLine}"
+           th:attr="data-live='stats-' + ${card.id}">Realised since start: 36 round trips · −€14.25 · …</p>
+
+        <div class="table-wrap" th:unless="${#lists.isEmpty(card.orders)}">
+            <table class="orders">
+                <thead>
+                <tr>
+                    <th class="left">Time</th>
+                    <th class="left">Side</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th class="left">Status</th>
+                    <th>Result</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="order : ${card.orders}">
+                    <td class="left" th:text="${order.timeText}">14:46</td>
+                    <td class="left" th:text="${order.side}">SELL</td>
+                    <td th:text="${order.quantityText}">0.00134403</td>
+                    <td th:text="${order.priceText}">€74,412.00</td>
+                    <td class="left">
+                        <span class="badge" th:classappend="${order.statusBadgeClass}"
+                              th:text="${order.statusBadge}">DRY RUN</span>
+                        <span class="badge" th:if="${order.openedPosition}">opened position</span>
+                    </td>
+                    <td th:classappend="${order.resultClass}" th:text="${order.resultText}">−€0.10</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

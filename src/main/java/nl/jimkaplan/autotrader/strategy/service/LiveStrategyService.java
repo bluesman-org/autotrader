@@ -160,6 +160,9 @@ public class LiveStrategyService {
         // last-evaluated update or stop can never be clobbered by a stale copy.
         liveStrategyRepository.updateEnabled(id, true);
         strategy.setEnabled(true);
+        Instant started = Instant.now();
+        liveStrategyRepository.updateLastStartedTime(id, started);
+        strategy.setLastStartedTime(started);
         runners.put(id, runner);
         runner.start();
         log.info("Live strategy {} started ({} {}, dry-run={})", id, strategy.getMarket(),

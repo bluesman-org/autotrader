@@ -4,6 +4,7 @@ import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,4 +21,13 @@ public interface LivePositionRepository extends MongoRepository<LivePosition, St
      * @return The position if it exists
      */
     Optional<LivePosition> findByStrategyIdAndStatus(String strategyId, String status);
+
+    /**
+     * A strategy's positions in the given state, for aggregating its round trips.
+     *
+     * @param strategyId The strategy ID
+     * @param status     "OPEN" or "CLOSED"
+     * @return The positions, in no particular order
+     */
+    List<LivePosition> findAllByStrategyIdAndStatus(String strategyId, String status);
 }

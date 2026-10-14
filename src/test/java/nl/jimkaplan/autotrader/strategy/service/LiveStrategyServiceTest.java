@@ -184,9 +184,10 @@ class LiveStrategyServiceTest {
         assertTrue(strategy.isEnabled());
         assertTrue(liveStrategyService.isRunning("strategy-1"));
         verify(liveStrategyRepository).updateEnabled("strategy-1", true);
+        verify(liveStrategyRepository).updateLastStartedTime(eq("strategy-1"), any());
         verify(streamFactory, times(1)).create(any(), any(), anyLong(), any());
         verify(stream).start();
-        // Only the enabled flag is written; a full save would clobber concurrent evaluation state.
+        // Only targeted fields are written; a full save would clobber concurrent evaluation state.
         verify(liveStrategyRepository, never()).save(any());
     }
 

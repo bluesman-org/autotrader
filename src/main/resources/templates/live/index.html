@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live engine · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1>Live engine</h1>
+    <p class="muted" th:text="|Order times are local time (${timeZoneLabel}) · Page refreshes every 10 seconds · DRY RUN = simulated orders, nothing sent to the exchange · REAL = live money|">
+        Order times are local time (CEST) · Page refreshes every 10 seconds · DRY RUN = simulated
+        orders, nothing sent to the exchange · REAL = live money
+    </p>
+
+    <div id="live-cards" th:attr="data-refresh-url=@{/ui/live/cards}"
+         th:insert="~{live/cards :: cards}"></div>
+</main>
+
+<script>
+    // Refresh the cards in place every 10 seconds: scroll position, expanded details and any
+    // half-typed input stay put, and a number that changed gets a brief highlight. A failed fetch
+    // keeps the last state on screen.
+    (function () {
+        var container = document.getElementById('live-cards');
+        if (!container) {
+            return;
+        }
+        var url = container.getAttribute('data-refresh-url');
+
+        function values(root) {
+            var map = {};
+            root.querySelectorAll('[data-live]').forEach(function (el) {
+                map[el.getAttribute('data-live')] = el.textContent;
+            });
+            return map;
+        }
+
+        function refresh() {
+            fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
+                .then(function (response) { return response.ok ? response.text() : null; })
+                .then(function (html) {
+                    if (html === null) {
+                        return;
+                    }
+                    var before = values(container);
+                    container.innerHTML = html;
+                    container.querySelectorAll('[data-live]').forEach(function (el) {
+                        var key = el.getAttribute('data-live');
+                        if (before[key] !== undefined && before[key] !== el.textContent) {
+                            el.classList.add('flash');
+                            window.setTimeout(function () { el.classList.remove('flash'); }, 1100);
+                        }
+                    });
+                })
+                .catch(function () { /* keep the last state */ });
+        }
+
+        window.setInterval(refresh, 10000);
+    })();
+</script>
+</body>
+</html>
