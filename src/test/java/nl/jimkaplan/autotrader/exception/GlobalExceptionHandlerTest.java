@@ -192,6 +192,16 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.NOT_ACCEPTABLE, response.getStatusCode());
         assertNull(response.getBody());
+        assertEquals("application/json", response.getHeaders().getFirst(HttpHeaders.ACCEPT));
+    }
+
+    @Test
+    void handleMediaTypeNotAcceptableException_withoutProducibleTypes_omitsAcceptHeader() {
+        ResponseEntity<Void> response = globalExceptionHandler.handleMediaTypeNotAcceptableException(
+                new HttpMediaTypeNotAcceptableException("Not acceptable"), request());
+
+        assertEquals(HttpStatus.NOT_ACCEPTABLE, response.getStatusCode());
+        assertNull(response.getHeaders().getFirst(HttpHeaders.ACCEPT));
     }
 
     @Test

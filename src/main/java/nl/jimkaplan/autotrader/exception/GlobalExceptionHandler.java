@@ -242,16 +242,18 @@ public class GlobalExceptionHandler {
 
     /**
      * Handle responses no acceptable media type can carry, which Spring maps to 406 by default.
-     * The response is deliberately empty: the client's {@code Accept} header rejected every type
-     * the endpoint can produce, so an error body could not be rendered either — the catch-all's
-     * JSON body would fail negotiation and the request would degrade to a 500.
+     * The response body is deliberately empty: the client's {@code Accept} header rejected every
+     * type the endpoint can produce, so an error body could not be rendered either — the
+     * catch-all's JSON body would fail negotiation and the request would degrade to a 500. The
+     * exception's own headers carry the producible types in {@code Accept}, so the client still
+     * learns what the endpoint can serve, exactly as the 405 and 415 handlers reuse theirs.
      */
     @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
     public ResponseEntity<Void> handleMediaTypeNotAcceptableException(
             HttpMediaTypeNotAcceptableException ex, WebRequest request) {
         log.warn("Not acceptable: {} at {}", ex.getMessage(), getRequestPath(request));
 
-        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build();
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).headers(ex.getHeaders()).build();
     }
 
     /**
