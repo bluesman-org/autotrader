@@ -155,7 +155,7 @@ class TradeHistoryServiceTest {
 
     @Test
     void view_resolvesCalendarPresetsInTheDisplayZone() {
-        when(positions.findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+        when(positions.findByStatusAndEntryTimeRange(
                 eq("CLOSED"),
                 eq(Instant.parse("2026-10-05T00:00:00Z").toEpochMilli()),
                 eq(Instant.parse("2026-10-11T23:59:59.999Z").toEpochMilli())))
@@ -173,12 +173,12 @@ class TradeHistoryServiceTest {
 
     @Test
     void view_resolvesYearToDateAndLastYear() {
-        when(positions.findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+        when(positions.findByStatusAndEntryTimeRange(
                 eq("CLOSED"),
                 eq(Instant.parse("2026-01-01T00:00:00Z").toEpochMilli()),
                 eq(NOW.toEpochMilli())))
                 .thenReturn(List.of());
-        when(positions.findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+        when(positions.findByStatusAndEntryTimeRange(
                 eq("CLOSED"),
                 eq(Instant.parse("2025-01-01T00:00:00Z").toEpochMilli()),
                 eq(Instant.parse("2025-12-31T23:59:59.999Z").toEpochMilli())))
@@ -195,7 +195,7 @@ class TradeHistoryServiceTest {
 
     @Test
     void view_prefersTheCustomRangeAndLabelsIt() {
-        when(positions.findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+        when(positions.findByStatusAndEntryTimeRange(
                 eq("CLOSED"),
                 eq(Instant.parse("2026-10-07T09:00:00Z").toEpochMilli()),
                 eq(Instant.parse("2026-10-14T14:55:59.999Z").toEpochMilli())))
@@ -216,7 +216,7 @@ class TradeHistoryServiceTest {
 
     @Test
     void view_dateOnlyCustomRangeCoversWholeDays() {
-        when(positions.findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+        when(positions.findByStatusAndEntryTimeRange(
                 eq("CLOSED"),
                 eq(Instant.parse("2026-10-07T00:00:00Z").toEpochMilli()),
                 eq(Instant.parse("2026-10-08T23:59:59.999Z").toEpochMilli())))
@@ -239,7 +239,7 @@ class TradeHistoryServiceTest {
                 .exitPrice(74_412.0).exitTime(NOW.minusSeconds(89 * 60).toEpochMilli())
                 .profit(0.12).dryRun(false).build();
         stubPeriod(List.of(real));
-        when(orders.findBySignalOpenTimeGreaterThanEqualAndSignalOpenTimeLessThanEqual(anyLong(), anyLong()))
+        when(orders.findBySignalOpenTimeRange(anyLong(), anyLong()))
                 .thenReturn(List.of(
                         order("BUY", real.getEntryTime(), "8f14e2c7-aaaa-bbbb-cccc-dddddddddddd", 0.20),
                         order("SELL", real.getExitTime(), "c92b71a0-1111-2222-3333-444444444444", 0.20)));
@@ -331,7 +331,7 @@ class TradeHistoryServiceTest {
                 .quantity(0.5).entryPrice(100).entryFee(null).entryTime(NOW.minusSeconds(30).toEpochMilli())
                 .exitPrice(null).exitTime(null).profit(null).dryRun(false).build();
         stubPeriod(List.of(incomplete));
-        when(orders.findBySignalOpenTimeGreaterThanEqualAndSignalOpenTimeLessThanEqual(anyLong(), anyLong()))
+        when(orders.findBySignalOpenTimeRange(anyLong(), anyLong()))
                 .thenReturn(List.of());
 
         TradeHistoryRequest request = new TradeHistoryRequest();
@@ -425,7 +425,7 @@ class TradeHistoryServiceTest {
     }
 
     private void stubPeriod(List<LivePosition> result) {
-        when(positions.findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+        when(positions.findByStatusAndEntryTimeRange(
                 eq("CLOSED"), anyLong(), anyLong())).thenReturn(result);
     }
 

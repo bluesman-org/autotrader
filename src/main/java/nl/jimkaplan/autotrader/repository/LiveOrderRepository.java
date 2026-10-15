@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.repository;
 
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -33,11 +34,12 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     /**
      * Orders whose decision candle falls in the given range, for the history page's order
      * references: a round trip's buy carries the position's entry signal time, its sell the exit
-     * signal time.
+     * signal time. Explicit {@code @Query} for the same reason as the position range above.
      *
      * @param from The start of the range, inclusive, epoch millis
      * @param to   The end of the range, inclusive, epoch millis
      * @return The orders
      */
-    List<LiveOrder> findBySignalOpenTimeGreaterThanEqualAndSignalOpenTimeLessThanEqual(long from, long to);
+    @Query("{ 'signal_open_time' : { $gte : ?0, $lte : ?1 } }")
+    List<LiveOrder> findBySignalOpenTimeRange(long from, long to);
 }

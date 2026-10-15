@@ -121,8 +121,7 @@ public class TradeHistoryService {
         // The filter bar's strategy options come from the whole period, so narrowing by one
         // strategy never collapses the list to that strategy.
         List<LivePosition> periodRows = positions
-                .findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
-                        "CLOSED", range.fromMillis(), range.toMillis());
+                .findByStatusAndEntryTimeRange("CLOSED", range.fromMillis(), range.toMillis());
         List<LivePosition> filtered = periodRows.stream()
                 .filter(position -> matchesStrategy(position, request.getStrategy()))
                 .filter(position -> matchesType(position, request.getType()))
@@ -295,8 +294,7 @@ public class TradeHistoryService {
         long max = rows.stream().mapToLong(position -> position.getExitTime() == null
                 ? position.getEntryTime() : position.getExitTime()).max().orElse(0);
         Map<String, LiveOrder> refs = new HashMap<>();
-        for (LiveOrder order : orders
-                .findBySignalOpenTimeGreaterThanEqualAndSignalOpenTimeLessThanEqual(min, max)) {
+        for (LiveOrder order : orders.findBySignalOpenTimeRange(min, max)) {
             refs.put(order.getStrategyId() + "|" + order.getSignalOpenTime(), order);
         }
         return refs;

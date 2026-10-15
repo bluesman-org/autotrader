@@ -209,6 +209,12 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
     whole round-trip history in memory on every 10-second refresh (the orders query is already
     bounded in the database). Aggregate count, sum, win count and the averages Mongo-side (flagged
     in the PR #30 review).
+22. ⬜ Cover Mongo query execution in CI: the history page's range queries failed only at deploy —
+    two conditions on one field cannot be written as a derived method name (Spring Data builds one
+    criteria document per property and Mongo rejects the second bound at run time), and neither the
+    mocked tests nor the context test (which mocks the startup runners, so CI needs no database)
+    can see that. A Mongo service in the coverage workflow would let a repository test execute the
+    queries (flagged after PR #34)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
