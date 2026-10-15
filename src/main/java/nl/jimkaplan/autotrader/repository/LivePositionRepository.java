@@ -30,4 +30,17 @@ public interface LivePositionRepository extends MongoRepository<LivePosition, St
      * @return The positions, in no particular order
      */
     List<LivePosition> findAllByStrategyIdAndStatus(String strategyId, String status);
+
+    /**
+     * Closed round trips that opened within the given range, for the history page. The range bounds
+     * the read; the page filters, sorts and pages the result in memory because its totals and its
+     * daily breakdown cover the whole selected period, not one page.
+     *
+     * @param status The position status ("CLOSED")
+     * @param from   The start of the range, inclusive, epoch millis
+     * @param to     The end of the range, inclusive, epoch millis
+     * @return The positions
+     */
+    List<LivePosition> findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+            String status, long from, long to);
 }

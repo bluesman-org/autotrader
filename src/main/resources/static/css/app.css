@@ -369,6 +369,140 @@ table.orders td, table.orders th {
     animation: flash 1s ease-out;
 }
 
+/* The account history page: tabs, filters, paging, strategy colours and expandable rows. */
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 0;
+}
+
+.tabs a {
+    padding: 8px 18px;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: 6px 6px 0 0;
+    background: #eef1f4;
+    color: #566573;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.tabs a.active {
+    background: #ffffff;
+    color: var(--nav);
+    font-weight: 600;
+}
+
+.filters {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: end;
+}
+
+.filters .f {
+    min-width: 150px;
+}
+
+.filters label {
+    font-size: 0.82rem;
+}
+
+.pager {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.pager a {
+    text-decoration: none;
+}
+
+.pager .disabled {
+    color: #b6c2cb;
+}
+
+.table-scroll {
+    max-height: 62vh;
+    overflow-y: auto;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.totals {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+th a {
+    color: inherit;
+    text-decoration: none;
+}
+
+th a.sorted {
+    text-decoration: underline;
+}
+
+th .arrow {
+    color: var(--accent);
+    font-size: 0.8rem;
+}
+
+.schip {
+    display: inline-block;
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.hue-0 { background: #eaf4fb; color: #21618c; }
+.hue-1 { background: #f5eef8; color: #6c3483; }
+.hue-2 { background: #eafaf1; color: #1e8449; }
+.hue-3 { background: #fef5e7; color: #9c640c; }
+.hue-4 { background: #e8f6f3; color: #117864; }
+.hue-5 { background: #eef1f4; color: #566573; }
+
+tr.hue-0 td:first-child { border-left: 8px solid #5dade2; }
+tr.hue-1 td:first-child { border-left: 8px solid #bb8fce; }
+tr.hue-2 td:first-child { border-left: 8px solid #58d68d; }
+tr.hue-3 td:first-child { border-left: 8px solid #f0b27a; }
+tr.hue-4 td:first-child { border-left: 8px solid #48c9b0; }
+tr.hue-5 td:first-child { border-left: 8px solid #aab7c4; }
+
+tr.detail td {
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border);
+    padding: 4px 10px;
+    text-align: left;
+}
+
+tr.detail summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+tr.detail details[open] summary {
+    color: var(--nav);
+}
+
+.detail-grid {
+    display: flex;
+    gap: 34px;
+    flex-wrap: wrap;
+    padding: 6px 0 10px;
+}
+
 /* The live page's refresh pulse is decorative; honour a request for less motion. */
 @media (prefers-reduced-motion: reduce) {
     .flash {

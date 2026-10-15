@@ -63,7 +63,7 @@ class MongoIndexInitializerTest {
         mongoIndexInitializer.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<Index> indexCaptor = ArgumentCaptor.forClass(Index.class);
-        verify(indexOperations, times(5)).ensureIndex(indexCaptor.capture());
+        verify(indexOperations, times(7)).ensureIndex(indexCaptor.capture());
         List<Index> indexes = indexCaptor.getAllValues();
 
         Index candleIndex = indexes.get(0);
@@ -93,6 +93,15 @@ class MongoIndexInitializerTest {
         assertEquals(2, livePositionIndex.getIndexKeys().size());
         assertEquals(1, livePositionIndex.getIndexKeys().get("strategyId"));
         assertEquals(1, livePositionIndex.getIndexKeys().get("status"));
+
+        Index liveOrderSignalIndex = indexes.get(5);
+        assertEquals(1, liveOrderSignalIndex.getIndexKeys().size());
+        assertEquals(1, liveOrderSignalIndex.getIndexKeys().get("signalOpenTime"));
+
+        Index livePositionHistoryIndex = indexes.get(6);
+        assertEquals(2, livePositionHistoryIndex.getIndexKeys().size());
+        assertEquals(1, livePositionHistoryIndex.getIndexKeys().get("status"));
+        assertEquals(1, livePositionHistoryIndex.getIndexKeys().get("entryTime"));
     }
 
     @Test
@@ -113,7 +122,7 @@ class MongoIndexInitializerTest {
 
         verify(indexOperations).dropIndex("botId_1");
         ArgumentCaptor<Index> indexCaptor = ArgumentCaptor.forClass(Index.class);
-        verify(indexOperations, times(5)).ensureIndex(indexCaptor.capture());
+        verify(indexOperations, times(7)).ensureIndex(indexCaptor.capture());
         assertEquals(BOT_ID_INDEX_NAME, indexCaptor.getAllValues().get(1).getIndexOptions().get("name"));
     }
 
@@ -132,7 +141,7 @@ class MongoIndexInitializerTest {
         mongoIndexInitializer.run(new DefaultApplicationArguments());
 
         verify(indexOperations, never()).getIndexInfo();
-        verify(indexOperations, times(5)).ensureIndex(any(Index.class));
+        verify(indexOperations, times(7)).ensureIndex(any(Index.class));
     }
 
     @Test

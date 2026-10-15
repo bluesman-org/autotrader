@@ -64,6 +64,12 @@ public class MongoIndexInitializer implements ApplicationRunner {
         ensureIndex(LivePosition.class, new Index()
                 .on("strategyId", Sort.Direction.ASC)
                 .on("status", Sort.Direction.ASC));
+        // The history page reads orders by signal time and positions by status plus entry time.
+        ensureIndex(LiveOrder.class, new Index()
+                .on("signalOpenTime", Sort.Direction.ASC));
+        ensureIndex(LivePosition.class, new Index()
+                .on("status", Sort.Direction.ASC)
+                .on("entryTime", Sort.Direction.ASC));
     }
 
     /**
