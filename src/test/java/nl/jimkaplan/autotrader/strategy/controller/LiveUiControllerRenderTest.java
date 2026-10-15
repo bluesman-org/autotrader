@@ -47,11 +47,14 @@ class LiveUiControllerRenderTest {
     void pageRendersARunningCardWithItsPositionAndOrders() throws Exception {
         when(liveViewService.cards()).thenReturn(List.of(card(true)));
         when(liveViewService.zoneLabel()).thenReturn("UTC");
+        when(liveViewService.zoneId()).thenReturn("UTC");
 
         mockMvc.perform(get("/ui/live"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Live engine")))
                 .andExpect(content().string(containsString("Order times are local time (UTC)")))
+                .andExpect(content().string(containsString("id=\"last-refresh\"")))
+                .andExpect(content().string(containsString("data-time-zone=\"UTC\"")))
                 .andExpect(content().string(containsString("BTC-EUR · 1m")))
                 .andExpect(content().string(containsString("6ace5dbf")))
                 .andExpect(content().string(containsString("● Running")))
@@ -69,6 +72,7 @@ class LiveUiControllerRenderTest {
     void pageRendersAStoppedCardWithoutAPosition() throws Exception {
         when(liveViewService.cards()).thenReturn(List.of(card(false)));
         when(liveViewService.zoneLabel()).thenReturn("UTC");
+        when(liveViewService.zoneId()).thenReturn("UTC");
 
         mockMvc.perform(get("/ui/live"))
                 .andExpect(status().isOk())
@@ -81,6 +85,7 @@ class LiveUiControllerRenderTest {
     void pageShowsTheEmptyStateWithoutStrategies() throws Exception {
         when(liveViewService.cards()).thenReturn(List.of());
         when(liveViewService.zoneLabel()).thenReturn("UTC");
+        when(liveViewService.zoneId()).thenReturn("UTC");
 
         mockMvc.perform(get("/ui/live"))
                 .andExpect(status().isOk())

@@ -78,6 +78,14 @@ public class LiveViewService {
     }
 
     /**
+     * @return The zone's IANA id, e.g. {@code Europe/Amsterdam} — the page passes it to its
+     *         refresh script so the "last refresh" stamp renders in the same zone and format
+     */
+    public String zoneId() {
+        return zone.getId();
+    }
+
+    /**
      * @return One card per strategy — the running ones first, then the newest — with the prices
      *         that could be read
      */

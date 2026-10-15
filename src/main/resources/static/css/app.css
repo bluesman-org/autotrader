@@ -368,3 +368,10 @@ table.orders td, table.orders th {
 .flash {
     animation: flash 1s ease-out;
 }
+
+/* The live page's refresh pulse is decorative; honour a request for less motion. */
+@media (prefers-reduced-motion: reduce) {
+    .flash {
+        animation: none;
+    }
+}

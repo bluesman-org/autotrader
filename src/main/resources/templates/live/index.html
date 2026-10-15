@@ -16,8 +16,9 @@
         Order times are local time (CEST) · Page refreshes every 10 seconds · DRY RUN = simulated
         orders, nothing sent to the exchange · REAL = live money
     </p>
+    <p class="muted">Last refresh: <span id="last-refresh">just loaded</span></p>
 
-    <div id="live-cards" th:attr="data-refresh-url=@{/ui/live/cards}"
+    <div id="live-cards" th:attr="data-refresh-url=@{/ui/live/cards},data-time-zone=${timeZoneId}"
          th:insert="~{live/cards :: cards}"></div>
 </main>
 
@@ -31,6 +32,9 @@
             return;
         }
         var url = container.getAttribute('data-refresh-url');
+        var zone = container.getAttribute('data-time-zone');
+        var lastRefresh = document.getElementById('last-refresh');
+        var lastOk = null;
 
         function values(root) {
             var map = {};
@@ -38,6 +42,35 @@
                 map[el.getAttribute('data-live')] = el.textContent;
             });
             return map;
+        }
+
+        function nowText() {
+            var options = { hour12: false };
+            if (zone) {
+                options.timeZone = zone;
+            }
+            return new Date().toLocaleTimeString([], options);
+        }
+
+        // Show when the page last refreshed, so an unchanged page still visibly ticks. The stamp
+        // always answers "how old is what I am looking at?": on a failed refresh the last
+        // successful time stays put, with the failure noted beside it.
+        function refreshed(ok) {
+            if (!lastRefresh) {
+                return;
+            }
+            var now = nowText();
+            if (ok) {
+                lastOk = now;
+                lastRefresh.textContent = now;
+            } else {
+                lastRefresh.textContent = 'last update ' + (lastOk || 'none yet')
+                        + ' — refresh failed at ' + now;
+            }
+            lastRefresh.classList.toggle('neg', !ok);
+            lastRefresh.classList.remove('flash');
+            void lastRefresh.offsetWidth;
+            lastRefresh.classList.add('flash');
         }
 
         function refresh() {
@@ -49,6 +82,7 @@
                 .then(function (response) { return response.ok ? response.text() : null; })
                 .then(function (html) {
                     if (html === null) {
+                        refreshed(false);
                         return;
                     }
                     var before = values(container);
@@ -60,8 +94,9 @@
                             window.setTimeout(function () { el.classList.remove('flash'); }, 1100);
                         }
                     });
+                    refreshed(true);
                 })
-                .catch(function () { /* keep the last state */ });
+                .catch(function () { refreshed(false); });
         }
 
         document.addEventListener('visibilitychange', function () {
