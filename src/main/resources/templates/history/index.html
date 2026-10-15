@@ -48,6 +48,7 @@
             </div>
             <div class="f"><label>Time</label>
                 <select name="period">
+                    <option value="" th:selected="${#strings.isEmpty(history.filters.period)}">Custom range</option>
                     <option th:each="option : ${history.filters.timeOptions}" th:value="${option.value}"
                             th:text="${option.label}"
                             th:selected="${option.value == history.filters.period}">Last 7 days</option>
@@ -120,13 +121,17 @@
 
         form.addEventListener('submit', function (event) {
             event.preventDefault();
-            var params = [];
+            // Keep the state the form does not own (sort, direction, page size); a cleared field
+            // removes its filter.
+            var params = new URLSearchParams(window.location.search);
             new FormData(form).forEach(function (value, key) {
-                if (String(value).trim() !== '') {
-                    params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+                if (String(value).trim() === '') {
+                    params.delete(key);
+                } else {
+                    params.set(key, value);
                 }
             });
-            swap(form.getAttribute('action') + '?' + params.join('&'));
+            swap(form.getAttribute('action') + '?' + params.toString());
         });
     })();
 </script>

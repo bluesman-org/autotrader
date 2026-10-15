@@ -215,6 +215,22 @@ class TradeHistoryServiceTest {
     }
 
     @Test
+    void view_dateOnlyCustomRangeCoversWholeDays() {
+        when(positions.findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
+                eq("CLOSED"),
+                eq(Instant.parse("2026-10-07T00:00:00Z").toEpochMilli()),
+                eq(Instant.parse("2026-10-08T23:59:59.999Z").toEpochMilli())))
+                .thenReturn(List.of());
+
+        TradeHistoryRequest request = new TradeHistoryRequest();
+        request.setFromDate("2026-10-07");
+        request.setToDate("2026-10-08");
+        TradeHistoryView view = service.view(request);
+
+        assertEquals("7 Oct 00:00 → 8 Oct 23:59", view.totals().periodText());
+    }
+
+    @Test
     void view_detailsCarryFeesAndOrderReferences() {
         LivePosition real = LivePosition.builder()
                 .strategyId(STRATEGY).market("BTC-EUR").status("CLOSED")

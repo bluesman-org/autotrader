@@ -310,10 +310,10 @@ public class LiveViewService {
     }
 
     private static String euro(double value) {
-        return "€" + String.format(Locale.US, "%,.2f", Math.abs(value));
+        return ViewText.euro(value);
     }
 
     private static String signed(double value) {
-        return (value < 0 ? "−" : "+") + euro(value);
+        return ViewText.signed(value);
     }
 }

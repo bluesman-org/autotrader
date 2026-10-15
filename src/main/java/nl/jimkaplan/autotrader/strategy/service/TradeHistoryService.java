@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.strategy.service;
 
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryRequest;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView.DailyView;
@@ -117,10 +118,12 @@ public class TradeHistoryService {
      */
     public TradeHistoryView view(TradeHistoryRequest request) {
         Range range = range(request);
-        List<LivePosition> filtered = positions
+        // The filter bar's strategy options come from the whole period, so narrowing by one
+        // strategy never collapses the list to that strategy.
+        List<LivePosition> periodRows = positions
                 .findByStatusAndEntryTimeGreaterThanEqualAndEntryTimeLessThanEqual(
-                        "CLOSED", range.fromMillis(), range.toMillis())
-                .stream()
+                        "CLOSED", range.fromMillis(), range.toMillis());
+        List<LivePosition> filtered = periodRows.stream()
                 .filter(position -> matchesStrategy(position, request.getStrategy()))
                 .filter(position -> matchesType(position, request.getType()))
                 .filter(position -> matchesResult(position, request.getResult()))
@@ -143,7 +146,7 @@ public class TradeHistoryService {
             rows.add(row(pageRows.get(i), fromIndex + i + 1, refs));
         }
         return new TradeHistoryView(rows, headers(request, sortKey, ascending, size),
-                filters(request, sorted), pager(request, fromIndex, toIndex, sorted.size(), page, pages, size),
+                filters(request, periodRows), pager(request, fromIndex, toIndex, sorted.size(), page, pages, size),
                 totals(sorted, range), daily(sorted));
     }
 
@@ -157,11 +160,16 @@ public class TradeHistoryService {
             LocalDate fromDate = parseDate(request.getFromDate());
             LocalDate toDate = parseDate(request.getToDate());
             if (fromDate != null && toDate != null) {
-                LocalDateTime from = fromDate.atTime(parseTime(request.getFromTime(), LocalTime.MIN));
-                LocalDateTime to = toDate.atTime(parseTime(request.getToTime(), LocalTime.MAX.withNano(0)));
-                long toMillis = to.plusMinutes(1).atZone(zone).toInstant().toEpochMilli() - 1;
+                LocalTime fromTime = parseTime(request.getFromTime());
+                LocalDateTime from = fromDate.atTime(fromTime == null ? LocalTime.MIN : fromTime);
+                // An explicit minute means "through the end of that minute"; a date alone means the
+                // whole day.
+                LocalTime toTime = parseTime(request.getToTime());
+                long toMillis = toTime == null ? endOfDay(toDate)
+                        : toDate.atTime(toTime).plusMinutes(1).atZone(zone).toInstant().toEpochMilli() - 1;
+                LocalDateTime labelTo = toDate.atTime(toTime == null ? LocalTime.of(23, 59) : toTime);
                 String label = minuteFormat.format(from.atZone(zone).toInstant()) + " → "
-                        + minuteFormat.format(to.atZone(zone).toInstant());
+                        + minuteFormat.format(labelTo.atZone(zone).toInstant());
                 return new Range(from.atZone(zone).toInstant().toEpochMilli(), toMillis, label);
             }
         }
@@ -219,15 +227,15 @@ public class TradeHistoryService {
         }
     }
 
-    private static LocalTime parseTime(String value, LocalTime fallback) {
+    private static LocalTime parseTime(String value) {
         if (!notBlank(value)) {
-            return fallback;
+            return null;
         }
         try {
             return LocalTime.parse(value.length() <= 2 ? value + ":00" : value,
                     DateTimeFormatter.ofPattern("H:mm"));
         } catch (RuntimeException e) {
-            return fallback;
+            return null;
         }
     }
 
@@ -319,9 +327,11 @@ public class TradeHistoryService {
                 : refs.get(position.getStrategyId() + "|" + position.getExitTime());
         String boughtFee = position.getEntryFee() != null ? euro(position.getEntryFee())
                 : buy != null && buy.getFee() != null ? euro(buy.getFee()) : DASH;
+        // Only the buy fee is stored on a position; the sell fee comes from the matching order
+        // when it is found and is otherwise estimated with the engine's taker rate.
         String soldFee = sell != null && sell.getFee() != null ? euro(sell.getFee())
                 : position.getExitPrice() == null ? DASH
-                : euro(position.getQuantity() * position.getExitPrice() * 0.002);
+                : euro(position.getQuantity() * position.getExitPrice() * BacktestDefaults.FEE_RATE);
         String references = position.isDryRun() ? "none — dry run (simulated)"
                 : "buy " + shortRef(buy) + " · sell " + shortRef(sell);
         return new DetailsView(
@@ -493,11 +503,11 @@ public class TradeHistoryService {
     }
 
     private static String euro(double value) {
-        return "€" + String.format(Locale.US, "%,.2f", Math.abs(value));
+        return ViewText.euro(value);
     }
 
     private static String signed(double value) {
-        return (value < 0 ? "−" : "+") + euro(value);
+        return ViewText.signed(value);
     }
 
     private static boolean notBlank(String value) {
