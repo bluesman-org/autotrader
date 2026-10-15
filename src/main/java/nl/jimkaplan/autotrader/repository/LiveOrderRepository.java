@@ -34,7 +34,8 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     /**
      * Orders whose decision candle falls in the given range, for the history page's order
      * references: a round trip's buy carries the position's entry signal time, its sell the exit
-     * signal time. Explicit {@code @Query} for the same reason as the position range above.
+     * signal time. Explicit {@code @Query} for the same reason as
+     * {@code LivePositionRepository.findByStatusAndEntryTimeRange}.
      *
      * @param from The start of the range, inclusive, epoch millis
      * @param to   The end of the range, inclusive, epoch millis
