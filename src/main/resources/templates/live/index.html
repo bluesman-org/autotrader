@@ -16,6 +16,7 @@
         Order times are local time (CEST) · Page refreshes every 10 seconds · DRY RUN = simulated
         orders, nothing sent to the exchange · REAL = live money
     </p>
+    <p class="muted">Last refresh: <span id="last-refresh">just loaded</span></p>
 
     <div id="live-cards" th:attr="data-refresh-url=@{/ui/live/cards}"
          th:insert="~{live/cards :: cards}"></div>
@@ -31,6 +32,7 @@
             return;
         }
         var url = container.getAttribute('data-refresh-url');
+        var lastRefresh = document.getElementById('last-refresh');
 
         function values(root) {
             var map = {};
@@ -38,6 +40,20 @@
                 map[el.getAttribute('data-live')] = el.textContent;
             });
             return map;
+        }
+
+        // Show when the page last refreshed, so an unchanged page still visibly ticks: the value
+        // pulses on every refresh, and says so when one fails.
+        function refreshed(ok) {
+            if (!lastRefresh) {
+                return;
+            }
+            lastRefresh.textContent = ok ? new Date().toLocaleTimeString()
+                    : new Date().toLocaleTimeString() + ' — refresh failed, showing the last state';
+            lastRefresh.classList.toggle('neg', !ok);
+            lastRefresh.classList.remove('flash');
+            void lastRefresh.offsetWidth;
+            lastRefresh.classList.add('flash');
         }
 
         function refresh() {
@@ -49,6 +65,7 @@
                 .then(function (response) { return response.ok ? response.text() : null; })
                 .then(function (html) {
                     if (html === null) {
+                        refreshed(false);
                         return;
                     }
                     var before = values(container);
@@ -60,8 +77,9 @@
                             window.setTimeout(function () { el.classList.remove('flash'); }, 1100);
                         }
                     });
+                    refreshed(true);
                 })
-                .catch(function () { /* keep the last state */ });
+                .catch(function () { refreshed(false); });
         }
 
         document.addEventListener('visibilitychange', function () {
