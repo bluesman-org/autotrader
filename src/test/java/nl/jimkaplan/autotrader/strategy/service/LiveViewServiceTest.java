@@ -198,6 +198,7 @@ class LiveViewServiceTest {
     @Test
     void zoneLabel_namesTheDisplayZone() {
         assertEquals("UTC", service.zoneLabel());
+        assertEquals("UTC", service.zoneId());
     }
 
     private static LivePosition closedPosition(double profit) {

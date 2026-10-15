@@ -31,13 +31,14 @@ public class LiveUiController {
     }
 
     /**
-     * @param model The cards and the display zone's label
+     * @param model The cards, the display zone's label and its IANA id (for the refresh stamp)
      * @return The live page
      */
     @GetMapping
     public String page(Model model) {
         model.addAttribute("cards", liveViewService.cards());
         model.addAttribute("timeZoneLabel", liveViewService.zoneLabel());
+        model.addAttribute("timeZoneId", liveViewService.zoneId());
         return "live/index";
     }
 
