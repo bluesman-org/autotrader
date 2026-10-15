@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -68,4 +69,16 @@ public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, St
     @Query("{ '_id' : ?0, 'series_start_time' : { $in : [ null, 0 ] } }")
     @Update("{ '$set' : { 'series_start_time' : ?1 } }")
     long updateSeriesStartTime(String id, long seriesStartTime);
+
+    /**
+     * Record when the current run started, so the live page can show how long the strategy has
+     * been running. A targeted update, like the enabled flag: a concurrent evaluation-state write
+     * is never clobbered.
+     *
+     * @param id      The strategy ID
+     * @param started When the run started
+     */
+    @Query("{ '_id' : ?0 }")
+    @Update("{ '$set' : { 'last_started_time' : ?1 } }")
+    void updateLastStartedTime(String id, Instant started);
 }

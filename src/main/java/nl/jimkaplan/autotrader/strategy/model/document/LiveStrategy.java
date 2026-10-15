@@ -130,6 +130,14 @@ public class LiveStrategy extends BaseDocument {
     private long seriesStartTime;
 
     /**
+     * When the current run started, written on every start so the live page can say how long the
+     * strategy has been running. Engine bookkeeping only: kept out of the API.
+     */
+    @JsonIgnore
+    @Field("last_started_time")
+    private Instant lastStartedTime;
+
+    /**
      * When the strategy was created.
      */
     @Field("created_time")

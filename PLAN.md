@@ -167,7 +167,7 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
     column sorts on the underlying value, never the displayed text — and Bitvavo's account ledger:
     per-order rows with the order's total fee (`feePaid`) expanding into their fills, plus the raw
     transactions (deposits, withdrawals, staking, rebates) — modelled on the broker-app screenshots
-    shared 2026-10-13
+    shared 2026-10-13. The live page landed as its first part (PR #30); the history tabs follow
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed
@@ -204,6 +204,10 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
     still needs update and delete endpoints (create exists; today the UI has none, so strategies can
     only be created via the API). Scoped out of item 10 on 2026-10-14; the endpoints and the form
     land together.
+21. ⬜ Keep the live page's reads flat as histories grow: the statistics line walks a strategy's
+    whole round-trip history in memory on every 10-second refresh (the orders query is already
+    bounded in the database). Aggregate count, sum, win count and the averages Mongo-side (flagged
+    in the PR #30 review).
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

@@ -244,3 +244,127 @@ thead th.group-validate {
     font-size: 1.02rem;
     color: var(--nav);
 }
+
+/* Live engine page: the cards, badges and position block its in-place refresh swaps in. */
+.card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-head .spacer {
+    margin-left: auto;
+}
+
+.card-head h2 {
+    margin: 0;
+}
+
+.card-meta {
+    margin: 8px 0 0;
+}
+
+.card-meta.tight {
+    margin-top: 2px;
+}
+
+.badge {
+    display: inline-block;
+    border-radius: 10px;
+    padding: 1px 9px;
+    font-size: 0.78rem;
+    margin-right: 5px;
+    background: #eef1f4;
+    color: #566573;
+}
+
+.badge.ok {
+    background: #eafaf1;
+    color: #1e8449;
+}
+
+.badge.warn {
+    background: #fef9e7;
+    color: #9a7d0a;
+}
+
+.badge.dry {
+    background: #eaf4fb;
+    color: #21618c;
+}
+
+.badge.real {
+    background: #fdecea;
+    color: #b03a2e;
+}
+
+button.secondary {
+    background: #eef1f4;
+    color: #566573;
+    border: 0;
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+button.primary.small {
+    padding: 9px 18px;
+    font-size: 0.95rem;
+}
+
+.position {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 12px 0;
+}
+
+.pos-line {
+    display: flex;
+    gap: 26px;
+    flex-wrap: wrap;
+}
+
+.kv {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.kv b {
+    display: block;
+    font-size: 1.0rem;
+    color: var(--nav);
+}
+
+.pos {
+    color: #1e8449;
+}
+
+.neg {
+    color: #b03a2e;
+}
+
+table.orders {
+    font-size: 0.85rem;
+}
+
+table.orders td, table.orders th {
+    padding: 5px 9px;
+}
+
+/* A number that changed since the previous refresh flashes briefly. */
+@keyframes flash {
+    0% {
+        background-color: #fff3bf;
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+.flash {
+    animation: flash 1s ease-out;
+}
