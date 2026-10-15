@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="trades">
+    <p class="muted" th:if="${#lists.isEmpty(history.rows)}">No round trips match these filters.</p>
+
+    <div class="table-wrap table-scroll" th:unless="${#lists.isEmpty(history.rows)}">
+        <table>
+            <thead>
+            <tr>
+                <th class="left">#</th>
+                <th th:each="header : ${history.headers}" th:classappend="${header.alignClass}">
+                    <a th:href="@{'/ui/history' + ${header.query}}" th:classappend="${header.active} ? 'sorted'"
+                       th:text="${header.label}">Entry</a><span class="arrow" th:if="${header.active}"
+                                                                 th:text="${header.arrow}">▼</span>
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <th:block th:each="row : ${history.rows}">
+                <tr th:classappend="${row.hueClass}">
+                    <td class="left" th:text="${row.number}">1</td>
+                    <td class="left" th:text="${row.entryText}">14 Oct 14:10</td>
+                    <td class="left" th:text="${row.exitText}">14 Oct 14:11</td>
+                    <td class="left"><span th:classappend="${row.chipClass}" th:text="${row.strategyId}">6ace5dbf</span></td>
+                    <td class="left"><span class="badge" th:classappend="${row.typeClass}"
+                                           th:text="${row.typeLabel}">DRY RUN</span></td>
+                    <td th:text="${row.priceText}">73,990 → 74,380</td>
+                    <td th:text="${row.quantityText}">0.00135153</td>
+                    <td th:classappend="${row.resultClass}" th:text="${row.resultText}">+€0.13</td>
+                </tr>
+                <tr class="detail">
+                    <td colspan="8">
+                        <details>
+                            <summary>details</summary>
+                            <div class="detail-grid">
+                                <div class="kv">Bought<b th:text="${row.details.boughtText}">14 Oct 14:10 ·
+                                    0.00135153 BTC @ €73,990.00</b><span
+                                        th:text="${row.details.boughtFeeText}">fee €0.20</span></div>
+                                <div class="kv">Sold<b th:text="${row.details.soldText}">14 Oct 14:11 ·
+                                    0.00135153 BTC @ €74,380.00</b><span
+                                        th:text="${row.details.soldFeeText}">fee €0.20</span></div>
+                                <div class="kv">Held<b th:text="${row.details.heldText}">1 min 3 s</b>&nbsp;</div>
+                                <div class="kv">Order references<b class="muted"
+                                                                  th:text="${row.details.orderRefsText}">none —
+                                    dry run (simulated)</b>&nbsp;</div>
+                            </div>
+                        </details>
+                    </td>
+                </tr>
+            </th:block>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pager" th:if="${history.pager.total > 0}">
+        <span>Showing <b th:text="|${history.pager.from}–${history.pager.to}|">1–10</b> of
+            <b th:text="${history.pager.total}">41</b> round trips · page
+            <b th:text="${history.pager.page}">1</b> of <b th:text="${history.pager.pages}">5</b></span>
+        <span>Rows per page</span>
+        <select data-history-size>
+            <option th:each="size : ${history.pager.sizes}"
+                    th:value="@{'/ui/history' + ${size.query}}" th:text="${size.label}"
+                    th:selected="${size.selected}">10</option>
+        </select>
+        <a th:if="${history.pager.prevQuery != null}" th:href="@{'/ui/history' + ${history.pager.prevQuery}}">← Newer</a>
+        <span class="disabled" th:unless="${history.pager.prevQuery != null}">← Newer</span>
+        <a th:if="${history.pager.nextQuery != null}" th:href="@{'/ui/history' + ${history.pager.nextQuery}}">Older →</a>
+        <span class="disabled" th:unless="${history.pager.nextQuery != null}">Older →</span>
+    </div>
+
+    <div class="totals">
+        <div class="stat">Round trips<b th:text="${history.totals.roundTrips}">41</b></div>
+        <div class="stat">Realised<b th:classappend="${history.totals.realisedClass}"
+                                     th:text="${history.totals.realisedText}">−€16.68</b></div>
+        <div class="stat">Win rate<b th:text="${history.totals.winRateText}">24%</b></div>
+        <div class="stat">Period<b th:text="${history.totals.periodText}">Last 7 days</b></div>
+    </div>
+    <p class="muted" style="margin-top:4px">The totals cover the whole selected period, not just the
+        page you are on.</p>
+
+    <h2>Realised P&amp;L by day</h2>
+    <p class="muted" style="margin:0 0 8px">Closed round trips of the engine in the selected period,
+        dry-runs excluded</p>
+    <p class="muted" th:if="${#lists.isEmpty(history.daily)}">No real trades in this period.</p>
+    <div class="table-wrap" th:unless="${#lists.isEmpty(history.daily)}">
+        <table class="orders">
+            <thead>
+            <tr>
+                <th class="left">Day</th>
+                <th>Round trips</th>
+                <th>Realised</th>
+                <th>Cumulative</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="day : ${history.daily}">
+                <td class="left" th:text="${day.dayText}">12 Oct</td>
+                <td th:text="${day.roundTrips}">5</td>
+                <td th:classappend="${day.realisedClass}" th:text="${day.realisedText}">+€0.85</td>
+                <td th:classappend="${day.cumulativeClass}" th:text="${day.cumulativeText}">+€0.85</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

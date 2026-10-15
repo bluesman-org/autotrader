@@ -29,4 +29,15 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
      * @return The newest orders, at most the eight the page shows
      */
     List<LiveOrder> findTop8ByStrategyIdOrderByCreatedTimeDesc(String strategyId);
+
+    /**
+     * Orders whose decision candle falls in the given range, for the history page's order
+     * references: a round trip's buy carries the position's entry signal time, its sell the exit
+     * signal time.
+     *
+     * @param from The start of the range, inclusive, epoch millis
+     * @param to   The end of the range, inclusive, epoch millis
+     * @return The orders
+     */
+    List<LiveOrder> findBySignalOpenTimeGreaterThanEqualAndSignalOpenTimeLessThanEqual(long from, long to);
 }
