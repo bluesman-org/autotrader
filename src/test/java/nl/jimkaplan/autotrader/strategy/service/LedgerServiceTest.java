@@ -187,7 +187,7 @@ class LedgerServiceTest {
         LedgerView view = service.view(new LedgerRequest());
 
         assertNotNull(view.message());
-        assertTrue(view.message().contains("No Bitvavo API key is configured"));
+        assertTrue(view.message().contains("No active Bitvavo API key is configured"));
         assertEquals(0, view.rows().size());
         assertEquals(null, view.totals());
         assertEquals("BTC-EUR", view.price().market());
