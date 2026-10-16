@@ -7,6 +7,8 @@ info:
 servers:
   - url: "http://localhost:8081/autotrader"
     description: "Generated server url"
+security:
+  - basicAuth: []
 tags:
   - name: "Live strategies"
     description: "API for running strategies live on closed candles"
@@ -1247,3 +1249,9 @@ components:
           type: "string"
           enum:
             - "INSUFFICIENT_BALANCE"
+  securitySchemes:
+    basicAuth:
+      type: "http"
+      description: "The installation's account: HTTP Basic, the same credentials the\
+        \ sign-in page takes."
+      scheme: "basic"

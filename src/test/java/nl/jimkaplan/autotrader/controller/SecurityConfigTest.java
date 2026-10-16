@@ -123,6 +123,31 @@ class SecurityConfigTest {
     }
 
     @Test
+    void aForwardedHeaderDoesNotBuyTheApiShape() throws Exception {
+        // The rule keys on the address the container hands over. Tomcat only rewrites that from
+        // X-Forwarded-For for a trusted peer, and ignores `Forwarded` altogether — so a header alone
+        // must leave a remote caller outside (this slice has no forwarded-header filter, exactly
+        // like the production chain, which uses Tomcat's valve instead of Spring's filter).
+        mockMvc.perform(get("/v3/api-docs")
+                        .header("Forwarded", "for=127.0.0.1")
+                        .header("X-Forwarded-For", "127.0.0.1")
+                        .with(request -> {
+                            request.setRemoteAddr("203.0.113.7");
+                            return request;
+                        }))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("http://localhost/login"));
+    }
+
+    @Test
+    void aSignedInReaderGetsTheApiShape() throws Exception {
+        // Swagger UI fetches its configuration as the reader's browser, which is not loopback; the
+        // session admits it, like every other page.
+        mockMvc.perform(get("/v3/api-docs").with(user("jim")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void theWebhookNeedsNoSessionAndNoToken() throws Exception {
         // Reaching the dispatcher (404 in this slice) shows the path is open and past CSRF.
         mockMvc.perform(post("/webhook/tradingview")

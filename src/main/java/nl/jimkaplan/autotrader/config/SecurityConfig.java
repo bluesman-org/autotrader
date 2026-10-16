@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -52,7 +53,13 @@ public class SecurityConfig {
     /**
      * How a loopback address may look: the exporter that writes the committed specification runs on
      * this machine and fetches {@code /v3/api-docs} over the loopback interface, so that one path
-     * admits the host itself; every other reader signs in like anywhere else.
+     * admits the host itself.
+     *
+     * <p>This is only trustworthy because the application runs with
+     * {@code server.forward-headers-strategy=native}: Tomcat's valve rewrites the remote address
+     * from {@code X-Forwarded-For} only when the peer is on the host itself (Caddy), and it ignores
+     * the {@code Forwarded} header, so a remote caller cannot claim a loopback address in a header.
+     * Spring's own {@code framework} strategy would let exactly that through.</p>
      */
     private static final Set<String> LOOPBACK_ADDRESSES = Set.of("127.0.0.1", "0:0:0:0:0:0:0:1");
 
@@ -80,7 +87,7 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(OPEN_PATHS).permitAll()
-                        .requestMatchers("/v3/api-docs/**").access(loopbackOnly())
+                        .requestMatchers("/v3/api-docs/**").access(loopbackOrSignedIn())
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginPage("/login")
@@ -107,14 +114,22 @@ public class SecurityConfig {
     }
 
     /**
-     * @return A rule that admits requests coming from this machine only
+     * @return A rule that admits a signed-in reader and, for the specification exporter, this
+     *         machine itself — Swagger UI fetches its configuration as the reader's browser, which
+     *         is not loopback
      */
-    static AuthorizationManager<RequestAuthorizationContext> loopbackOnly() {
-        return (authentication, context) -> {
-            String address = context.getRequest().getRemoteAddr();
-            return new AuthorizationDecision(address != null
-                    && (LOOPBACK_ADDRESSES.contains(address) || "::1".equals(address)));
-        };
+    static AuthorizationManager<RequestAuthorizationContext> loopbackOrSignedIn() {
+        return (authentication, context) -> new AuthorizationDecision(
+                isLoopback(context.getRequest().getRemoteAddr()) || isSignedIn(authentication.get()));
+    }
+
+    private static boolean isLoopback(String address) {
+        return address != null && (LOOPBACK_ADDRESSES.contains(address) || "::1".equals(address));
+    }
+
+    private static boolean isSignedIn(Authentication authentication) {
+        return authentication != null && authentication.isAuthenticated()
+                && !(authentication instanceof AnonymousAuthenticationToken);
     }
 
     /**

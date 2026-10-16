@@ -7,6 +7,10 @@ import nl.jimkaplan.autotrader.repository.AppUserRepository;
 import nl.jimkaplan.autotrader.repository.PasswordResetTokenRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -19,6 +23,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 /**
  * Password recovery by mail: a request always answers the same way, whether or not the address
@@ -40,6 +45,13 @@ public class PasswordResetService {
             "We'll send a recovery email to this address if it exists.";
 
     /**
+     * A repeat request inside this window keeps the link that is already on its way and sends
+     * nothing: a double-click must not invalidate the mail it just asked for, and the window caps
+     * how often one address can make the SMTP server work.
+     */
+    static final Duration RESEND_COOLDOWN = Duration.ofMinutes(2);
+
+    /**
      * One source of randomness for the token bytes; a fresh SecureRandom per call would be seeded
      * from scratch every time.
      */
@@ -49,25 +61,32 @@ public class PasswordResetService {
     private final PasswordResetTokenRepository tokens;
     private final AppUserService appUserService;
     private final MailSettingsService mail;
-    private final Clock clock;
+    private final MongoTemplate mongoTemplate;
     private final String publicUrl;
     private final Duration lifetime;
+    private final Clock clock;
+    private final Executor mailExecutor;
 
     @Autowired
     public PasswordResetService(AppUserRepository users, PasswordResetTokenRepository tokens,
                                 AppUserService appUserService, MailSettingsService mail,
+                                MongoTemplate mongoTemplate, Executor recoveryMailExecutor,
                                 @Value("${autotrader.security.public-url:http://localhost:8081/autotrader}") String publicUrl,
                                 @Value("${autotrader.security.reset-token-minutes:30}") long minutes) {
-        this(users, tokens, appUserService, mail, publicUrl, minutes, Clock.systemUTC());
+        this(users, tokens, appUserService, mail, mongoTemplate, recoveryMailExecutor, publicUrl,
+                minutes, Clock.systemUTC());
     }
 
     PasswordResetService(AppUserRepository users, PasswordResetTokenRepository tokens,
-                         AppUserService appUserService, MailSettingsService mail, String publicUrl,
+                         AppUserService appUserService, MailSettingsService mail,
+                         MongoTemplate mongoTemplate, Executor mailExecutor, String publicUrl,
                          long minutes, Clock clock) {
         this.users = users;
         this.tokens = tokens;
         this.appUserService = appUserService;
         this.mail = mail;
+        this.mongoTemplate = mongoTemplate;
+        this.mailExecutor = mailExecutor;
         this.publicUrl = publicUrl.endsWith("/") ? publicUrl.substring(0, publicUrl.length() - 1) : publicUrl;
         this.lifetime = Duration.ofMinutes(minutes);
         this.clock = clock;
@@ -84,14 +103,40 @@ public class PasswordResetService {
         String address = email == null ? null : email.trim().toLowerCase(Locale.ROOT);
         if (address != null && !address.isEmpty()) {
             users.findByEmail(address).ifPresent(user -> {
-                try {
-                    sendLink(user);
-                } catch (RuntimeException e) {
-                    log.warn("The recovery mail for account {} could not be sent", user.getUsername(), e);
+                if (stillOnItsWay(user)) {
+                    log.info("A recovery link for {} was requested again inside the cooldown; "
+                            + "nothing was sent", user.getUsername());
+                    return;
                 }
+                // Off the request thread: an address that is the account's must not answer slower
+                // than one that is not, and the response must not wait for SMTP.
+                mailExecutor.execute(() -> {
+                    try {
+                        sendLink(user);
+                    } catch (RuntimeException e) {
+                        log.warn("The recovery mail for account {} could not be sent",
+                                user.getUsername(), e);
+                    }
+                });
             });
         }
         return SENT_MESSAGE;
+    }
+
+    /**
+     * @param user The account
+     * @return Whether an unused, unexpired link was issued so recently that it may still be on its
+     *         way
+     */
+    private boolean stillOnItsWay(AppUser user) {
+        Instant now = clock.instant();
+        return tokens.findById(user.getId())
+                .filter(token -> token.getUsedTime() == null
+                        && token.getExpiresTime() != null
+                        && token.getExpiresTime().isAfter(now))
+                .filter(token -> token.getCreatedTime() != null
+                        && token.getCreatedTime().isAfter(now.minus(RESEND_COOLDOWN)))
+                .isPresent();
     }
 
     /**
@@ -112,14 +157,37 @@ public class PasswordResetService {
      * @throws IllegalArgumentException when the token is not live or the password breaks a rule
      */
     public void reset(String token, String password, String confirm) {
-        PasswordResetToken stored = live(token).orElseThrow(() -> new IllegalArgumentException(
-                "This recovery link is no longer valid — request a new one."));
-        AppUser user = users.findById(stored.getId()).orElseThrow(() -> new IllegalArgumentException(
-                "This recovery link is no longer valid — request a new one."));
+        PasswordResetToken stored = live(token).orElseThrow(this::noLongerValid);
+        AppUser user = users.findById(stored.getId()).orElseThrow(this::noLongerValid);
+        // The rules are checked before the token is claimed, so a typo does not spend the link.
+        appUserService.validatePassword(password, confirm);
+        if (!claim(token)) {
+            // Another request claimed the token between the read and the write.
+            throw noLongerValid();
+        }
         appUserService.setPassword(user, password, confirm);
-        stored.setUsedTime(clock.instant());
-        tokens.save(stored);
         log.info("Account {} set a new password through a recovery link", user.getUsername());
+    }
+
+    /**
+     * Spend the token in one step: only the request that matches an unused, unexpired token and
+     * actually marks it used may continue, so two overlapping submissions cannot both set a
+     * password.
+     *
+     * @param token The token from the link
+     * @return Whether this request claimed it
+     */
+    private boolean claim(String token) {
+        Query query = Query.query(Criteria.where("token_hash").is(hash(token))
+                .and("used_time").is(null)
+                .and("expires_time").gt(clock.instant()));
+        Update update = new Update().set("used_time", clock.instant());
+        return mongoTemplate.updateFirst(query, update, PasswordResetToken.class).getModifiedCount() == 1;
+    }
+
+    private IllegalArgumentException noLongerValid() {
+        return new IllegalArgumentException(
+                "This recovery link is no longer valid — request a new one.");
     }
 
     private void sendLink(AppUser user) {

@@ -6,7 +6,11 @@ import nl.jimkaplan.autotrader.repository.AppUserRepository;
 import nl.jimkaplan.autotrader.repository.PasswordResetTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.mongodb.client.result.UpdateResult;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.mail.MailSendException;
 
 import java.time.Clock;
@@ -22,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -41,6 +46,7 @@ class PasswordResetServiceTest {
     private final PasswordResetTokenRepository tokens = mock(PasswordResetTokenRepository.class);
     private final AppUserService appUsers = mock(AppUserService.class);
     private final MailSettingsService mail = mock(MailSettingsService.class);
+    private final MongoTemplate mongoTemplate = mock(MongoTemplate.class);
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     private PasswordResetService service;
@@ -48,15 +54,27 @@ class PasswordResetServiceTest {
 
     @BeforeEach
     void wireTheTokenStore() {
-        service = new PasswordResetService(users, tokens, appUsers, mail,
-                "https://at.bluris.nl/autotrader", 30, clock);
+        service = new PasswordResetService(users, tokens, appUsers, mail, mongoTemplate,
+                Runnable::run, "https://at.bluris.nl/autotrader", 30, clock);
         when(tokens.save(any())).thenAnswer(invocation -> {
             stored = invocation.getArgument(0);
             return stored;
         });
+        when(tokens.findById(any())).thenAnswer(invocation ->
+                Optional.ofNullable(stored).filter(token -> token.getId().equals(invocation.getArgument(0))));
         when(tokens.findByTokenHash(any())).thenAnswer(invocation ->
                 Optional.ofNullable(stored)
                         .filter(token -> token.getTokenHash().equals(invocation.getArgument(0))));
+        // The claim is the one atomic step: it spends the token in the store, which the in-memory
+        // double mirrors so a second claim finds nothing to take.
+        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(PasswordResetToken.class)))
+                .thenAnswer(invocation -> {
+                    if (stored == null || stored.getUsedTime() != null) {
+                        return UpdateResult.acknowledged(0, 0L, null);
+                    }
+                    stored.setUsedTime(NOW);
+                    return UpdateResult.acknowledged(1, 1L, null);
+                });
     }
 
     @Test
@@ -85,7 +103,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void aSecondRequestReplacesTheFirstToken() {
+    void aRequestInsideTheCooldownKeepsTheLinkOnItsWay() {
         AppUser user = account();
         when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
@@ -94,14 +112,35 @@ class PasswordResetServiceTest {
         verify(mail).send(any(), any(), body.capture());
         String first = tokenOf(body.getValue());
 
-        ArgumentCaptor<String> secondBody = ArgumentCaptor.forClass(String.class);
+        // A double-click, or an impatient second try, must not send another mail and must not
+        // invalidate the link that is already on its way.
+        assertEquals(PasswordResetService.SENT_MESSAGE, service.request("jim@example.com"));
+
+        verify(mail, org.mockito.Mockito.times(1)).send(any(), any(), any());
+        assertTrue(service.valid(first));
+    }
+
+    @Test
+    void aRequestAfterTheCooldownMintsAFreshLink() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         service.request("jim@example.com");
+        verify(mail).send(any(), any(), body.capture());
+        String first = tokenOf(body.getValue());
+
+        // Three minutes later the cooldown has passed: a new link goes out and replaces the old one.
+        PasswordResetService later = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, Runnable::run, "https://at.bluris.nl/autotrader", 30,
+                Clock.fixed(NOW.plus(Duration.ofMinutes(3)), ZoneOffset.UTC));
+        ArgumentCaptor<String> secondBody = ArgumentCaptor.forClass(String.class);
+        later.request("jim@example.com");
+
         verify(mail, org.mockito.Mockito.times(2)).send(any(), any(), secondBody.capture());
         String second = tokenOf(secondBody.getValue());
-
-        assertEquals("u1", stored.getId());
+        assertNotEquals(first, second);
         assertFalse(service.valid(first));
-        assertTrue(service.valid(second));
+        assertTrue(later.valid(second));
     }
 
     @Test
@@ -123,6 +162,40 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void aTokenAnotherRequestClaimedFirstIsRefused() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        when(users.findById("u1")).thenReturn(Optional.of(user));
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        service.request("jim@example.com");
+        verify(mail).send(any(), any(), body.capture());
+        String token = tokenOf(body.getValue());
+        // The claim finds nothing to take: someone else spent it between the read and the write.
+        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(PasswordResetToken.class)))
+                .thenReturn(UpdateResult.acknowledged(0, 0L, null));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.reset(token, "new-password-1", "new-password-1"));
+    }
+
+    @Test
+    void aBrokenPasswordDoesNotSpendTheLink() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        when(users.findById("u1")).thenReturn(Optional.of(user));
+        doThrow(new IllegalArgumentException("The password must be at least 10 characters."))
+                .when(appUsers).validatePassword("short", "short");
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        service.request("jim@example.com");
+        verify(mail).send(any(), any(), body.capture());
+        String token = tokenOf(body.getValue());
+
+        assertThrows(IllegalArgumentException.class, () -> service.reset(token, "short", "short"));
+        assertTrue(service.valid(token));
+        verify(appUsers, org.mockito.Mockito.never()).setPassword(any(), any(), any());
+    }
+
+    @Test
     void anExpiredTokenIsRefused() {
         AppUser user = account();
         when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
@@ -132,7 +205,7 @@ class PasswordResetServiceTest {
         String token = tokenOf(body.getValue());
 
         PasswordResetService later = new PasswordResetService(users, tokens, appUsers, mail,
-                "https://at.bluris.nl/autotrader", 30,
+                mongoTemplate, Runnable::run, "https://at.bluris.nl/autotrader", 30,
                 Clock.fixed(NOW.plus(Duration.ofMinutes(31)), ZoneOffset.UTC));
 
         assertFalse(later.valid(token));

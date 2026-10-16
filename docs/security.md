@@ -15,13 +15,20 @@ user would have nothing of their own.
 | `/css/**`, `/js/**`, `/images/**`, `/favicon.ico`, `/error` | anyone |
 | `/actuator/health` | anyone (the monitoring probe) |
 | `/webhook/**` | anyone — the TradingView webhook authenticates itself with its own key |
-| `/v3/api-docs/**` | the machine itself (the specification exporter fetches it over the loopback) |
+| `/v3/api-docs/**` | a signed-in account, and the machine itself (the specification exporter fetches it over the loopback at startup) |
 | `/ui/**`, `/api/**`, `/swagger-ui/**`, everything else | a signed-in account |
 
 A page that needs a sign-in redirects to `/login`; an API request answers **401** with a
 `WWW-Authenticate: Basic` header, so a script sees what happened instead of a login page. CSRF is on
 for the browser forms (Thymeleaf's `th:action` inserts the token by itself) and off for `/api/**` and
-`/webhook/**`, which authenticate per request.
+`/webhook/**`, which authenticate per request. The session cookie states `SameSite=Strict` itself,
+because `/api/**` accepts that cookie with CSRF off.
+
+The exporter's loopback rule is only trustworthy because the app runs with
+`server.forward-headers-strategy=native`: Tomcat rewrites the client address from `X-Forwarded-For`
+only when the peer is a trusted proxy on this host, and it ignores the `Forwarded` header altogether.
+Spring's own `framework` strategy rewrites the address from headers a remote caller can set, which
+would let anyone claim the loopback and read the API shape.
 
 ## The account
 
@@ -41,9 +48,13 @@ for the browser forms (Thymeleaf's `th:action` inserts the token by itself) and 
    `autotrader.security.public-url` (`AUTOTRADER_PUBLIC_URL`), so the address in the mail is the
    address the app is reached on.
 3. The token is a 256-bit random value; the database stores only its **SHA-256 hash**, so a copy of
-   the database cannot be turned into working links. It is **single-use** and expires after
-   `autotrader.security.reset-token-minutes` (30 by default). Asking again replaces the previous
-   token.
+   the database cannot be turned into working links. It is **single-use** — the reset claims it with
+   one conditional update, so two overlapping submissions cannot both set a password — and expires
+   after `autotrader.security.reset-token-minutes` (30 by default). A second request within the
+   2-minute cooldown keeps the link that is already on its way (and sends nothing); after that a
+   fresh link replaces the old one.
+   The mail leaves on a single background thread, so the page answers as fast for an address that is
+   the account's as for one that is not — the answer time is not an oracle either.
 4. `/reset-password?token=…` sets the new password and spends the token; a broken rule (too short,
    not repeated) comes back on the page, a spent or unknown token says the link is no longer valid.
 
@@ -82,3 +93,5 @@ alerts when the address changes.
 5. Settings → **Mail**: store the SMTP server, then use "Forgot your password?" once and confirm the
    mail arrives.
 6. The webhook's own key does not change; only its URL does.
+7. Keep the app's own port (8081) closed to the internet: Caddy on the same host is the only public
+   entrance, which is also what makes the forwarded-address handling trustworthy.

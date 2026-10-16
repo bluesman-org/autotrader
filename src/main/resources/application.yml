@@ -10,8 +10,15 @@ server:
         # cookie must be secure; a local http run sets SESSION_COOKIE_SECURE=false (the default) or
         # the browser would never send the cookie back.
         secure: ${SESSION_COOKIE_SECURE:false}
+        # The API takes this cookie too and turns CSRF off for it, so the cookie states its own
+        # cross-site rule rather than leaning on the browser default. Strict is safe here: the
+        # recovery mail links to an open page, and signing in is a same-site form post.
+        same-site: strict
   # Caddy terminates TLS and forwards the original scheme, so redirects and cookies keep https.
-  forward-headers-strategy: framework
+  # `native` rather than `framework`: Tomcat rewrites the client address only when the peer is a
+  # trusted proxy on this host and ignores the `Forwarded` header, so the loopback rule that admits
+  # the specification exporter cannot be spoofed by a header.
+  forward-headers-strategy: native
 
 spring:
   application:

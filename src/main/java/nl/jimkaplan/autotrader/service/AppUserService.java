@@ -195,7 +195,15 @@ public class AppUserService implements UserDetailsService {
         return address;
     }
 
-    private void validatePassword(String password, String confirm) {
+    /**
+     * Check the password rules without storing anything, so a caller can refuse a broken password
+     * before it spends anything else (a recovery link, for instance).
+     *
+     * @param password The password
+     * @param confirm  The password again
+     * @throws IllegalArgumentException when the password breaks a rule
+     */
+    public void validatePassword(String password, String confirm) {
         if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
             throw new IllegalArgumentException("The password must be at least "
                     + MIN_PASSWORD_LENGTH + " characters.");

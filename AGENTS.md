@@ -202,8 +202,10 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
       Swagger UI — needs a sign-in. A page asks with a redirect to `/login`; an API request answers
       401. Recovery mail goes out through the SMTP server stored on the settings page.
     - Production is served on `https://at.bluris.nl` behind Caddy, with
-      `server.forward-headers-strategy=framework` and `SESSION_COOKIE_SECURE=true`, so redirects and
-      cookies keep the https scheme. The site block and the deployment checklist are in
+      `server.forward-headers-strategy=native` (Tomcat trusts forwarded addresses only from a proxy
+      on the host, which is what makes the exporter's loopback rule safe) and
+      `SESSION_COOKIE_SECURE=true` with `SameSite=Strict`, so redirects and cookies keep the https
+      scheme. The site block and the deployment checklist are in
       `docs/security.md`; the host change is the operator's.
 
 5. **Bitvavo HTTP clients**:
