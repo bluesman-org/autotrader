@@ -76,6 +76,21 @@ final class HistoryPeriods {
     }
 
     /**
+     * The one rule for which range the request means: a chosen preset wins over dates that linger in
+     * the form or the address bar, and the custom fields apply only while the Time select says
+     * "Custom range". Every reader — the resolver, both filter bars and both link builders — asks
+     * this.
+     *
+     * @param period   The requested preset
+     * @param fromDate The custom range's start date
+     * @param toDate   The custom range's end date
+     * @return Whether the custom range is the one in effect
+     */
+    static boolean usesCustomRange(String period, String fromDate, String toDate) {
+        return !isPreset(period) && hasCustomRange(fromDate, toDate);
+    }
+
+    /**
      * @return Whether the request carries a custom range instead of a preset
      */
     static boolean hasCustomRange(String fromDate, String toDate) {
@@ -103,7 +118,8 @@ final class HistoryPeriods {
      * @return The preset when it is a known one, the default preset otherwise
      */
     static String preset(String period) {
-        return period == null || !LABELS.containsKey(period) ? DEFAULT_PRESET : period;
+        String value = period == null ? "" : period.trim();
+        return LABELS.containsKey(value) ? value : DEFAULT_PRESET;
     }
 
     /**
@@ -118,7 +134,7 @@ final class HistoryPeriods {
         // A chosen preset wins over whatever dates linger in the form or the address bar: picking
         // "Year to date" while a start date is still filled in must show the year, not that range.
         // The custom fields apply only while the Time select says "Custom range".
-        if (!isPreset(period) && hasCustomRange(fromDate, toDate)) {
+        if (usesCustomRange(period, fromDate, toDate)) {
             LocalDate from = parseDate(fromDate);
             LocalDate to = parseDate(toDate);
             boolean unparseable = (notBlank(fromDate) && from == null) || (notBlank(toDate) && to == null)

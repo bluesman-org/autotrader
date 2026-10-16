@@ -431,8 +431,8 @@ public class LedgerService {
     }
 
     private FiltersView filters(LedgerRequest request, String market, boolean raw) {
-        boolean custom = !HistoryPeriods.isPreset(request.getPeriod())
-                && HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate());
+        boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
+                request.getToDate());
         return new FiltersView(request.getSide(), market, request.getType(), request.getStatus(),
                 raw ? RAW_VIEW : DEFAULT_VIEW,
                 custom ? "" : HistoryPeriods.preset(request.getPeriod()),
@@ -962,13 +962,15 @@ public class LedgerService {
         add(params, "type", request.getType());
         add(params, "status", request.getStatus());
         add(params, "view", request.getView());
-        if (!HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate())) {
+        if (HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
+                request.getToDate())) {
+            add(params, "fromDate", request.getFromDate());
+            add(params, "fromTime", request.getFromTime());
+            add(params, "toDate", request.getToDate());
+            add(params, "toTime", request.getToTime());
+        } else {
             add(params, "period", request.getPeriod());
         }
-        add(params, "fromDate", request.getFromDate());
-        add(params, "fromTime", request.getFromTime());
-        add(params, "toDate", request.getToDate());
-        add(params, "toTime", request.getToTime());
         params.put("size", String.valueOf(size));
         if (page > 1) {
             params.put("page", String.valueOf(page));

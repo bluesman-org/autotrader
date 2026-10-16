@@ -257,8 +257,8 @@ public class TradeHistoryService {
                 && strategies.stream().noneMatch(option -> option.value().equals(request.getStrategy()))) {
             strategies.add(new Option(request.getStrategy(), shortId(request.getStrategy())));
         }
-        boolean custom = !HistoryPeriods.isPreset(request.getPeriod())
-                && HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate());
+        boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
+                request.getToDate());
         String preset = HistoryPeriods.preset(request.getPeriod());
         return new FiltersView(request.getStrategy(), request.getType(), request.getResult(),
                 custom ? "" : preset,
@@ -319,13 +319,15 @@ public class TradeHistoryService {
         add(params, "strategy", request.getStrategy());
         add(params, "type", request.getType());
         add(params, "result", request.getResult());
-        if (!HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate())) {
+        if (HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
+                request.getToDate())) {
+            add(params, "fromDate", request.getFromDate());
+            add(params, "fromTime", request.getFromTime());
+            add(params, "toDate", request.getToDate());
+            add(params, "toTime", request.getToTime());
+        } else {
             add(params, "period", request.getPeriod());
         }
-        add(params, "fromDate", request.getFromDate());
-        add(params, "fromTime", request.getFromTime());
-        add(params, "toDate", request.getToDate());
-        add(params, "toTime", request.getToTime());
         if (sort != null) {
             params.put("sort", sort);
         }

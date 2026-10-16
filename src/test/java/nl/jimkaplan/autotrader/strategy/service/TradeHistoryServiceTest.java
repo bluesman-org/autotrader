@@ -198,7 +198,12 @@ class TradeHistoryServiceTest {
 
     @Test
     void view_aChosenPresetBeatsLingeringCustomDates() {
-        when(positions.findByStatusAndEntryTimeRange(eq("CLOSED"), anyLong(), anyLong()))
+        // The bounds the preset resolves to (last week = Mon 5 Oct 00:00 → Sun 11 Oct 23:59:59.999)
+        // are pinned too, so a wrong window fails here.
+        when(positions.findByStatusAndEntryTimeRange(
+                eq("CLOSED"),
+                eq(Instant.parse("2026-10-05T00:00:00Z").toEpochMilli()),
+                eq(Instant.parse("2026-10-11T23:59:59.999Z").toEpochMilli())))
                 .thenReturn(List.of());
 
         // Picking a preset while the form still holds a custom range shows and applies the preset;
