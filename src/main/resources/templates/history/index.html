@@ -65,9 +65,11 @@
         });
     }
 
-    // Fetches a tab's content and swaps it in place: no scroll jump, the address bar keeps the whole
-    // state, and a failed fetch shows the last state. The tab's own fragment name rides along.
-    function swapContent(content, url, fragment) {
+    // Fetches a tab's content and swaps it in place: the address bar keeps the whole state, and a
+    // failed fetch shows the last state. The tab's own fragment name rides along. `keepScroll` is for
+    // the timed refresh: a table scrolled halfway down stays where it was, while a user action
+    // (filters, paging, sorting) starts the new content at its top.
+    function swapContent(content, url, fragment, keepScroll) {
         fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'fragment=' + fragment,
                 { headers: { 'X-Requested-With': 'fetch' } })
             .then(function (response) { return response.ok ? response.text() : null; })
@@ -75,7 +77,21 @@
                 if (html === null) {
                     return;
                 }
+                // Captured at swap time, so a refresh never fights a scroll that just happened.
+                var scrolled = keepScroll ? Array.prototype.map.call(
+                        content.querySelectorAll('.table-scroll'),
+                        function (box) { return box.scrollTop; }) : null;
+                var pageScroll = keepScroll ? window.scrollY : 0;
                 content.innerHTML = html;
+                if (scrolled) {
+                    Array.prototype.forEach.call(content.querySelectorAll('.table-scroll'),
+                            function (box, index) {
+                                if (index < scrolled.length) {
+                                    box.scrollTop = scrolled[index];
+                                }
+                            });
+                    window.scrollTo(0, pageScroll);
+                }
                 window.history.replaceState(null, '', url);
             })
             .catch(function () { /* keep the last state */ });
@@ -145,7 +161,7 @@
                 if (document.hidden || content.contains(document.activeElement)) {
                     return;
                 }
-                swapContent(content, window.location.href, fragment);
+                swapContent(content, window.location.href, fragment, true);
             }, refreshSeconds * 1000);
         }
     }
