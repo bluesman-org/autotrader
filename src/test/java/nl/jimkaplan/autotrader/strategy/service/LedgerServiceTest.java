@@ -392,6 +392,21 @@ class LedgerServiceTest {
     }
 
     @Test
+    void theEndOfTodayFollowsTheDisplayZone() {
+        // 00:30 on the 16th in Amsterdam, still the 15th in UTC: the range ends at now, and "today"
+        // is the display zone's day — the clock's own zone must not decide it.
+        service = new LedgerService(client, credentials, strategies,
+                new DisplayZone(ZoneId.of("Europe/Amsterdam")),
+                Clock.fixed(Instant.parse("2026-10-15T22:30:00Z"), ZoneId.of("UTC")));
+        accountReadable();
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("+€1,28", view.totals().unrealisedText());
+        assertEquals("", view.totals().unrealisedHint());
+    }
+
+    @Test
     void theUnrealisedFigureNeedsARangeThatEndsToday() {
         accountReadable();
 

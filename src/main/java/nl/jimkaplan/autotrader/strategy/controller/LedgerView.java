@@ -115,8 +115,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param netCashText      The filled cash flow, fees included
      * @param netCashClass     {@code pos}/{@code neg}
      * @param fillsCount       How many fills the order has
-     * @param pnlText          What the order realised, or the buys' theoretical result
-     * @param pnlClass         {@code pos}/{@code neg}
+     * @param pnlText          What the order realised, or a dash for a buy or an order without fills
+     * @param pnlClass         {@code pos}/{@code neg} for a result, empty for a dash
      * @param fills            The fills, for the expandable detail
      * @param filledText       What filled of the order and what remains
      */

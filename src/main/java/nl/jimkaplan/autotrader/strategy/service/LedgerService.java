@@ -493,9 +493,10 @@ public class LedgerService {
     }
 
     private boolean endsToday(HistoryPeriods.Range range) {
-        // The service's clock, so the rule is the same in a test as on the page.
+        // Both sides read in the display zone — the range's end date and what the clock calls today —
+        // so a range that ends at now is "today" from 00:00 local on, as HistoryPeriods resolves it.
         LocalDate end = Instant.ofEpochMilli(range.toMillis()).atZone(display.zone()).toLocalDate();
-        return end.equals(LocalDate.now(clock));
+        return end.equals(clock.instant().atZone(display.zone()).toLocalDate());
     }
 
     private String unrealisedHint(Basis basis, HistoryPeriods.Range range, double currentBid) {
