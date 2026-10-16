@@ -385,8 +385,10 @@ public class LedgerService {
             double amount = number(fill.getAmount());
             double price = number(fill.getPrice());
             // Only a fee charged in the quote currency moves the cash; a coin fee leaves the euro
-            // flow alone and shows in the fee column instead.
-            double cashFee = quote(market).equals(fill.getFeeCurrency()) ? number(fill.getFee()) : 0;
+            // flow alone and shows in the fee column instead. A missing currency follows the same
+            // rule as the row's, so an order's cash always equals the sum of its fills'.
+            double cashFee = quote(market).equals(currency(fill.getFeeCurrency(), market))
+                    ? number(fill.getFee()) : 0;
             double netCash = isBuy(order) ? -(amount * price + cashFee) : amount * price - cashFee;
             rows.add(new FillRowView(
                     fill.getTimestamp() == null ? DASH : display.clockSecond(fill.getTimestamp()),

@@ -244,6 +244,7 @@ class LedgerServiceTest {
         assertEquals("€0.10", missingRow.feeText());
         assertEquals("€0.1000", missingRow.fills().get(0).feeText());
         assertEquals("−€75.10", missingRow.netCashText());
+        assertEquals("−€75.10", missingRow.fills().get(0).netCashText());
         // A fill that reports no fee of its own falls back to the order's feePaid.
         LedgerView.OrderRowView fallbackRow = view.rows().get(0);
         assertEquals("€0.20", fallbackRow.feeText());
