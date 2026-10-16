@@ -26,7 +26,7 @@
                 fast/slow/signal
             </div>
             <div class="stat">
-                <b th:text="${entry.acceleration + '/' + entry.maximum}">0.02/0.2</b>SAR accel/max
+                <b th:text="${#strings.replace('' + entry.acceleration, '.', ',') + '/' + #strings.replace('' + entry.maximum, '.', ',')}">0.02/0.2</b>SAR accel/max
             </div>
             <div class="stat">
                 <b th:text="${#numbers.formatDecimal(run.amountPerBuy, 1, 'POINT', 0, 'COMMA') + ' EUR'}">100 EUR</b>Per buy

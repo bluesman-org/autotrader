@@ -75,7 +75,7 @@
                        th:text="${iter.count}">1</a>
                 </td>
                 <td class="left" th:text="${entry.fastPeriod + '/' + entry.slowPeriod + '/' + entry.signalPeriod}">12/26/9</td>
-                <td class="left" th:text="${entry.acceleration + '/' + entry.maximum}">0.02/0.2</td>
+                <td class="left" th:text="${#strings.replace('' + entry.acceleration, '.', ',') + '/' + #strings.replace('' + entry.maximum, '.', ',')}">0.02/0.2</td>
                 <td class="left">
                     <span class="pill" th:text="${entry.entryOperator}">ALL</span>
                     <span th:text="${#strings.replace(#strings.listJoin(entry.entryConditions, ', '), '_', ' ')}">MACD BULLISH CROSSOVER</span>

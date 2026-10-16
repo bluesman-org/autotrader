@@ -84,6 +84,8 @@ class BacktestUiControllerRenderTest {
                 // initial capital proves the thousands separator is not the en_US one.
                 .andExpect(content().string(containsString("0,64")))
                 .andExpect(content().string(containsString("1.000 EUR")))
+                // The SAR parameter readout follows it too, without rounding a non-standard step.
+                .andExpect(content().string(containsString("0,02/0,2")))
                 // The skipped column renders the stored count, and the em dash when it is absent
                 .andExpect(content().string(containsString("<th>Skipped</th>")))
                 .andExpect(content().string(containsString("<td>2</td>")))
