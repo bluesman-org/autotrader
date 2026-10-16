@@ -94,11 +94,11 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param typeText         The order type
      * @param marketText       The market
      * @param amountText       The order's amount in base currency
-     * @param avgPriceText     The filled average price, or the limit price while nothing filled
+     * @param avgPriceText     The average of the fills, or a dash while nothing filled
      * @param statusLabel      The status, spelled out
      * @param statusClass      The status badge's colour class, or empty
-     * @param triggerText      For an order that waits for its trigger: the trigger price and, when
-     *                         it has one, the limit price
+     * @param triggerText      For a resting or trigger-waiting order: its trigger price and, when
+     *                         the order type carries one, its limit price; empty once it traded
      * @param balanceAfterText The base-currency balance after the order's fills
      * @param feeText          The order's total fee, or a dash while nothing filled
      * @param netCashText      The filled cash flow, fees included

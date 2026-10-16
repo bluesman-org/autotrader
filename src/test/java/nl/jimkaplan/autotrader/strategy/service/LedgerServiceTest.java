@@ -369,12 +369,17 @@ class LedgerServiceTest {
         OrderResponse stop = baseOrder("2026-10-14T19:00:00Z", "sell", "stopLoss");
         stop.setStatus("awaitingTrigger");
         stop.setTriggerPrice(new BigDecimal("73000"));
+        OrderResponse plainTakeProfit = baseOrder("2026-10-14T19:30:00Z", "sell", "takeProfit");
+        plainTakeProfit.setStatus("awaitingTrigger");
+        plainTakeProfit.setTriggerPrice(new BigDecimal("73000"));
+        // The API documents `price` for a plain takeProfit too, so that branch labels it "price".
+        plainTakeProfit.setPrice(new BigDecimal("73100"));
         OrderResponse filledBuy = baseOrder("2026-10-14T18:00:00Z", "buy", "takeProfitLimit");
         filledBuy.setStatus("filled");
         filledBuy.setTriggerPrice(new BigDecimal("74000"));
         filledBuy.setPrice(new BigDecimal("74100"));
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
-                .thenReturn(new OrderResponse[]{waiting, stop, filledBuy});
+                .thenReturn(new OrderResponse[]{waiting, plainTakeProfit, stop, filledBuy});
         when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
                 .thenReturn(balances());
         when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
@@ -386,20 +391,22 @@ class LedgerServiceTest {
         LedgerView.OrderRowView takeProfit = view.rows().get(0);
         assertEquals("awaiting trigger", takeProfit.statusLabel());
         assertEquals("trigger €73.162,00 · limit €75.364,00", takeProfit.triggerText());
-        LedgerView.OrderRowView stopLoss = view.rows().get(1);
+        LedgerView.OrderRowView plainTakeProfitRow = view.rows().get(1);
+        assertEquals("trigger €73.000,00 · price €73.100,00", plainTakeProfitRow.triggerText());
+        LedgerView.OrderRowView stopLoss = view.rows().get(2);
         assertEquals("trigger €73.000,00", stopLoss.triggerText());
-        // A trigger order that already traded keeps its limit price in Avg price; the readout is
-        // for the orders that are still waiting.
-        LedgerView.OrderRowView traded = view.rows().get(2);
+        // The readout is for the orders still open at the exchange; a traded one shows no trigger
+        // text (its fills carry the average price instead).
+        LedgerView.OrderRowView traded = view.rows().get(3);
         assertEquals("", traded.triggerText());
 
         // The filter reaches a waiting order by name and through Open.
         LedgerRequest byName = new LedgerRequest();
         byName.setStatus("awaitingTrigger");
-        assertEquals(2, service.view(byName).rows().size());
+        assertEquals(3, service.view(byName).rows().size());
         LedgerRequest open = new LedgerRequest();
         open.setStatus("open");
-        assertEquals(2, service.view(open).rows().size());
+        assertEquals(3, service.view(open).rows().size());
     }
 
     private static String queryParam(String url, String name) {

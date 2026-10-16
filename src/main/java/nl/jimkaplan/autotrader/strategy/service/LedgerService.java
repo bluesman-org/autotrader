@@ -715,8 +715,8 @@ public class LedgerService {
 
     /**
      * @param order The order
-     * @return For an order that waits for its trigger: the trigger price and, when the order type
-     *         carries one, its limit price; empty for every other order
+     * @return For a resting or trigger-waiting order: its trigger price and, when the order type
+     *         carries one, its limit price; empty once it traded or when it carries neither
      */
     private static String triggerText(OrderResponse order) {
         boolean waiting = "awaitingtrigger".equalsIgnoreCase(order.getStatus())
