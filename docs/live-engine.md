@@ -202,14 +202,13 @@ autotrader:
 The pages show times in `autotrader.ui.time-zone` — the machine's zone when unset — and label them
 with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken for UTC.
 
-The history page's ledger tab reads the real Bitvavo account, not the engine's own records, through
-the credentials of the newest live strategy that has a bot and otherwise of the newest bot
-configuration; without one it says what is missing instead of showing data. The orders come from
-`GET /orders` (with their fills and `feePaid`), the P&L walk and the raw transactions from
-`GET /account/history`, the balance from `GET /balance` and the prices from the public order book.
-The P&L is derived at average cost over the market's whole buy/sell history, so a sell inside the
-period knows what its inventory cost; the walk ignores deposits, so a sell of deposited coins shows
-without a result.
+The history page's ledger tab reads the real Bitvavo account, not the engine's own records, with
+the app's Bitvavo API key — the same key the engine trades with; there is one key for the account,
+and without one the page says so instead of showing data. The orders come from `GET /orders` (with
+their fills and `feePaid`), the P&L walk and the raw transactions from `GET /account/history`, the
+balance from `GET /balance` and the prices from the public order book. The P&L is derived at average
+cost over the market's whole buy/sell history, so a sell inside the period knows what its inventory
+cost; the walk ignores deposits, so a sell of deposited coins shows without a result.
 
 ## Out of scope
 

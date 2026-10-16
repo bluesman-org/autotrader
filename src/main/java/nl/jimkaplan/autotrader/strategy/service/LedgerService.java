@@ -136,8 +136,9 @@ public class LedgerService {
         Optional<BotConfiguration> account = account();
         if (account.isEmpty()) {
             return new LedgerView(
-                    "No Bitvavo account is configured: the ledger reads the account the engine trades "
-                            + "on, so first add a bot configuration with its API key and secret.",
+                    "No Bitvavo API key is configured, so the account cannot be read. The ledger "
+                            + "uses the same key the engine trades with — configure it once with "
+                            + "POST /api/bots/create.",
                     price, filters, null, List.of(), pager(request, 0, 1, 1), raw, List.of(),
                     pager(request, 0, 1, 1));
         }
@@ -193,9 +194,9 @@ public class LedgerService {
     // ---- the account ------------------------------------------------------------------------
 
     /**
-     * The account the engine trades on: the credentials of the newest live strategy that has a bot,
-     * and otherwise the newest bot configuration — the ledger is account-wide, so a strategy only
-     * names whose account it is.
+     * The account the engine trades on: the key stored for the engine's strategy when it names one,
+     * the newest stored key otherwise. The app keeps a single Bitvavo API key for the account, so
+     * both paths lead to the same record.
      */
     private Optional<BotConfiguration> account() {
         Optional<BotConfiguration> fromEngine = liveStrategyService.all().stream()

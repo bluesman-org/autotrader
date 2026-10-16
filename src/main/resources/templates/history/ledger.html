@@ -80,7 +80,7 @@
     </form>
 
     <div class="card" style="padding:18px 22px" th:if="${ledger.message != null}">
-        <p class="muted" style="margin:0" th:text="${ledger.message}">No Bitvavo account is configured yet.</p>
+        <p class="muted" style="margin:0" th:text="${ledger.message}">No Bitvavo API key is configured.</p>
     </div>
 
     <th:block th:if="${ledger.message == null}">
