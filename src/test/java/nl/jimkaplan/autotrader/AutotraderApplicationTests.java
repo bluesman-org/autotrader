@@ -34,6 +34,9 @@ class AutotraderApplicationTests {
     @MockitoBean
     private LiveStrategyStarter liveStrategyStarter;
 
+    @MockitoBean
+    private nl.jimkaplan.autotrader.config.BitvavoCredentialsInitializer bitvavoCredentialsInitializer;
+
     @Test
     void contextLoads() {
         // The context starting is the assertion.

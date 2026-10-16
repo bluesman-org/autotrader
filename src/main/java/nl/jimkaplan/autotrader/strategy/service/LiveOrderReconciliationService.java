@@ -4,11 +4,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
-import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
@@ -82,14 +82,14 @@ public class LiveOrderReconciliationService {
     }
 
     private final LiveStrategyService liveStrategyService;
-    private final BotConfigurationService botConfigurationService;
+    private final BitvavoCredentialsService credentialsService;
     private final BitvavoApiClient bitvavoApiClient;
     private final LiveOrderRepository liveOrderRepository;
     private final LivePositionRepository livePositionRepository;
     private final LiveStrategyRepository liveStrategyRepository;
 
     /**
-     * Reconcile every non-dry-run strategy with a resolvable bot against the exchange.
+     * Reconcile every non-dry-run strategy against the exchange, when the account key is set.
      *
      * @return The ids of the strategies whose reconciliation threw; those must not be started
      */
@@ -112,18 +112,19 @@ public class LiveOrderReconciliationService {
             log.debug("Skipping reconciliation for dry-run strategy {}", strategy.getId());
             return;
         }
-        BotConfiguration bot = activeBot(strategy);
-        if (bot == null) {
-            log.warn("Cannot reconcile live strategy {}: no active bot configuration for {}",
-                    strategy.getId(), strategy.getBotId());
-            return;
+        BitvavoCredentials credentials = credentialsService.get().orElse(null);
+        if (credentials == null) {
+            // A real strategy cannot trade without the account key, so it is held back like any
+            // other reconciliation failure instead of starting blind.
+            throw new IllegalStateException(
+                    "no Bitvavo API key is configured: store it on the settings page");
         }
 
         OrderResponse[] history = bitvavoApiClient.get(
                 "/orders?market=" + strategy.getMarket()
                         + "&start=" + strategy.getCreatedTime().toEpochMilli()
                         + "&limit=" + ORDER_HISTORY_LIMIT,
-                OrderResponse[].class, bot.getApiKey(), bot.getApiSecret());
+                OrderResponse[].class, credentials.getApiKey(), credentials.getApiSecret());
         History indexed = history(history, strategy.getId());
 
         List<LiveOrder> rows = liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(strategy.getId());
@@ -134,13 +135,6 @@ public class LiveOrderReconciliationService {
             rows = liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(strategy.getId());
         }
         syncPosition(strategy, rows);
-    }
-
-    private BotConfiguration activeBot(LiveStrategy strategy) {
-        if (strategy.getBotId() == null) {
-            return null;
-        }
-        return botConfigurationService.getBotConfiguration(strategy.getBotId()).orElse(null);
     }
 
     /**

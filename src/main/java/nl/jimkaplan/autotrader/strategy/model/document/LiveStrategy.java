@@ -28,7 +28,9 @@ import java.util.List;
 public class LiveStrategy extends BaseDocument {
 
     /**
-     * The bot configuration whose API key, secret and operator ID are used when not in dry-run.
+     * The bot configuration the strategy used to trade with. Historical only: the engine signs its
+     * orders with the system-wide Bitvavo API key (see {@code BitvavoCredentials}), so the field is
+     * ignored and kept for the documents that already carry one.
      */
     @Field("bot_id")
     private String botId;

@@ -12,7 +12,9 @@ design is verified live — restarts kept the same anchor and the engine's trade
 from-anchor backtest exactly. The `.junie/` design notes live under `docs/` (PR #29) and 406
 responses come from the advice (PR #28). Quality gates hardened (PR #13). Item 10's UI landed: the
 live page (PRs #30, #33) and both tabs of the account history page — the engine's round trips
-(PR #34) and the Bitvavo ledger (PR #36) — with a hotfix for the history range queries (PR #35).
+(PR #34) and the Bitvavo ledger (PR #36, fees shown in the currency the exchange charged, PR #37) —
+with a hotfix for the history range queries (PR #35). The Bitvavo key now lives system-wide, outside
+the bot configurations (PR #38).
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
 next: the small live-run trial of the engine.
 
@@ -222,6 +224,13 @@ next: the small live-run trial of the engine.
     the market's whole buy/sell history from the account's start on every tick, because the
     average-cost walk needs it; a long-lived account makes that many pages. Cache the walk and
     extend it with the new fills, or bound the look-back with a stated rule (flagged in PR #36)
+24. ✅ Move the Bitvavo key out of the bot configurations: the engine and the ledger sign with one
+    system-wide credential, stored encrypted and managed on `/ui/settings` (or through
+    `/api/bitvavo-credentials`); a startup copy takes the key an installation already stored inside
+    a bot configuration, so nothing has to be re-entered (PR #38)
+25. ⬜ Drop the live strategy's `botId`: the engine reads the system-wide key now, so the field is
+    historical only — remove it from the model, the create request and the docs once no stored
+    document needs it
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

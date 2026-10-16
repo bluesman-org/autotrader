@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
-import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.controller.LiveStrategyRequest;
 import nl.jimkaplan.autotrader.strategy.controller.RuleSetRequest;
@@ -46,7 +46,7 @@ public class LiveStrategyService {
     private final LiveOrderRepository liveOrderRepository;
     private final CandleHistoryService candleHistoryService;
     private final LiveTradingService liveTradingService;
-    private final BotConfigurationService botConfigurationService;
+    private final BitvavoCredentialsService credentialsService;
     private final CandleStreamFactory candleStreamFactory;
     private final ConcurrentMap<String, LiveStrategyRunner> runners = new ConcurrentHashMap<>();
 
@@ -72,11 +72,9 @@ public class LiveStrategyService {
                     + LiveTradingService.MINIMUM_ORDER_EUR + " EUR");
         }
         boolean dryRun = request.getDryRun() == null || request.getDryRun();
-        if (!dryRun) {
-            String botId = required("botId", request.getBotId());
-            if (botConfigurationService.getBotConfiguration(botId).isEmpty()) {
-                throw new IllegalArgumentException("no active bot configuration: " + botId);
-            }
+        if (!dryRun && !credentialsService.configured()) {
+            throw new IllegalArgumentException(
+                    "no Bitvavo API key is configured: store it on the settings page");
         }
         MacdParameters macd = macdParameters(request);
         ParabolicSarParameters sar = sarParameters(request);
