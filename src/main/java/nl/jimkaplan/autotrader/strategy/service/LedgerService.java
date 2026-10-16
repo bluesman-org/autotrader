@@ -77,7 +77,8 @@ public class LedgerService {
     private static final List<String> ORDER_TYPES = List.of("market", "limit", "stopLoss",
             "stopLossLimit", "takeProfit", "takeProfitLimit");
     private static final int ORDER_LIMIT = 1000;
-    private static final int HISTORY_PAGE_SIZE = 200;
+    /** The API's maximum for one account-history page (a larger value is rejected with code 417). */
+    private static final int HISTORY_PAGE_SIZE = 100;
     private static final int MAX_HISTORY_PAGES = 25;
 
     /**
