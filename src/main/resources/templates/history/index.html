@@ -10,6 +10,9 @@
 </head>
 <body>
 <script>
+    // Both tabs of the history page share these helpers, so filters, dates and paging behave the
+    // same everywhere.
+
     // The custom range's fields, declared once: the Time select follows typing in them, and choosing
     // a preset clears them.
     var CUSTOM_RANGE_FIELDS = ['fromDate', 'fromTime', 'toDate', 'toTime'];
@@ -47,7 +50,7 @@
     });
 
     // A chosen preset replaces a custom range the form still carries: the date fields leave both the
-    // request and the form, so the page shows the range it applies. Shared by both tabs' handlers.
+    // request and the form, so the page shows the range it applies.
     function dropLingeringDates(form, params) {
         var period = form.querySelector('select[name="period"]');
         if (!period || String(period.value).trim() === '') {
@@ -60,6 +63,84 @@
                 field.value = '';
             }
         });
+    }
+
+    // Fetches a tab's content and swaps it in place: no scroll jump, the address bar keeps the whole
+    // state, and a failed fetch shows the last state. The tab's own fragment name rides along.
+    function swapContent(content, url, fragment) {
+        fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'fragment=' + fragment,
+                { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (response) { return response.ok ? response.text() : null; })
+            .then(function (html) {
+                if (html === null) {
+                    return;
+                }
+                content.innerHTML = html;
+                window.history.replaceState(null, '', url);
+            })
+            .catch(function () { /* keep the last state */ });
+    }
+
+    // Applies a submitted filter form: the state the form does not own (sort, direction, page size,
+    // view) is kept, a cleared field removes its filter, multi-value fields keep every choice, and a
+    // chosen preset replaces a lingering custom range.
+    function swapWithForm(content, form, fragment) {
+        var params = new URLSearchParams(window.location.search);
+        var values = {};
+        new FormData(form).forEach(function (value, key) {
+            (values[key] = values[key] || []).push(String(value).trim());
+        });
+        Object.keys(values).forEach(function (key) {
+            params.delete(key);
+            values[key].forEach(function (value) {
+                if (value !== '') {
+                    params.append(key, value);
+                }
+            });
+        });
+        dropLingeringDates(form, params);
+        swapContent(content, form.getAttribute('action') + '?' + params.toString(), fragment);
+    }
+
+    // Wires a tab: link clicks, the rows-per-page select, the filter form, and — when the tab has one
+    // — a refresh that stands still while the page is hidden or the form is in use.
+    function wireHistoryContent(fragment, refreshSeconds) {
+        var content = document.getElementById('history-content');
+        if (!content) {
+            return;
+        }
+
+        content.addEventListener('click', function (event) {
+            var link = event.target.closest('a');
+            if (!link) {
+                return;
+            }
+            event.preventDefault();
+            swapContent(content, link.getAttribute('href'), fragment);
+        });
+
+        content.addEventListener('change', function (event) {
+            if (event.target.matches('select[data-history-size]')) {
+                swapContent(content, event.target.value, fragment);
+            }
+        });
+
+        content.addEventListener('submit', function (event) {
+            if (!event.target.matches('form')) {
+                return;
+            }
+            event.preventDefault();
+            swapWithForm(content, event.target, fragment);
+        });
+
+        if (refreshSeconds > 0) {
+            setInterval(function () {
+                if (document.hidden || content.contains(document.activeElement)) {
+                    return;
+                }
+                swapContent(content, window.location.href, fragment);
+            }, refreshSeconds * 1000);
+        }
     }
 </script>
 <nav th:replace="~{fragments/nav :: nav}"></nav>
@@ -82,191 +163,12 @@
 
     <th:block th:if="${ledgerTab}">
         <div id="history-content" th:insert="~{history/ledger :: ledger}"></div>
-        <script>
-            // The ledger swaps its content in place: filters, paging and the view select keep the
-            // scroll position and the address bar carries the whole state, so a reload or a shared
-            // URL shows the same view. A failed fetch keeps the last state on screen, and the
-            // ten-second price and P&L refresh stands still while the tab is hidden or the form is
-            // in use.
-            (function () {
-                var content = document.getElementById('history-content');
-                if (!content) {
-                    return;
-                }
-
-                function swap(url) {
-                    fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'fragment=ledger',
-                            { headers: { 'X-Requested-With': 'fetch' } })
-                        .then(function (response) { return response.ok ? response.text() : null; })
-                        .then(function (html) {
-                            if (html === null) {
-                                return;
-                            }
-                            content.innerHTML = html;
-                            window.history.replaceState(null, '', url);
-                        })
-                        .catch(function () { /* keep the last state */ });
-                }
-
-                content.addEventListener('click', function (event) {
-                    var link = event.target.closest('a');
-                    if (!link) {
-                        return;
-                    }
-                    event.preventDefault();
-                    swap(link.getAttribute('href'));
-                });
-
-                content.addEventListener('change', function (event) {
-                    if (event.target.matches('select[data-history-size]')) {
-                        swap(event.target.value);
-                    }
-                });
-
-                content.addEventListener('submit', function (event) {
-                    if (!event.target.matches('form')) {
-                        return;
-                    }
-                    event.preventDefault();
-                    var form = event.target;
-                    // Keep the state the form does not own; a cleared field removes its filter.
-                    var params = new URLSearchParams(window.location.search);
-                    new FormData(form).forEach(function (value, key) {
-                        if (String(value).trim() === '') {
-                            params.delete(key);
-                        } else {
-                            params.set(key, value);
-                        }
-                    });
-                    dropLingeringDates(form, params);
-                    swap(form.getAttribute('action') + '?' + params.toString());
-                });
-
-                setInterval(function () {
-                    if (document.hidden || content.contains(document.activeElement)) {
-                        return;
-                    }
-                    swap(window.location.href);
-                }, 10000);
-            })();
-        </script>
+        <script>wireHistoryContent('ledger', 10);</script>
     </th:block>
 
     <th:block th:unless="${ledgerTab}">
-        <form id="history-filters" class="card" style="padding:16px 20px" method="get"
-              th:action="@{/ui/history}">
-            <div class="filters">
-                <div class="f"><label>Strategy</label>
-                    <select name="strategy">
-                        <option value="">All strategies</option>
-                        <option th:each="option : ${history.filters.strategyOptions}" th:value="${option.value}"
-                                th:text="${option.label}"
-                                th:selected="${option.value == history.filters.strategy}">6ace5dbf</option>
-                    </select>
-                </div>
-                <div class="f"><label>Type</label>
-                    <select name="type">
-                        <option value="">All types</option>
-                        <option value="dry" th:selected="${history.filters.type == 'dry'}">Dry-run</option>
-                        <option value="real" th:selected="${history.filters.type == 'real'}">Real</option>
-                    </select>
-                </div>
-                <div class="f"><label>Result</label>
-                    <select name="result">
-                        <option value="">All results</option>
-                        <option value="wins" th:selected="${history.filters.result == 'wins'}">Wins</option>
-                        <option value="losses" th:selected="${history.filters.result == 'losses'}">Losses</option>
-                    </select>
-                </div>
-                <div class="f"><label>Time</label>
-                    <select name="period" th:attr="data-default-period=${history.filters.defaultPeriod}">
-                        <option value="" th:selected="${#strings.isEmpty(history.filters.period)}">Custom range</option>
-                        <option th:each="option : ${history.filters.timeOptions}" th:value="${option.value}"
-                                th:text="${option.label}"
-                                th:selected="${option.value == history.filters.period}">Last 7 days</option>
-                    </select>
-                </div>
-                <div class="f" style="min-width:250px"><label>Custom range — from</label>
-                    <div style="display:flex;gap:6px;align-items:center">
-                        <input type="date" name="fromDate" th:value="${history.filters.fromDate}"
-                               style="width:150px">
-                        <input type="text" name="fromTime" th:value="${history.filters.fromTime}"
-                               placeholder="HH:MM" style="width:64px">
-                    </div>
-                </div>
-                <div class="f" style="min-width:250px"><label>to</label>
-                    <div style="display:flex;gap:6px;align-items:center">
-                        <input type="date" name="toDate" th:value="${history.filters.toDate}"
-                               style="width:150px">
-                        <input type="text" name="toTime" th:value="${history.filters.toTime}"
-                               placeholder="HH:MM" style="width:64px">
-                    </div>
-                </div>
-                <div>
-                    <button class="primary small" type="submit">Apply</button>
-                </div>
-            </div>
-        </form>
-
         <div id="history-content" th:insert="~{history/trades :: trades}"></div>
-
-        <script>
-            // Sorting, paging and applying filters swap the table in place: no scroll jump, and the address
-            // bar keeps the whole state, so a reload or a shared URL shows the same view. A failed fetch
-            // keeps the last state on screen.
-            (function () {
-                var content = document.getElementById('history-content');
-                var form = document.getElementById('history-filters');
-                if (!content || !form) {
-                    return;
-                }
-
-                function swap(url) {
-                    fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'fragment=1',
-                            { headers: { 'X-Requested-With': 'fetch' } })
-                        .then(function (response) { return response.ok ? response.text() : null; })
-                        .then(function (html) {
-                            if (html === null) {
-                                return;
-                            }
-                            content.innerHTML = html;
-                            window.history.replaceState(null, '', url);
-                        })
-                        .catch(function () { /* keep the last state */ });
-                }
-
-                content.addEventListener('click', function (event) {
-                    var link = event.target.closest('a');
-                    if (!link) {
-                        return;
-                    }
-                    event.preventDefault();
-                    swap(link.getAttribute('href'));
-                });
-
-                content.addEventListener('change', function (event) {
-                    if (event.target.matches('select[data-history-size]')) {
-                        swap(event.target.value);
-                    }
-                });
-
-                form.addEventListener('submit', function (event) {
-                    event.preventDefault();
-                    // Keep the state the form does not own (sort, direction, page size); a cleared field
-                    // removes its filter.
-                    var params = new URLSearchParams(window.location.search);
-                    new FormData(form).forEach(function (value, key) {
-                        if (String(value).trim() === '') {
-                            params.delete(key);
-                        } else {
-                            params.set(key, value);
-                        }
-                    });
-                    dropLingeringDates(form, params);
-                    swap(form.getAttribute('action') + '?' + params.toString());
-                });
-            })();
-        </script>
+        <script>wireHistoryContent('1', 0);</script>
     </th:block>
 </main>
 </body>

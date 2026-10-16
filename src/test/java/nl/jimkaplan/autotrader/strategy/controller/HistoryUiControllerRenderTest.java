@@ -147,9 +147,14 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("fills (1)")))
                 .andExpect(content().string(containsString(">Awaiting trigger<")))
                 .andExpect(content().string(containsString("awaiting trigger")))
+                // The type and status filters are multi-value selects with their choices marked.
+                .andExpect(content().string(containsString("name=\"type\" multiple")))
+                .andExpect(content().string(containsString("name=\"status\" multiple")))
+                .andExpect(content().string(containsString("selected=\"selected\">takeProfitLimit<")))
+                .andExpect(content().string(containsString("selected=\"selected\">Awaiting trigger<")))
                 .andExpect(content().string(containsString("trigger €73.162,00 · limit €75.364,00")))
                 .andExpect(content().string(containsString("09:00:00")))
-                .andExpect(content().string(containsString("fragment=ledger")));
+                .andExpect(content().string(containsString("wireHistoryContent('ledger', 10)")));
     }
 
     @Test
@@ -170,9 +175,12 @@ class HistoryUiControllerRenderTest {
                 "takeProfitLimit", "BTC-EUR", "0.00050000", "€76.000,00", "awaiting trigger", "",
                 "trigger €73.162,00 · limit €75.364,00", "0.0015", "€0,08",
                 "+€37,92", "pos", 1, "+€0,60", "pos", List.of(fill), "");
-        LedgerView.FiltersView filters = new LedgerView.FiltersView("", "BTC-EUR", "", "", "orders",
+        LedgerView.FiltersView filters = new LedgerView.FiltersView("", "BTC-EUR",
+                List.of("takeProfitLimit"), List.of("awaitingTrigger"), "orders",
                 "7d", "", "", "", "", "7d",
                 List.of(new TradeHistoryView.Option("BTC-EUR", "BTC-EUR")),
+                List.of(new TradeHistoryView.Option("takeProfitLimit", "takeProfitLimit")),
+                List.of(new TradeHistoryView.Option("awaitingTrigger", "Awaiting trigger")),
                 List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
         LedgerView.TotalsView totals = new LedgerView.TotalsView("Last 7 days", 1, "€0,23", "+€0,60",
                 "pos", "+€0,35", "pos", "0,0015 BTC");

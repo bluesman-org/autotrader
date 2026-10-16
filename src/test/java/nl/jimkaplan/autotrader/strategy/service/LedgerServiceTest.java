@@ -134,16 +134,25 @@ class LedgerServiceTest {
         assertEquals(1, service.view(sellOnly).rows().size());
 
         LedgerRequest openOnly = new LedgerRequest();
-        openOnly.setStatus("open");
+        openOnly.setStatus(List.of("open"));
         assertEquals(1, service.view(openOnly).rows().size());
 
         LedgerRequest waitingOnly = new LedgerRequest();
-        waitingOnly.setStatus("awaitingTrigger");
+        waitingOnly.setStatus(List.of("awaitingTrigger"));
         assertEquals(0, service.view(waitingOnly).rows().size());
 
         LedgerRequest limitOnly = new LedgerRequest();
-        limitOnly.setType("limit");
+        limitOnly.setType(List.of("limit"));
         assertEquals(1, service.view(limitOnly).rows().size());
+
+        // Multi-value: every chosen type (or status) counts, and a value the filter cannot use is
+        // ignored rather than hiding everything.
+        LedgerRequest twoTypes = new LedgerRequest();
+        twoTypes.setType(List.of("limit", "market"));
+        assertEquals(3, service.view(twoTypes).rows().size());
+        LedgerRequest junk = new LedgerRequest();
+        junk.setType(List.of("nonsense"));
+        assertEquals(3, service.view(junk).rows().size());
 
         LedgerRequest paged = new LedgerRequest();
         paged.setSize(5);
@@ -421,10 +430,10 @@ class LedgerServiceTest {
 
         // The filter reaches a waiting order by name and through Open.
         LedgerRequest byName = new LedgerRequest();
-        byName.setStatus("awaitingTrigger");
+        byName.setStatus(List.of("awaitingTrigger"));
         assertEquals(3, service.view(byName).rows().size());
         LedgerRequest open = new LedgerRequest();
-        open.setStatus("open");
+        open.setStatus(List.of("open"));
         assertEquals(3, service.view(open).rows().size());
     }
 

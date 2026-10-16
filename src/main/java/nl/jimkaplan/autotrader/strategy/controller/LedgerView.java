@@ -45,8 +45,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      *
      * @param side          The selected side, or empty for all
      * @param market        The selected market
-     * @param type          The selected order type, or empty for all
-     * @param status        The selected status, or empty for all
+     * @param type          The selected order types; empty selects every type
+     * @param status        The selected statuses; empty selects every status
      * @param view          The selected view ({@code orders}/{@code raw})
      * @param period        The selected time preset, empty when the custom range is in use
      * @param fromDate      The custom range's start date
@@ -56,16 +56,23 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param defaultPeriod The preset the app falls back to, so the page can restore it when a
      *                      custom range no longer carries a date
      * @param marketOptions The markets the engine knows, as values and labels
+     * @param typeOptions   The order types the exchange uses
+     * @param statusOptions The statuses an order can have, as values and labels
      * @param timeOptions   The time presets
      */
-    public record FiltersView(String side, String market, String type, String status, String view,
-                              String period, String fromDate, String fromTime, String toDate,
-                              String toTime, String defaultPeriod, List<Option> marketOptions,
-                              List<Option> timeOptions) {
+    public record FiltersView(String side, String market, List<String> type, List<String> status,
+                              String view, String period, String fromDate, String fromTime,
+                              String toDate, String toTime, String defaultPeriod,
+                              List<Option> marketOptions, List<Option> typeOptions,
+                              List<Option> statusOptions, List<Option> timeOptions) {
 
-        /** Copy the option lists so the model cannot be mutated from outside. */
+        /** Copy the lists so the model cannot be mutated from outside. */
         public FiltersView {
+            type = List.copyOf(type);
+            status = List.copyOf(status);
             marketOptions = List.copyOf(marketOptions);
+            typeOptions = List.copyOf(typeOptions);
+            statusOptions = List.copyOf(statusOptions);
             timeOptions = List.copyOf(timeOptions);
         }
     }

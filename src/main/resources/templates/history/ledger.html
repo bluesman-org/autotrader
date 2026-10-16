@@ -49,23 +49,18 @@
                             th:selected="${option.value == ledger.filters.market}">BTC-EUR</option>
                 </select>
             </div>
-            <div class="f"><label>Type</label>
-                <select name="type">
-                    <option value="" th:selected="${#strings.isEmpty(ledger.filters.type)}">All types</option>
-                    <option th:each="type : ${ {'market', 'limit', 'stopLoss', 'stopLossLimit', 'takeProfit', 'takeProfitLimit'} }"
-                            th:value="${type}" th:text="${type}"
-                            th:selected="${type == ledger.filters.type}">market</option>
+            <div class="f"><label>Type <span class="muted">any of</span></label>
+                <select name="type" multiple size="6">
+                    <option th:each="option : ${ledger.filters.typeOptions}" th:value="${option.value}"
+                            th:text="${option.label}"
+                            th:selected="${#lists.contains(ledger.filters.type, option.value)}">market</option>
                 </select>
             </div>
-            <div class="f"><label>Status</label>
-                <select name="status">
-                    <option value="" th:selected="${#strings.isEmpty(ledger.filters.status)}">All statuses</option>
-                    <option value="open" th:selected="${ledger.filters.status == 'open'}">Open</option>
-                    <option value="awaitingTrigger" th:selected="${ledger.filters.status == 'awaitingTrigger'}">Awaiting trigger</option>
-                    <option value="partiallyFilled" th:selected="${ledger.filters.status == 'partiallyFilled'}">Partially filled</option>
-                    <option value="filled" th:selected="${ledger.filters.status == 'filled'}">Filled</option>
-                    <option value="canceled" th:selected="${ledger.filters.status == 'canceled'}">Canceled</option>
-                    <option value="expired" th:selected="${ledger.filters.status == 'expired'}">Expired</option>
+            <div class="f"><label>Status <span class="muted">any of</span></label>
+                <select name="status" multiple size="6">
+                    <option th:each="option : ${ledger.filters.statusOptions}" th:value="${option.value}"
+                            th:text="${option.label}"
+                            th:selected="${#lists.contains(ledger.filters.status, option.value)}">filled</option>
                 </select>
             </div>
             <div class="f"><label>View</label>

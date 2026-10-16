@@ -585,3 +585,9 @@ tr.detail details[open] summary {
     width: 80px;
     flex: 0 0 auto;
 }
+
+/* A multi-value filter select keeps the filter bar's height in check. */
+.filters select[multiple] {
+    height: auto;
+    padding: 4px 6px;
+}
