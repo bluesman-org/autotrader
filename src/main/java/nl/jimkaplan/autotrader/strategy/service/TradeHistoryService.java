@@ -257,12 +257,15 @@ public class TradeHistoryService {
                 && strategies.stream().noneMatch(option -> option.value().equals(request.getStrategy()))) {
             strategies.add(new Option(request.getStrategy(), shortId(request.getStrategy())));
         }
-        boolean custom = HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate());
+        boolean custom = !HistoryPeriods.isPreset(request.getPeriod())
+                && HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate());
         String preset = HistoryPeriods.preset(request.getPeriod());
         return new FiltersView(request.getStrategy(), request.getType(), request.getResult(),
                 custom ? "" : preset,
-                request.getFromDate(), HistoryPeriods.shownFromTime(request.getFromTime()),
-                request.getToDate(), HistoryPeriods.shownToTime(request.getToTime()),
+                custom ? request.getFromDate() : null,
+                HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
+                custom ? request.getToDate() : null,
+                HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
                 strategies, HistoryPeriods.OPTIONS);
     }
 

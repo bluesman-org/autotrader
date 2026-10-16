@@ -85,6 +85,18 @@
                             params.set(key, value);
                         }
                     });
+                    // A chosen preset replaces the custom range: drop the date fields from the request
+                    // and from the form, so the page shows the range it applies.
+                    var period = form.querySelector('select[name="period"]');
+                    if (period && String(period.value).trim() !== '') {
+                        ['fromDate', 'fromTime', 'toDate', 'toTime'].forEach(function (name) {
+                            params.delete(name);
+                            var field = form.querySelector('[name="' + name + '"]');
+                            if (field) {
+                                field.value = '';
+                            }
+                        });
+                    }
                     swap(form.getAttribute('action') + '?' + params.toString());
                 });
 
@@ -208,6 +220,18 @@
                             params.set(key, value);
                         }
                     });
+                    // A chosen preset replaces the custom range: drop the date fields from the request
+                    // and from the form, so the page shows the range it applies.
+                    var period = form.querySelector('select[name="period"]');
+                    if (period && String(period.value).trim() !== '') {
+                        ['fromDate', 'fromTime', 'toDate', 'toTime'].forEach(function (name) {
+                            params.delete(name);
+                            var field = form.querySelector('[name="' + name + '"]');
+                            if (field) {
+                                field.value = '';
+                            }
+                        });
+                    }
                     swap(form.getAttribute('action') + '?' + params.toString());
                 });
             })();

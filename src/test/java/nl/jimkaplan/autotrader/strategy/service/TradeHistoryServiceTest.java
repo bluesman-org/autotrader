@@ -197,13 +197,12 @@ class TradeHistoryServiceTest {
     }
 
     @Test
-    void view_prefersTheCustomRangeAndLabelsIt() {
-        when(positions.findByStatusAndEntryTimeRange(
-                eq("CLOSED"),
-                eq(Instant.parse("2026-10-07T09:00:00Z").toEpochMilli()),
-                eq(Instant.parse("2026-10-14T14:55:59.999Z").toEpochMilli())))
+    void view_aChosenPresetBeatsLingeringCustomDates() {
+        when(positions.findByStatusAndEntryTimeRange(eq("CLOSED"), anyLong(), anyLong()))
                 .thenReturn(List.of());
 
+        // Picking a preset while the form still holds a custom range shows and applies the preset;
+        // the custom fields come back only when the Time select says "Custom range".
         TradeHistoryRequest request = new TradeHistoryRequest();
         request.setPeriod("last-week");
         request.setFromDate("2026-10-07");
@@ -212,9 +211,12 @@ class TradeHistoryServiceTest {
         request.setToTime("14:55");
         TradeHistoryView view = service.view(request);
 
-        assertEquals("7 Oct 09:00 → 14 Oct 14:55", view.totals().periodText());
-        assertEquals("", view.filters().period());
-        assertEquals("2026-10-07", view.filters().fromDate());
+        assertEquals("Last week (Mon–Sun)", view.totals().periodText());
+        assertEquals("last-week", view.filters().period());
+        assertEquals(null, view.filters().fromDate());
+        assertEquals(null, view.filters().toDate());
+        assertEquals("00:00", view.filters().fromTime());
+        assertEquals("23:59", view.filters().toTime());
     }
 
     @Test
@@ -424,6 +426,7 @@ class TradeHistoryServiceTest {
         TradeHistoryRequest future = new TradeHistoryRequest();
         future.setFromDate("2027-01-01");
         assertEquals("Last 7 days", service.view(future).totals().periodText());
+
 
         // And a properly formed custom range still resolves, times and all.
         TradeHistoryRequest fine = new TradeHistoryRequest();

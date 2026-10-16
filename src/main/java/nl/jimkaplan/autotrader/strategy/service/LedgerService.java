@@ -431,12 +431,15 @@ public class LedgerService {
     }
 
     private FiltersView filters(LedgerRequest request, String market, boolean raw) {
+        boolean custom = !HistoryPeriods.isPreset(request.getPeriod())
+                && HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate());
         return new FiltersView(request.getSide(), market, request.getType(), request.getStatus(),
                 raw ? RAW_VIEW : DEFAULT_VIEW,
-                HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate()) ? ""
-                        : HistoryPeriods.preset(request.getPeriod()),
-                request.getFromDate(), HistoryPeriods.shownFromTime(request.getFromTime()),
-                request.getToDate(), HistoryPeriods.shownToTime(request.getToTime()),
+                custom ? "" : HistoryPeriods.preset(request.getPeriod()),
+                custom ? request.getFromDate() : null,
+                HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
+                custom ? request.getToDate() : null,
+                HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
                 marketOptions(market), HistoryPeriods.OPTIONS);
     }
 
