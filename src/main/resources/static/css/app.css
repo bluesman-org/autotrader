@@ -35,6 +35,21 @@ body {
     background: var(--nav);
 }
 
+.nav-account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.nav-account .who {
+    color: #d5dbdb;
+}
+
+.nav-account form {
+    margin: 0;
+}
+
 .nav a {
     color: #ecf0f1;
     text-decoration: none;

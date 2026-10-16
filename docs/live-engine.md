@@ -183,6 +183,9 @@ brings the two back together:
 | `POST /api/live-strategies/{id}/stop` | Disconnect and clear `enabled` |
 | `GET /api/live-strategies/{id}/orders` | The strategy's orders, newest first |
 | `GET /ui/live` | The live page: one card per strategy, refreshed in place every 10 seconds |
+Every `/ui/**` and `/api/**` endpoint below needs a signed-in account; the TradingView webhook is
+the exception, because it authenticates itself with its own webhook key (see `docs/security.md`).
+
 | `GET /ui/history` | The account history page's engine-trades tab: the closed round trips with filters, sorting, period totals and realised P&L by day |
 | `GET /ui/history?tab=ledger` | The account history page's Bitvavo-ledger tab: the account's orders with their fills, average-cost P&L, the raw transactions and the current prices |
 | `GET /api/bitvavo-credentials` | The system-wide Bitvavo API key, masked: whether one is configured, a hint that identifies it and the operator id |

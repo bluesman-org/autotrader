@@ -35,9 +35,79 @@
     {
       "name": "Transaction History",
       "description": "API for viewing Bitvavo transaction history"
+    },
+    {
+      "name": "Mail settings",
+      "description": "The SMTP server the recovery mails go out through"
+    },
+    {
+      "name": "Password recovery",
+      "description": "Ask for a password-recovery mail"
     }
   ],
   "paths": {
+    "/api/mail-settings": {
+      "get": {
+        "tags": [
+          "Mail settings"
+        ],
+        "summary": "Read the SMTP settings (no password)",
+        "description": "Returns the host, port, sign-in name, from-address and STARTTLS flag; the password is never returned.",
+        "operationId": "current",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Mail settings"
+        ],
+        "summary": "Store or replace the SMTP settings",
+        "description": "Stores the password encrypted. A blank password keeps the stored one, so the host can be corrected without re-typing it.",
+        "operationId": "store",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The settings were stored",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The host, from-address or first password was missing",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/bitvavo-credentials": {
       "get": {
         "tags": [
@@ -167,6 +237,38 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/password-recovery": {
+      "post": {
+        "tags": [
+          "Password recovery"
+        ],
+        "summary": "Ask for a password-recovery mail",
+        "description": "Always answers the same way, whether or not the address belongs to the account; when it does, a single-use link is mailed to it.",
+        "operationId": "request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -818,18 +920,27 @@
   },
   "components": {
     "schemas": {
-      "BitvavoCredentialsRequest": {
+      "MailSettingsRequest": {
         "type": "object",
         "properties": {
-          "apiKey": {
+          "host": {
             "type": "string"
           },
-          "apiSecret": {
-            "type": "string"
-          },
-          "operatorId": {
+          "port": {
             "type": "integer",
-            "format": "int64"
+            "format": "int32"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "fromAddress": {
+            "type": "string"
+          },
+          "startTls": {
+            "type": "boolean"
           }
         }
       },
@@ -852,6 +963,49 @@
           },
           "path": {
             "type": "string"
+          }
+        }
+      },
+      "MailSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "username": {
+            "type": "string"
+          },
+          "fromAddress": {
+            "type": "string"
+          },
+          "startTls": {
+            "type": "boolean"
+          },
+          "updatedTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BitvavoCredentialsRequest": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          },
+          "apiSecret": {
+            "type": "string"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -892,6 +1046,22 @@
           },
           "dryRun": {
             "type": "boolean"
+          }
+        }
+      },
+      "EmailRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
           }
         }
       },

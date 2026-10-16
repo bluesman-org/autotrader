@@ -4,6 +4,14 @@ server:
   port: 8081
   servlet:
     context-path: /autotrader
+    session:
+      cookie:
+        # The production deployment answers on https://at.bluris.nl behind Caddy, where the session
+        # cookie must be secure; a local http run sets SESSION_COOKIE_SECURE=false (the default) or
+        # the browser would never send the cookie back.
+        secure: ${SESSION_COOKIE_SECURE:false}
+  # Caddy terminates TLS and forwards the original scheme, so redirects and cookies keep https.
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -36,6 +44,12 @@ bitvavo:
 # Encryption settings for sensitive data
 encryption:
   master-key: ${ENCRYPTION_MASTER_KEY}  # Base64 encoded key, should be set via environment variable in production
+
+# The account, the recovery mails and the address the links in them point at.
+autotrader:
+  security:
+    public-url: ${AUTOTRADER_PUBLIC_URL:http://localhost:8081/autotrader}
+    reset-token-minutes: 30
 
 # Live engine: the WebSocket endpoint and our keepalive/reconnect policy.
 strategy:

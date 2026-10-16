@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create the account · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container" style="max-width:560px">
+    <h1 th:text="${closed} ? 'Signups are closed' : 'Create the account'">Create the account</h1>
+
+    <div class="card" style="padding:18px 22px" th:if="${closed}">
+        <p>This installation already has an account. Signups close once it exists — the app trades
+            one account, so a second one would have nothing of its own.</p>
+        <p><a th:href="@{/login}">Sign in instead</a></p>
+    </div>
+
+    <div class="card" style="padding:18px 22px" th:unless="${closed}">
+        <p class="muted">The first account: it signs in to the app and the API, and its email address
+            is how a forgotten password is recovered. Signups close after this one.</p>
+        <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+        <form method="post" th:action="@{/signup}" th:object="${form}" autocomplete="off">
+            <div class="filters">
+                <div class="f">
+                    <label>Username</label>
+                    <input type="text" th:field="*{username}" autocomplete="username" required
+                           style="width:240px">
+                </div>
+                <div class="f">
+                    <label>Email (for recovery)</label>
+                    <input type="email" th:field="*{email}" autocomplete="email" required
+                           style="width:280px">
+                </div>
+                <div class="f">
+                    <label>Display name (optional)</label>
+                    <input type="text" th:field="*{displayName}" style="width:240px">
+                </div>
+                <div class="f">
+                    <label>Password (at least 10 characters)</label>
+                    <input type="password" th:field="*{password}" autocomplete="new-password" required
+                           style="width:240px">
+                </div>
+                <div class="f">
+                    <label>Password again</label>
+                    <input type="password" th:field="*{confirm}" autocomplete="new-password" required
+                           style="width:240px">
+                </div>
+                <div>
+                    <button class="primary small" type="submit">Create the account</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</main>
+</body>
+</html>

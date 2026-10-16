@@ -196,9 +196,15 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Never commit API keys or secrets to version control
     - Always use environment variables for sensitive information
     - Follow the authentication pattern used for Bitvavo API
-    - The REST API is not authenticated: anyone who can reach the app can manage bots and read
-      account data, including transaction history. Run it on a private network behind the host's
-      firewall; the production compose uses host networking, so exposure is whatever the host allows.
+    - The app holds one account (see `docs/security.md`): the pages sign in with a form and a
+      session, the API with HTTP Basic, and a fresh installation starts at `/signup`. The
+      TradingView webhook stays open because it authenticates itself, everything else — pages, API,
+      Swagger UI — needs a sign-in. A page asks with a redirect to `/login`; an API request answers
+      401. Recovery mail goes out through the SMTP server stored on the settings page.
+    - Production is served on `https://at.bluris.nl` behind Caddy, with
+      `server.forward-headers-strategy=framework` and `SESSION_COOKIE_SECURE=true`, so redirects and
+      cookies keep the https scheme. The site block and the deployment checklist are in
+      `docs/security.md`; the host change is the operator's.
 
 5. **Bitvavo HTTP clients**:
     - `restTemplate` is used for signed trading calls and deliberately has no socket timeouts: a read
