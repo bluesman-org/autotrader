@@ -349,8 +349,9 @@ public class LedgerService {
         double quoteAmount = number(order.getFilledAmountQuote());
         double cashFee = cashFee(order, market);
         double result = result(order, basis, currentBid);
-        String avgPrice = amount > 0 ? euro(quoteAmount / amount)
-                : order.getPrice() == null ? DASH : euro(order.getPrice().doubleValue());
+        // The average of the fills, so it is a dash until something filled; what a waiting order
+        // carries is named under its status instead.
+        String avgPrice = amount > 0 ? euro(quoteAmount / amount) : DASH;
         double netCash = buy ? -(quoteAmount + cashFee) : quoteAmount - cashFee;
         return new OrderRowView(number,
                 order.getCreated() == null ? DASH : display.minute(Instant.ofEpochMilli(order.getCreated())),
@@ -592,9 +593,13 @@ public class LedgerService {
         if (status == null || status.isBlank()) {
             return true;
         }
-        // The API calls an open order "new"; the filter spells it out.
-        String wanted = "open".equalsIgnoreCase(status) ? "new" : status;
-        return wanted.equalsIgnoreCase(order.getStatus());
+        // The API calls a resting order "new" and a stop or take-profit waiting for its trigger
+        // "awaitingTrigger"; "Open" is both, and the other choices name one status each.
+        if ("open".equalsIgnoreCase(status)) {
+            return "new".equalsIgnoreCase(order.getStatus())
+                    || "awaitingtrigger".equalsIgnoreCase(order.getStatus());
+        }
+        return status.equalsIgnoreCase(order.getStatus());
     }
 
     private static boolean isBuy(OrderResponse order) {
@@ -714,15 +719,26 @@ public class LedgerService {
      *         carries one, its limit price; empty for every other order
      */
     private static String triggerText(OrderResponse order) {
-        if (!"awaitingtrigger".equalsIgnoreCase(order.getStatus())
-                || order.getTriggerPrice() == null || order.getTriggerPrice().signum() == 0) {
+        boolean waiting = "awaitingtrigger".equalsIgnoreCase(order.getStatus())
+                || "new".equalsIgnoreCase(order.getStatus());
+        if (!waiting) {
             return "";
         }
-        String text = "trigger " + euro(order.getTriggerPrice().doubleValue());
-        boolean limit = order.getOrderType() != null
-                && order.getOrderType().toLowerCase(Locale.ENGLISH).endsWith("limit")
-                && order.getPrice() != null;
-        return limit ? text + " · limit " + euro(order.getPrice().doubleValue()) : text;
+        boolean hasTrigger = order.getTriggerPrice() != null && order.getTriggerPrice().signum() != 0;
+        boolean hasPrice = order.getPrice() != null && order.getPrice().signum() != 0;
+        if (!hasTrigger && !hasPrice) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        if (hasTrigger) {
+            parts.add("trigger " + euro(order.getTriggerPrice().doubleValue()));
+        }
+        if (hasPrice) {
+            boolean limit = order.getOrderType() != null
+                    && order.getOrderType().toLowerCase(Locale.ENGLISH).endsWith("limit");
+            parts.add((limit ? "limit " : "price ") + euro(order.getPrice().doubleValue()));
+        }
+        return String.join(" · ", parts);
     }
 
     /**

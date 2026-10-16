@@ -61,6 +61,7 @@
                 <select name="status">
                     <option value="" th:selected="${#strings.isEmpty(ledger.filters.status)}">All statuses</option>
                     <option value="open" th:selected="${ledger.filters.status == 'open'}">Open</option>
+                    <option value="awaitingTrigger" th:selected="${ledger.filters.status == 'awaitingTrigger'}">Awaiting trigger</option>
                     <option value="partiallyFilled" th:selected="${ledger.filters.status == 'partiallyFilled'}">Partially filled</option>
                     <option value="filled" th:selected="${ledger.filters.status == 'filled'}">Filled</option>
                     <option value="canceled" th:selected="${ledger.filters.status == 'canceled'}">Canceled</option>

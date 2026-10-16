@@ -110,13 +110,15 @@ final class HistoryPeriods {
         if (hasCustomRange(fromDate, toDate)) {
             LocalDate from = parseDate(fromDate);
             LocalDate to = parseDate(toDate);
-            boolean unparseable = (notBlank(fromDate) && from == null) || (notBlank(toDate) && to == null);
+            boolean unparseable = (notBlank(fromDate) && from == null) || (notBlank(toDate) && to == null)
+                    || (notBlank(fromTime) && parseTime(fromTime) == null)
+                    || (notBlank(toTime) && parseTime(toTime) == null);
             if (!unparseable) {
                 // Each side stands on its own: an empty start date means "everything before the
                 // end", an empty end date means "through today", and an empty time means the whole
-                // day (an explicit minute runs through the end of that minute). A date that is
-                // present but unreadable falls back to the preset below rather than widening the
-                // range silently.
+                // day (an explicit minute runs through the end of that minute). Anything that is
+                // present but unreadable — a date or a time — falls back to the preset below rather
+                // than widening the range silently, and so does a pair that runs backwards.
                 LocalDate end = to == null ? clock.instant().atZone(display.zone()).toLocalDate() : to;
                 LocalTime fromClock = parseTime(fromTime);
                 LocalTime toClock = parseTime(toTime);
@@ -124,10 +126,16 @@ final class HistoryPeriods {
                 long fromMillis = start == null ? 0 : start.atZone(display.zone()).toInstant().toEpochMilli();
                 long toMillis = toClock == null ? endOfDay(end)
                         : end.atTime(toClock).plusMinutes(1).atZone(display.zone()).toInstant().toEpochMilli() - 1;
-                LocalDateTime labelTo = end.atTime(toClock == null ? LocalTime.of(23, 59) : toClock);
-                String label = (start == null ? "the start" : display.minute(start.atZone(display.zone()).toInstant()))
-                        + " → " + display.minute(labelTo.atZone(display.zone()).toInstant());
-                return new Range(fromMillis, toMillis, label);
+                // A range that runs backwards (a start in the future, swapped dates) falls back to
+                // the preset rather than asking the database or the exchange for an impossible pair;
+                // the REST layer rejects the same combination.
+                if (fromMillis <= toMillis) {
+                    LocalDateTime labelTo = end.atTime(toClock == null ? LocalTime.of(23, 59) : toClock);
+                    String label = (start == null ? "the start"
+                            : display.minute(start.atZone(display.zone()).toInstant()))
+                            + " → " + display.minute(labelTo.atZone(display.zone()).toInstant());
+                    return new Range(fromMillis, toMillis, label);
+                }
             }
         }
         String resolved = preset(period);

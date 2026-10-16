@@ -145,6 +145,7 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("+€0,60")))
                 .andExpect(content().string(containsString("side-sell")))
                 .andExpect(content().string(containsString("fills (1)")))
+                .andExpect(content().string(containsString(">Awaiting trigger<")))
                 .andExpect(content().string(containsString("awaiting trigger")))
                 .andExpect(content().string(containsString("trigger €73.162,00 · limit €75.364,00")))
                 .andExpect(content().string(containsString("09:00:00")))

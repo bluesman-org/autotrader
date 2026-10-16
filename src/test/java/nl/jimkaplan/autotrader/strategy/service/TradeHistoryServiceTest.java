@@ -411,12 +411,27 @@ class TradeHistoryServiceTest {
         toOnly.setToDate("2026-10-08");
         assertEquals("the start → 8 Oct 23:59", service.view(toOnly).totals().periodText());
 
+        // A time that is present but unreadable follows the date rule: the preset stands in.
         TradeHistoryRequest badTime = new TradeHistoryRequest();
         badTime.setFromDate("2026-10-07");
         badTime.setFromTime("xyz");
         badTime.setToDate("2026-10-08");
         badTime.setToTime("25:99");
-        assertEquals("7 Oct 00:00 → 8 Oct 23:59", service.view(badTime).totals().periodText());
+        assertEquals("Last 7 days", service.view(badTime).totals().periodText());
+
+        // A range that runs backwards (a start in the future) falls back to the preset rather than
+        // asking for an impossible pair.
+        TradeHistoryRequest future = new TradeHistoryRequest();
+        future.setFromDate("2027-01-01");
+        assertEquals("Last 7 days", service.view(future).totals().periodText());
+
+        // And a properly formed custom range still resolves, times and all.
+        TradeHistoryRequest fine = new TradeHistoryRequest();
+        fine.setFromDate("2026-10-07");
+        fine.setFromTime("09:30");
+        fine.setToDate("2026-10-08");
+        fine.setToTime("14:00");
+        assertEquals("7 Oct 09:30 → 8 Oct 14:00", service.view(fine).totals().periodText());
     }
 
     @Test

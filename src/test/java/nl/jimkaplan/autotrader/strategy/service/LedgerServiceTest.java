@@ -80,7 +80,8 @@ class LedgerServiceTest {
         assertEquals("side-buy", open.sideClass());
         assertEquals("limit", open.typeText());
         assertEquals("0,00200000", open.amountText());
-        assertEquals("€73.000,00", open.avgPriceText());
+        assertEquals("—", open.avgPriceText());
+        assertEquals("limit €73.000,00", open.triggerText());
         assertEquals("open", open.statusLabel());
         assertEquals("0,0015", open.balanceAfterText());
         assertEquals("—", open.feeText());
@@ -135,6 +136,10 @@ class LedgerServiceTest {
         LedgerRequest openOnly = new LedgerRequest();
         openOnly.setStatus("open");
         assertEquals(1, service.view(openOnly).rows().size());
+
+        LedgerRequest waitingOnly = new LedgerRequest();
+        waitingOnly.setStatus("awaitingTrigger");
+        assertEquals(0, service.view(waitingOnly).rows().size());
 
         LedgerRequest limitOnly = new LedgerRequest();
         limitOnly.setType("limit");
@@ -387,6 +392,14 @@ class LedgerServiceTest {
         // for the orders that are still waiting.
         LedgerView.OrderRowView traded = view.rows().get(2);
         assertEquals("", traded.triggerText());
+
+        // The filter reaches a waiting order by name and through Open.
+        LedgerRequest byName = new LedgerRequest();
+        byName.setStatus("awaitingTrigger");
+        assertEquals(2, service.view(byName).rows().size());
+        LedgerRequest open = new LedgerRequest();
+        open.setStatus("open");
+        assertEquals(2, service.view(open).rows().size());
     }
 
     private static String queryParam(String url, String name) {
