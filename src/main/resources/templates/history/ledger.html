@@ -49,19 +49,23 @@
                             th:selected="${option.value == ledger.filters.market}">BTC-EUR</option>
                 </select>
             </div>
-            <div class="f"><label>Type <span class="muted">any of</span></label>
-                <select name="type" multiple size="6">
-                    <option th:each="option : ${ledger.filters.typeOptions}" th:value="${option.value}"
-                            th:text="${option.label}"
-                            th:selected="${#lists.contains(ledger.filters.type, option.value)}">market</option>
-                </select>
+            <div class="f f-checks"><label>Type <span class="muted">any of</span></label>
+                <div class="checks checks-inline">
+                    <label th:each="option : ${ledger.filters.typeOptions}">
+                        <input type="checkbox" name="type" th:value="${option.value}"
+                               th:checked="${#lists.contains(ledger.filters.type, option.value)}">
+                        <span th:text="${option.label}">market</span>
+                    </label>
+                </div>
             </div>
-            <div class="f"><label>Status <span class="muted">any of</span></label>
-                <select name="status" multiple size="6">
-                    <option th:each="option : ${ledger.filters.statusOptions}" th:value="${option.value}"
-                            th:text="${option.label}"
-                            th:selected="${#lists.contains(ledger.filters.status, option.value)}">filled</option>
-                </select>
+            <div class="f f-checks"><label>Status <span class="muted">any of</span></label>
+                <div class="checks checks-inline">
+                    <label th:each="option : ${ledger.filters.statusOptions}">
+                        <input type="checkbox" name="status" th:value="${option.value}"
+                               th:checked="${#lists.contains(ledger.filters.status, option.value)}">
+                        <span th:text="${option.label}">filled</span>
+                    </label>
+                </div>
             </div>
             <div class="f"><label>View</label>
                 <select name="view">

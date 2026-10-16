@@ -28,6 +28,7 @@ body {
 
 .nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 18px;
     align-items: center;
     padding: 12px 22px;
@@ -412,6 +413,7 @@ table.orders td, table.orders th {
     display: flex;
     gap: 16px;
     align-items: center;
+    flex-wrap: wrap;
     margin-top: 10px;
     font-size: 0.9rem;
     color: var(--muted);
@@ -428,6 +430,9 @@ table.orders td, table.orders th {
 .table-scroll {
     max-height: 62vh;
     overflow-y: auto;
+    /* A wide table scrolls inside its own box instead of pushing the page sideways on narrow
+       viewports. */
+    overflow-x: auto;
 }
 
 .table-scroll thead th {
@@ -586,8 +591,21 @@ tr.detail details[open] summary {
     flex: 0 0 auto;
 }
 
-/* A multi-value filter select keeps the filter bar's height in check. */
-.filters select[multiple] {
-    height: auto;
-    padding: 4px 6px;
+/* A multi-value filter group: compact chips that wrap inside the filter bar. The group may shrink
+   below its preferred width on a narrow viewport; the chips wrap instead. */
+.filters .f-checks {
+    min-width: 0;
+    flex: 1 1 320px;
+}
+
+.filters .checks-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 8px;
+}
+
+/* The chip labels set their own size: the filter bar's label rule is smaller. */
+.filters .checks-inline label {
+    font-size: 0.9rem;
 }
