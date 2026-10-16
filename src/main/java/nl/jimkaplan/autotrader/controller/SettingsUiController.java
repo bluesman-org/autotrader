@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.time.Instant;
 
 /**
  * The settings page: the system-wide Bitvavo API key the engine trades with and the ledger reads
@@ -39,12 +38,13 @@ public class SettingsUiController {
      */
     @GetMapping
     public String page(Model model) {
-        model.addAttribute("credentials", credentialsService.view());
+        BitvavoCredentialsResponse view = credentialsService.view();
+        model.addAttribute("credentials", view);
         if (!model.containsAttribute("form")) {
             model.addAttribute("form", new BitvavoCredentialsRequest());
         }
         model.addAttribute("zoneLabel", display.label());
-        model.addAttribute("updatedText", updatedText());
+        model.addAttribute("updatedText", updatedText(view));
         return "settings/index";
     }
 
@@ -70,8 +70,8 @@ public class SettingsUiController {
         return "redirect:/ui/settings";
     }
 
-    private String updatedText() {
-        Instant updated = credentialsService.view().updatedTime();
-        return updated == null ? null : display.minute(updated) + " (" + display.label() + ")";
+    private String updatedText(BitvavoCredentialsResponse view) {
+        return view.updatedTime() == null ? null
+                : display.minute(view.updatedTime()) + " (" + display.label() + ")";
     }
 }
