@@ -9,6 +9,7 @@ import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -25,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -255,6 +258,24 @@ class TradeHistoryServiceTest {
     }
 
     @Test
+    void view_customRangeDefaultsItsOpenEndsAndShowsTheWholeDayTimes() {
+        stubPeriod(List.of(position(STRATEGY, NOW.minusSeconds(2 * 3600).toEpochMilli(), 0.12, false)));
+
+        TradeHistoryRequest fromOnly = new TradeHistoryRequest();
+        fromOnly.setFromDate("2026-10-10");
+        TradeHistoryView view = service.view(fromOnly);
+
+        assertEquals("00:00", view.filters().fromTime());
+        assertEquals("23:59", view.filters().toTime());
+        ArgumentCaptor<Long> from = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> to = ArgumentCaptor.forClass(Long.class);
+        verify(positions).findByStatusAndEntryTimeRange(eq("CLOSED"), from.capture(), to.capture());
+        // The start runs from the chosen day's midnight, the open end through today.
+        assertEquals(Instant.parse("2026-10-10T00:00:00Z").toEpochMilli(), from.getValue());
+        assertEquals(Instant.parse("2026-10-15T23:59:59.999Z").toEpochMilli(), to.getValue());
+    }
+
+    @Test
     void view_detailsSayWhyDryRunsHaveNoReferences() {
         stubPeriod(List.of(position(STRATEGY, NOW.minusSeconds(2 * 3600).toEpochMilli(), 0.12, true)));
 
@@ -385,9 +406,10 @@ class TradeHistoryServiceTest {
         badDates.setFromDate("not-a-date");
         assertEquals("Last 7 days", service.view(badDates).totals().periodText());
 
+        // A single date side no longer falls back to the preset: the open side takes its default.
         TradeHistoryRequest toOnly = new TradeHistoryRequest();
         toOnly.setToDate("2026-10-08");
-        assertEquals("Last 7 days", service.view(toOnly).totals().periodText());
+        assertEquals("the start → 8 Oct 23:59", service.view(toOnly).totals().periodText());
 
         TradeHistoryRequest badTime = new TradeHistoryRequest();
         badTime.setFromDate("2026-10-07");

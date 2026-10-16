@@ -145,6 +145,8 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("+€0,60")))
                 .andExpect(content().string(containsString("side-sell")))
                 .andExpect(content().string(containsString("fills (1)")))
+                .andExpect(content().string(containsString("awaiting trigger")))
+                .andExpect(content().string(containsString("trigger €73.162,00 · limit €75.364,00")))
                 .andExpect(content().string(containsString("09:00:00")))
                 .andExpect(content().string(containsString("fragment=ledger")));
     }
@@ -164,7 +166,8 @@ class HistoryUiControllerRenderTest {
         LedgerView.FillRowView fill = new LedgerView.FillRowView("09:00:00", "0.00050000", "€76.000,00",
                 "€0,0800", "taker", "+€37,92", "pos");
         LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 09:00", "SELL", "side-sell",
-                "market", "BTC-EUR", "0.00050000", "€76.000,00", "filled", "ok", "0.0015", "€0,08",
+                "takeProfitLimit", "BTC-EUR", "0.00050000", "€76.000,00", "awaiting trigger", "",
+                "trigger €73.162,00 · limit €75.364,00", "0.0015", "€0,08",
                 "+€37,92", "pos", 1, "+€0,60", "pos", List.of(fill), "");
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "BTC-EUR", "", "", "orders",
                 "7d", "", "", "", "",

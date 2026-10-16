@@ -320,6 +320,80 @@ class LedgerServiceTest {
     }
 
     @Test
+    void theCustomRangeDefaultsItsOpenEndsAndShowsTheWholeDayTimes() {
+        accountReadable();
+
+        // Only a start date: the end runs through today, the times read 00:00 and 23:59.
+        LedgerRequest fromOnly = new LedgerRequest();
+        fromOnly.setFromDate("2026-10-10");
+        LedgerView view = service.view(fromOnly);
+
+        assertEquals("00:00", view.filters().fromTime());
+        assertEquals("23:59", view.filters().toTime());
+        ArgumentCaptor<String> orders = ArgumentCaptor.forClass(String.class);
+        verify(client).get(orders.capture(), eq(OrderResponse[].class), anyString(), anyString());
+        assertEquals(String.valueOf(Instant.parse("2026-10-10T00:00:00Z").toEpochMilli()),
+                queryParam(orders.getValue(), "start"));
+        assertEquals(String.valueOf(Instant.parse("2026-10-15T23:59:59.999Z").toEpochMilli()),
+                queryParam(orders.getValue(), "end"));
+    }
+
+    @Test
+    void anEmptyStartDateMeansEverythingBeforeTheEnd() {
+        accountReadable();
+
+        LedgerRequest toOnly = new LedgerRequest();
+        toOnly.setToDate("2026-10-14");
+        LedgerView view = service.view(toOnly);
+
+        ArgumentCaptor<String> orders = ArgumentCaptor.forClass(String.class);
+        verify(client).get(orders.capture(), eq(OrderResponse[].class), anyString(), anyString());
+        assertEquals("0", queryParam(orders.getValue(), "start"));
+        assertEquals(String.valueOf(Instant.parse("2026-10-14T23:59:59.999Z").toEpochMilli()),
+                queryParam(orders.getValue(), "end"));
+        assertTrue(view.totals().periodText().startsWith("the start →"));
+    }
+
+    @Test
+    void waitingOrdersShowTheirTriggerAndTheirLimit() {
+        accountReadableWithoutOrders();
+        OrderResponse waiting = baseOrder("2026-10-14T20:00:00Z", "sell", "takeProfitLimit");
+        waiting.setStatus("awaitingTrigger");
+        waiting.setTriggerPrice(new BigDecimal("73162"));
+        waiting.setPrice(new BigDecimal("75364"));
+        OrderResponse stop = baseOrder("2026-10-14T19:00:00Z", "sell", "stopLoss");
+        stop.setStatus("awaitingTrigger");
+        stop.setTriggerPrice(new BigDecimal("73000"));
+        OrderResponse filledBuy = baseOrder("2026-10-14T18:00:00Z", "buy", "takeProfitLimit");
+        filledBuy.setStatus("filled");
+        filledBuy.setTriggerPrice(new BigDecimal("74000"));
+        filledBuy.setPrice(new BigDecimal("74100"));
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{waiting, stop, filledBuy});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        LedgerView.OrderRowView takeProfit = view.rows().get(0);
+        assertEquals("awaiting trigger", takeProfit.statusLabel());
+        assertEquals("trigger €73.162,00 · limit €75.364,00", takeProfit.triggerText());
+        LedgerView.OrderRowView stopLoss = view.rows().get(1);
+        assertEquals("trigger €73.000,00", stopLoss.triggerText());
+        // A trigger order that already traded keeps its limit price in Avg price; the readout is
+        // for the orders that are still waiting.
+        LedgerView.OrderRowView traded = view.rows().get(2);
+        assertEquals("", traded.triggerText());
+    }
+
+    private static String queryParam(String url, String name) {
+        return UriComponentsBuilder.fromUriString(url).build().getQueryParams().getFirst(name);
+    }
+
+    @Test
     void aFailingPriceLookupLeavesDashesInsteadOfBreaking() {
         accountReadableWithoutOrders();
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))

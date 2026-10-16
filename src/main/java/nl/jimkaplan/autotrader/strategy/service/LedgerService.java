@@ -359,7 +359,7 @@ public class LedgerService {
                 order.getMarket() == null ? market : order.getMarket(),
                 order.getAmount() == null ? amountText(order.getAmountQuote(), market) : amount8(number(order.getAmount())),
                 avgPrice, statusLabel(order.getStatus()), statusClass(order.getStatus()),
-                balance.after(order), fee(order, market),
+                triggerText(order), balance.after(order), fee(order, market),
                 amount > 0 || quoteAmount > 0 ? signed(netCash) : DASH,
                 amount > 0 || quoteAmount > 0 ? signClass(netCash) : "",
                 order.getFills() == null ? 0 : order.getFills().size(),
@@ -434,7 +434,8 @@ public class LedgerService {
                 raw ? RAW_VIEW : DEFAULT_VIEW,
                 HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate()) ? ""
                         : HistoryPeriods.preset(request.getPeriod()),
-                request.getFromDate(), request.getFromTime(), request.getToDate(), request.getToTime(),
+                request.getFromDate(), HistoryPeriods.shownFromTime(request.getFromTime()),
+                request.getToDate(), HistoryPeriods.shownToTime(request.getToTime()),
                 marketOptions(market), HistoryPeriods.OPTIONS);
     }
 
@@ -708,6 +709,23 @@ public class LedgerService {
     }
 
     /**
+     * @param order The order
+     * @return For an order that waits for its trigger: the trigger price and, when the order type
+     *         carries one, its limit price; empty for every other order
+     */
+    private static String triggerText(OrderResponse order) {
+        if (!"awaitingtrigger".equalsIgnoreCase(order.getStatus())
+                || order.getTriggerPrice() == null || order.getTriggerPrice().signum() == 0) {
+            return "";
+        }
+        String text = "trigger " + euro(order.getTriggerPrice().doubleValue());
+        boolean limit = order.getOrderType() != null
+                && order.getOrderType().toLowerCase(Locale.ENGLISH).endsWith("limit")
+                && order.getPrice() != null;
+        return limit ? text + " · limit " + euro(order.getPrice().doubleValue()) : text;
+    }
+
+    /**
      * @param fee The fill's fee
      * @return The fee in its own currency — euro amounts at their own precision — or a dash when
      *         the fill paid nothing
@@ -827,6 +845,7 @@ public class LedgerService {
         return switch (status.toLowerCase(Locale.ENGLISH)) {
             case "new" -> "open";
             case "partiallyfilled" -> "partially filled";
+            case "awaitingtrigger" -> "awaiting trigger";
             default -> status.toLowerCase(Locale.ENGLISH);
         };
     }

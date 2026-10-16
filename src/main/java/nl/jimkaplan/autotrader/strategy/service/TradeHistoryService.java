@@ -261,7 +261,8 @@ public class TradeHistoryService {
         String preset = HistoryPeriods.preset(request.getPeriod());
         return new FiltersView(request.getStrategy(), request.getType(), request.getResult(),
                 custom ? "" : preset,
-                request.getFromDate(), request.getFromTime(), request.getToDate(), request.getToTime(),
+                request.getFromDate(), HistoryPeriods.shownFromTime(request.getFromTime()),
+                request.getToDate(), HistoryPeriods.shownToTime(request.getToTime()),
                 strategies, HistoryPeriods.OPTIONS);
     }
 
