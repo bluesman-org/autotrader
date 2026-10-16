@@ -153,6 +153,9 @@ class LedgerServiceTest {
         LedgerRequest junk = new LedgerRequest();
         junk.setType(List.of("nonsense"));
         assertEquals(3, service.view(junk).rows().size());
+        // The pager and rows-per-page links repeat the fields, so the selection survives a page.
+        assertTrue(service.view(twoTypes).pager().sizes().get(0).query()
+                .contains("type=limit&type=market"));
 
         LedgerRequest paged = new LedgerRequest();
         paged.setSize(5);

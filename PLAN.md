@@ -14,7 +14,9 @@ responses come from the advice (PR #28). Quality gates hardened (PR #13). Item 1
 live page (PRs #30, #33) and both tabs of the account history page — the engine's round trips
 (PR #34) and the Bitvavo ledger (PR #36, fees shown in the currency the exchange charged, PR #37) —
 with a hotfix for the history range queries (PR #35). The Bitvavo key now lives system-wide, outside
-the bot configurations (PR #38).
+the bot configurations (PR #38). The history page's numbers read Dutch-style (PR #40), its filter
+bars behave alike on both tabs and the ledger's type and status filters take several values (PR #44),
+after the custom-range flow was fixed twice over (PRs #42, #43).
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
 next: the small live-run trial of the engine.
 
@@ -172,7 +174,8 @@ next: the small live-run trial of the engine.
     per-order rows with the order's total fee (`feePaid`) expanding into their fills, plus the raw
     transactions (deposits, withdrawals, staking, rebates) — modelled on the broker-app screenshots
     shared 2026-10-13. The live page landed (PR #30, its "last refresh" indicator in PR #33), the
-    engine-trades tab (PR #34) and the Bitvavo ledger tab (PR #36) ✅
+    engine-trades tab (PR #34) and the Bitvavo ledger tab (PR #36); the follow-ups made the two tabs'
+    filter bars share their mechanics and the ledger's type and status filters multi-value (PR #44) ✅
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed

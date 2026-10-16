@@ -172,8 +172,8 @@ public class LedgerService {
 
         List<OrderResponse> filtered = periodOrders.stream()
                 .filter(order -> matchesSide(order, request.getSide()))
-                .filter(order -> matchesType(order, request.getType()))
-                .filter(order -> matchesStatus(order, request.getStatus()))
+                .filter(order -> matchesType(order, filters.type()))
+                .filter(order -> matchesStatus(order, filters.status()))
                 .sorted(Comparator.comparingLong(LedgerService::created).reversed())
                 .toList();
 
@@ -607,16 +607,14 @@ public class LedgerService {
     }
 
     private static boolean matchesType(OrderResponse order, List<String> types) {
-        List<String> wanted = types == null ? List.of()
-                : types.stream().filter(ORDER_TYPES::contains).toList();
-        return wanted.isEmpty()
-                || wanted.stream().anyMatch(type -> type.equalsIgnoreCase(order.getOrderType()));
+        // The filter bar hands over the normalized lists, so a value the filter cannot use is
+        // already gone: an empty list means every type.
+        return types.isEmpty()
+                || types.stream().anyMatch(type -> type.equalsIgnoreCase(order.getOrderType()));
     }
 
     private static boolean matchesStatus(OrderResponse order, List<String> statuses) {
-        List<String> wanted = statuses == null ? List.of()
-                : statuses.stream().filter(STATUS_VALUES::contains).toList();
-        return wanted.isEmpty() || wanted.stream()
+        return statuses.isEmpty() || statuses.stream()
                 .anyMatch(status -> matchesOneStatus(order.getStatus(), status));
     }
 
