@@ -206,6 +206,52 @@ class LedgerServiceTest {
     }
 
     @Test
+    void feesFallBackToTheOrderAndFollowTheMarketWhenACurrencyIsMissing() {
+        accountReadableWithoutOrders();
+        OrderResponse missingCurrency = baseOrder("2026-10-14T10:00:00Z", "buy", "market");
+        missingCurrency.setStatus("filled");
+        missingCurrency.setAmount(new BigDecimal("0.001"));
+        missingCurrency.setFilledAmount(new BigDecimal("0.001"));
+        missingCurrency.setFilledAmountQuote(new BigDecimal("75.00"));
+        Fills missing = fill("2026-10-14T10:00:00Z", "0.001", "75000", "0.10");
+        missing.setFeeCurrency(null);
+        missingCurrency.setFills(List.of(missing));
+
+        OrderResponse orderLevelFee = baseOrder("2026-10-14T11:00:00Z", "buy", "market");
+        orderLevelFee.setStatus("filled");
+        orderLevelFee.setAmount(new BigDecimal("0.001"));
+        orderLevelFee.setFilledAmount(new BigDecimal("0.001"));
+        orderLevelFee.setFilledAmountQuote(new BigDecimal("75.00"));
+        orderLevelFee.setFeePaid(new BigDecimal("0.20"));
+        orderLevelFee.setFeeCurrency("EUR");
+        Fills withoutFee = fill("2026-10-14T11:00:00Z", "0.001", "75000", "0");
+        withoutFee.setFee(null);
+        orderLevelFee.setFills(List.of(withoutFee));
+
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{orderLevelFee, missingCurrency});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        // A missing currency counts as the market's quote, so the row, its fill, the cash and the
+        // period total all carry the same figure.
+        LedgerView.OrderRowView missingRow = view.rows().get(1);
+        assertEquals("€0.10", missingRow.feeText());
+        assertEquals("€0.1000", missingRow.fills().get(0).feeText());
+        assertEquals("−€75.10", missingRow.netCashText());
+        // A fill that reports no fee of its own falls back to the order's feePaid.
+        LedgerView.OrderRowView fallbackRow = view.rows().get(0);
+        assertEquals("€0.20", fallbackRow.feeText());
+        assertEquals("−€75.20", fallbackRow.netCashText());
+        assertEquals("€0.30", view.totals().feesText());
+    }
+
+    @Test
     void aFailingPriceLookupLeavesDashesInsteadOfBreaking() {
         accountReadableWithoutOrders();
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
