@@ -77,7 +77,8 @@ public class LedgerService {
     private static final List<String> ORDER_TYPES = List.of("market", "limit", "stopLoss",
             "stopLossLimit", "takeProfit", "takeProfitLimit");
     private static final int ORDER_LIMIT = 1000;
-    private static final int HISTORY_PAGE_SIZE = 200;
+    /** The API's maximum for one account-history page (a larger value is rejected with code 417). */
+    private static final int HISTORY_PAGE_SIZE = 100;
     private static final int MAX_HISTORY_PAGES = 25;
 
     /**
@@ -279,6 +280,13 @@ public class LedgerService {
             entries.addAll(response.getItems());
             if (response.getTotalPages() == null || page >= response.getTotalPages()) {
                 break;
+            }
+            if (page == MAX_HISTORY_PAGES) {
+                // The walk would be silently incomplete past this page count (roughly 25 × 100
+                // entries per read), so the truncation is at least visible. PLAN item 23 covers
+                // bounding or caching the read itself.
+                log.warn("Account history read stopped at {} entries (type {}); the average-cost walk "
+                        + "may be incomplete", entries.size(), type == null ? "all" : type);
             }
         }
         return entries;
