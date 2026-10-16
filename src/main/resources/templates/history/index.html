@@ -65,9 +65,11 @@
         });
     }
 
-    // Fetches a tab's content and swaps it in place: no scroll jump, the address bar keeps the whole
-    // state, and a failed fetch shows the last state. The tab's own fragment name rides along.
-    function swapContent(content, url, fragment) {
+    // Fetches a tab's content and swaps it in place: the address bar keeps the whole state, and a
+    // failed fetch shows the last state. The tab's own fragment name rides along. `keepScroll` is for
+    // the timed refresh: a table scrolled halfway down stays where it was, while a user action
+    // (filters, paging, sorting) starts the new content at its top.
+    function swapContent(content, url, fragment, keepScroll) {
         fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'fragment=' + fragment,
                 { headers: { 'X-Requested-With': 'fetch' } })
             .then(function (response) { return response.ok ? response.text() : null; })
@@ -75,7 +77,51 @@
                 if (html === null) {
                     return;
                 }
+                // Captured at swap time, so a refresh never fights a scroll that just happened. Both
+                // axes are carried; a scroll box without a data-scroll-key falls back to its order.
+                var scrolled = keepScroll ? Array.prototype.map.call(
+                        content.querySelectorAll('.table-scroll'),
+                        function (box, index) {
+                            return {
+                                key: box.getAttribute('data-scroll-key') || String(index),
+                                top: box.scrollTop,
+                                left: box.scrollLeft
+                            };
+                        }) : null;
+                // A reader's open fills panel survives the swap too: it is reopened by position, and
+                // before the scroll is restored, because an open panel changes the layout.
+                var openDetails = keepScroll ? Array.prototype.map.call(
+                        content.querySelectorAll('details'),
+                        function (details, index) { return details.open ? index : -1; })
+                        .filter(function (index) { return index >= 0; }) : null;
+                var pageScroll = keepScroll ? { top: window.scrollY, left: window.scrollX } : null;
                 content.innerHTML = html;
+                if (keepScroll) {
+                    if (openDetails) {
+                        var details = content.querySelectorAll('details');
+                        openDetails.forEach(function (index) {
+                            if (index < details.length) {
+                                details[index].open = true;
+                            }
+                        });
+                    }
+                    if (scrolled) {
+                        Array.prototype.forEach.call(content.querySelectorAll('.table-scroll'),
+                                function (box, index) {
+                                    var wanted = scrolled.filter(function (entry) {
+                                        return entry.key === (box.getAttribute('data-scroll-key')
+                                                || String(index));
+                                    })[0];
+                                    if (wanted) {
+                                        box.scrollTop = wanted.top;
+                                        box.scrollLeft = wanted.left;
+                                    }
+                                });
+                    }
+                    if (pageScroll) {
+                        window.scrollTo(pageScroll.left, pageScroll.top);
+                    }
+                }
                 window.history.replaceState(null, '', url);
             })
             .catch(function () { /* keep the last state */ });
@@ -145,7 +191,7 @@
                 if (document.hidden || content.contains(document.activeElement)) {
                     return;
                 }
-                swapContent(content, window.location.href, fragment);
+                swapContent(content, window.location.href, fragment, true);
             }, refreshSeconds * 1000);
         }
     }

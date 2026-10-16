@@ -111,7 +111,7 @@
         <th:block th:unless="${ledger.raw}">
             <p class="muted" th:if="${#lists.isEmpty(ledger.rows)}">No orders match these filters.</p>
 
-            <div class="table-wrap table-scroll" th:unless="${#lists.isEmpty(ledger.rows)}">
+            <div class="table-wrap table-scroll" data-scroll-key="orders" th:unless="${#lists.isEmpty(ledger.rows)}">
                 <table>
                     <thead>
                     <tr>
@@ -219,7 +219,7 @@
                 fills, deposits, withdrawals, staking and rebates.</p>
             <p class="muted" th:if="${#lists.isEmpty(ledger.rawRows)}">No transactions in this period.</p>
 
-            <div class="table-wrap table-scroll" th:unless="${#lists.isEmpty(ledger.rawRows)}">
+            <div class="table-wrap table-scroll" data-scroll-key="raw" th:unless="${#lists.isEmpty(ledger.rawRows)}">
                 <table>
                     <thead>
                     <tr>

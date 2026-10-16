@@ -59,7 +59,7 @@
 
     <p class="muted" th:if="${#lists.isEmpty(history.rows)}">No round trips match these filters.</p>
 
-    <div class="table-wrap table-scroll" th:unless="${#lists.isEmpty(history.rows)}">
+    <div class="table-wrap table-scroll" data-scroll-key="trades" th:unless="${#lists.isEmpty(history.rows)}">
         <table>
             <thead>
             <tr>
