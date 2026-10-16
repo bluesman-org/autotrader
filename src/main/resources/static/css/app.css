@@ -428,6 +428,9 @@ table.orders td, table.orders th {
 .table-scroll {
     max-height: 62vh;
     overflow-y: auto;
+    /* A wide table scrolls inside its own box instead of pushing the page sideways on narrow
+       viewports. */
+    overflow-x: auto;
 }
 
 .table-scroll thead th {
