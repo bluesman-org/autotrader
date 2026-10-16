@@ -281,6 +281,13 @@ public class LedgerService {
             if (response.getTotalPages() == null || page >= response.getTotalPages()) {
                 break;
             }
+            if (page == MAX_HISTORY_PAGES) {
+                // The walk would be silently incomplete past this page count (roughly 25 × 100
+                // entries per read), so the truncation is at least visible. PLAN item 23 covers
+                // bounding or caching the read itself.
+                log.warn("Account history read stopped at {} entries (type {}); the average-cost walk "
+                        + "may be incomplete", entries.size(), type == null ? "all" : type);
+            }
         }
         return entries;
     }

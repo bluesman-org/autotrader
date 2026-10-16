@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -295,15 +296,27 @@ class LedgerServiceTest {
         accountReadable();
 
         service.view(new LedgerRequest());
+        LedgerRequest raw = new LedgerRequest();
+        raw.setView("raw");
+        service.view(raw);
 
         ArgumentCaptor<String> endpoints = ArgumentCaptor.forClass(String.class);
         verify(client, atLeastOnce()).get(endpoints.capture(), eq(GetAccountHistoryResponse.class),
                 anyString(), anyString());
-        // The API rejects a larger page with errorCode 417 ("between 1 and 100").
-        assertTrue(endpoints.getAllValues().stream().allMatch(url -> url.contains("maxItems=100")),
+        // The API rejects a larger page with errorCode 417 ("between 1 and 100"); a plain
+        // "maxItems=100" match would also accept 1000, so the value itself is compared.
+        assertTrue(endpoints.getAllValues().stream().allMatch(url -> historyPageSize(url) == 100),
                 "every account-history read asks for the API's maximum: " + endpoints.getAllValues());
         assertTrue(endpoints.getAllValues().stream().anyMatch(url -> url.contains("type=buy")));
         assertTrue(endpoints.getAllValues().stream().anyMatch(url -> url.contains("type=sell")));
+        // The raw view's read carries no type filter.
+        assertTrue(endpoints.getAllValues().stream()
+                .anyMatch(url -> !url.contains("type=") && historyPageSize(url) == 100));
+    }
+
+    private static int historyPageSize(String url) {
+        return Integer.parseInt(UriComponentsBuilder.fromUriString(url).build()
+                .getQueryParams().getFirst("maxItems"));
     }
 
     @Test
