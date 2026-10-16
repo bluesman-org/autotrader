@@ -80,14 +80,18 @@ class PasswordResetServiceTest {
                     Query query = invocation.getArgument(0);
                     Update update = invocation.getArgument(1);
                     if (query.getQueryObject().containsKey("_id")) {
+                        // The conditional restore: only while the stored document is still the
+                        // minted, unspent one.
                         if (stored == null || !stored.getTokenHash()
-                                .equals(query.getQueryObject().getString("token_hash"))) {
+                                .equals(query.getQueryObject().getString("token_hash"))
+                                || stored.getUsedTime() != null) {
                             return UpdateResult.acknowledged(0, 0L, null);
                         }
                         Document changes = update.getUpdateObject().get("$set", Document.class);
                         stored.setTokenHash(changes.getString("token_hash"));
                         stored.setCreatedTime(instantOf(changes.get("created_time")));
                         stored.setExpiresTime(instantOf(changes.get("expires_time")));
+                        stored.setUsedTime(instantOf(changes.get("used_time")));
                         return UpdateResult.acknowledged(1, 1L, null);
                     }
                     if (stored == null || stored.getUsedTime() != null) {
@@ -244,6 +248,32 @@ class PasswordResetServiceTest {
         failing.request("jim@example.com");
 
         assertTrue(service.valid(first));
+    }
+
+    @Test
+    void aSpentLinkDoesNotComeBackLiveThroughARestore() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        when(users.findById("u1")).thenReturn(Optional.of(user));
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        service.request("jim@example.com");
+        verify(mail).send(any(), any(), body.capture());
+        String first = tokenOf(body.getValue());
+        // The link is spent, and a spent link does not block a new request.
+        service.reset(first, "new-password-1", "new-password-1");
+        assertFalse(service.valid(first));
+
+        // The next request is refused, so the spent document comes back: it must keep its mark, or
+        // the single-use link would work a second time.
+        PasswordResetService refusing = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, command -> {
+                    throw new RejectedExecutionException("queue full");
+                }, "https://at.bluris.nl/autotrader", 30,
+                Clock.fixed(NOW.plus(Duration.ofMinutes(3)), ZoneOffset.UTC));
+        refusing.request("jim@example.com");
+
+        assertNotNull(stored.getUsedTime());
+        assertFalse(service.valid(first));
     }
 
     @Test

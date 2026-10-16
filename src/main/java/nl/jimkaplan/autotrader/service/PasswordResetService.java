@@ -155,7 +155,9 @@ public class PasswordResetService {
      * there was none), because the replacement never reached anybody — and only while the stored
      * token is still the one this request minted: another request may have replaced it meanwhile,
      * and undoing that would take away a link that is already on its way. {@code used_time} is left
-     * alone on purpose, so a claim that landed in this window keeps its mark and stays spent.
+     * guard asks for {@code used_time: null} — the state this request's mint left — so a claim that
+     * landed in this window keeps its mark and stays spent, while the earlier document otherwise
+     * comes back exactly as it was, its own spent mark included.
      *
      * <p>Two limits are accepted rather than engineered away. A send that fails after the server
      * accepted the message — a missing final {@code 250}, a read timeout — has been delivered, and
@@ -169,13 +171,17 @@ public class PasswordResetService {
      * @param mintedHash The hash of the token this request minted
      */
     private void restore(AppUser user, Optional<PasswordResetToken> previous, String mintedHash) {
+        // `used_time: null` is the state this request's mint left: a claim that landed in the window
+        // has marked the document spent, and the restore must then leave it spent.
         Query stillOurs = Query.query(Criteria.where("_id").is(user.getId())
-                .and("token_hash").is(mintedHash));
+                .and("token_hash").is(mintedHash)
+                .and("used_time").is(null));
         previous.ifPresentOrElse(
                 old -> mongoTemplate.updateFirst(stillOurs, new Update()
                                 .set("token_hash", old.getTokenHash())
                                 .set("created_time", old.getCreatedTime())
-                                .set("expires_time", old.getExpiresTime()),
+                                .set("expires_time", old.getExpiresTime())
+                                .set("used_time", old.getUsedTime()),
                         PasswordResetToken.class),
                 () -> mongoTemplate.remove(stillOurs, PasswordResetToken.class));
     }
