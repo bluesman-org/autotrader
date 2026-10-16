@@ -259,6 +259,100 @@ class LedgerServiceTest {
         // The fee is paid in BTC, so it is worth its own price in euro: 0.000002 × €75,000.00.
         assertEquals("€0.1500", buyWithBaseFee.fills().get(0).feeText());
         assertEquals("maker", buyWithBaseFee.fills().get(0).makerTakerText());
+        // The period's fees convert each fill's own currency too: €0.15 + €0.15.
+        assertEquals("€0.30", view.totals().feesText());
+    }
+
+    @Test
+    void aBaseCurrencyOrderFeeIsConvertedThroughItsPrice() {
+        accountReadableWithoutOrders();
+        OrderResponse order = baseOrder("2026-10-14T20:00:00Z", "buy", "limit");
+        order.setStatus("canceled");
+        order.setAmount(new BigDecimal("0.001"));
+        order.setPrice(new BigDecimal("75000"));
+        order.setFeePaid(new BigDecimal("0.000002"));
+        order.setFeeCurrency("BTC");
+        order.setFills(List.of());
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{order});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("€0.15", view.totals().feesText());
+    }
+
+    @Test
+    void anUnsupportedMarketFallsBackToTheEngineMarket() {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerRequest request = new LedgerRequest();
+        request.setMarket("BTC-EUR&limit=1");
+        LedgerView view = service.view(request);
+
+        assertEquals("BTC-EUR", view.filters().market());
+        assertTrue(view.filters().marketOptions().stream()
+                .noneMatch(option -> option.value().contains("&")));
+        assertEquals("€75,600.00", view.price().buyText());
+    }
+
+    @Test
+    void payingTheBaseCurrencyCountsItOutOfTheBalance() {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{betweenTheFills(), afterTheFills()});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances("0.0005"));
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String endpoint = invocation.getArgument(0);
+                    if (endpoint.contains("type=buy")) {
+                        // A buy of BTC, then a buy of ETH paid with BTC: the second moves the base
+                        // currency out even though its type says buy.
+                        Transaction bought = buy("2026-10-10T08:00:00Z", "0.001", "74.00", "74000", "0.15");
+                        Transaction paidWithBase = buy("2026-10-11T12:00:00Z", "0.01", "750.00", "75000", "0");
+                        paidWithBase.setSentCurrency("BTC");
+                        paidWithBase.setSentAmount(new BigDecimal("0.0005"));
+                        paidWithBase.setReceivedCurrency("ETH");
+                        paidWithBase.setReceivedAmount(new BigDecimal("0.01"));
+                        return new GetAccountHistoryResponse(List.of(bought, paidWithBase), 1, 1, 200);
+                    }
+                    return new GetAccountHistoryResponse(List.of(), 1, 1, 200);
+                });
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        // The account holds 0.0005 BTC today: after the BTC buy 0.001, after paying with BTC 0.0005.
+        assertEquals("0.0005", view.rows().get(0).balanceAfterText());
+        assertEquals("0.001", view.rows().get(1).balanceAfterText());
+    }
+
+    @Test
+    void theRawPagerClampsToOnePage() {
+        accountReadable();
+
+        LedgerRequest request = new LedgerRequest();
+        request.setView("raw");
+        request.setPage(3);
+        LedgerView view = service.view(request);
+
+        assertEquals(4, view.rawRows().size());
+        assertEquals(1, view.rawPager().page());
+        assertEquals(1, view.rawPager().from());
+        assertEquals(4, view.rawPager().to());
+        assertEquals(null, view.rawPager().prevQuery());
     }
 
     @Test
@@ -522,6 +616,28 @@ class LedgerServiceTest {
         return order;
     }
 
+    private static OrderResponse betweenTheFills() {
+        OrderResponse order = baseOrder("2026-10-11T09:00:00Z", "buy", "market");
+        order.setStatus("filled");
+        order.setAmount(new BigDecimal("0.001"));
+        order.setFilledAmount(new BigDecimal("0.001"));
+        order.setFilledAmountQuote(new BigDecimal("74.00"));
+        order.setFeePaid(new BigDecimal("0.15"));
+        order.setFeeCurrency("EUR");
+        return order;
+    }
+
+    private static OrderResponse afterTheFills() {
+        OrderResponse order = baseOrder("2026-10-12T09:00:00Z", "buy", "market");
+        order.setStatus("filled");
+        order.setAmount(new BigDecimal("0.0005"));
+        order.setFilledAmount(new BigDecimal("0.0005"));
+        order.setFilledAmountQuote(new BigDecimal("37.50"));
+        order.setFeePaid(new BigDecimal("0.08"));
+        order.setFeeCurrency("EUR");
+        return order;
+    }
+
     private static OrderResponse baseOrder(String when, String side, String type) {
         OrderResponse order = new OrderResponse();
         order.setOrderId(java.util.UUID.randomUUID());
@@ -546,9 +662,13 @@ class LedgerServiceTest {
     }
 
     private static GetAccountBalanceResponse[] balances() {
+        return balances("0.0015");
+    }
+
+    private static GetAccountBalanceResponse[] balances(String available) {
         GetAccountBalanceResponse balance = new GetAccountBalanceResponse();
         balance.setSymbol("BTC");
-        balance.setAvailable(new BigDecimal("0.0015"));
+        balance.setAvailable(new BigDecimal(available));
         balance.setInOrder(BigDecimal.ZERO);
         return new GetAccountBalanceResponse[]{balance};
     }

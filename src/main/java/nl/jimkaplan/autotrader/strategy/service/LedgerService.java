@@ -1,6 +1,7 @@
 package nl.jimkaplan.autotrader.strategy.service;
 
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.bitvavo.model.Fills;
 import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
@@ -26,9 +27,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -176,12 +180,14 @@ public class LedgerService {
 
         List<Transaction> rawEntries = raw ? history(bot, null, range.fromMillis(), range.toMillis())
                 : List.of();
-        List<RawRowView> rawRows = raw ? rawRows(rawEntries, request) : List.of();
+        int rawPages = pages(rawEntries.size(), pageSize);
+        int rawPage = Math.min(clamp(request.getPage()), rawPages);
+        List<RawRowView> rawRows = raw ? rawRows(rawEntries, rawPage, pageSize) : List.of();
 
         return new LedgerView(null, price, filters,
                 totals(filtered, basis, currentBid, balance.current(), market, range),
                 rows, pager(request, filtered.size(), page, pages), raw,
-                rawRows, pager(request, rawEntries.size(), page, pages(rawEntries.size(), pageSize)));
+                rawRows, pager(request, rawEntries.size(), rawPage, rawPages));
     }
 
     // ---- the account ------------------------------------------------------------------------
@@ -204,7 +210,13 @@ public class LedgerService {
 
     private String market(LedgerRequest request) {
         if (notBlank(request.getMarket())) {
-            return request.getMarket();
+            try {
+                // Markets end up in the signed API path and in every generated link, so only a
+                // well-formed one is accepted; anything else falls back to the engine's market.
+                return MarketFormat.toMarket(request.getMarket());
+            } catch (IllegalArgumentException e) {
+                log.warn("Ignoring an unsupported market filter: {}", request.getMarket());
+            }
         }
         return liveStrategyService.all().stream()
                 .max(Comparator.comparing(LiveStrategy::getCreatedTime,
@@ -230,10 +242,14 @@ public class LedgerService {
     // ---- reads ------------------------------------------------------------------------------
 
     private List<OrderResponse> orders(BotConfiguration bot, String market, HistoryPeriods.Range range) {
-        OrderResponse[] response = bitvavoApiClient.get(
-                "/orders?market=" + market + "&start=" + range.fromMillis() + "&end=" + range.toMillis()
-                        + "&limit=" + ORDER_LIMIT,
-                OrderResponse[].class, bot.getApiKey(), bot.getApiSecret());
+        String endpoint = UriComponentsBuilder.fromPath("/orders")
+                .queryParam("market", market)
+                .queryParam("start", range.fromMillis())
+                .queryParam("end", range.toMillis())
+                .queryParam("limit", ORDER_LIMIT)
+                .build().encode().toUriString();
+        OrderResponse[] response = bitvavoApiClient.get(endpoint, OrderResponse[].class,
+                bot.getApiKey(), bot.getApiSecret());
         return response == null ? List.of() : List.of(response);
     }
 
@@ -260,9 +276,15 @@ public class LedgerService {
     private List<Transaction> history(BotConfiguration bot, String type, long fromMillis, long toMillis) {
         List<Transaction> entries = new ArrayList<>();
         for (int page = 1; page <= MAX_HISTORY_PAGES; page++) {
-            GetAccountHistoryResponse response = bitvavoApiClient.get(
-                    "/account/history?fromDate=" + fromMillis + "&toDate=" + toMillis + "&page=" + page
-                            + "&maxItems=" + HISTORY_PAGE_SIZE + (type == null ? "" : "&type=" + type),
+            UriComponentsBuilder endpoint = UriComponentsBuilder.fromPath("/account/history")
+                    .queryParam("fromDate", fromMillis)
+                    .queryParam("toDate", toMillis)
+                    .queryParam("page", page)
+                    .queryParam("maxItems", HISTORY_PAGE_SIZE);
+            if (type != null) {
+                endpoint.queryParam("type", type);
+            }
+            GetAccountHistoryResponse response = bitvavoApiClient.get(endpoint.build().encode().toUriString(),
                     GetAccountHistoryResponse.class, bot.getApiKey(), bot.getApiSecret());
             if (response == null || response.getItems() == null || response.getItems().isEmpty()) {
                 break;
@@ -281,20 +303,24 @@ public class LedgerService {
      * counts only filled orders.
      */
     private Balance balance(BotConfiguration bot, String market, List<Transaction> marketFills) {
-        GetAccountBalanceResponse[] balances = bitvavoApiClient.get("/balance?symbol=" + base(market),
+        String endpoint = UriComponentsBuilder.fromPath("/balance")
+                .queryParam("symbol", base(market))
+                .build().encode().toUriString();
+        GetAccountBalanceResponse[] balances = bitvavoApiClient.get(endpoint,
                 GetAccountBalanceResponse[].class, bot.getApiKey(), bot.getApiSecret());
+        String base = base(market);
         double current = 0;
         if (balances != null) {
             for (GetAccountBalanceResponse entry : balances) {
-                if (base(market).equals(entry.getSymbol())) {
+                if (base.equals(entry.getSymbol())) {
                     current = number(entry.getAvailable()) + number(entry.getInOrder());
                 }
             }
         }
         NavigableMap<Long, Double> afterByFill = new TreeMap<>();
-        double running = current - marketFills.stream().mapToDouble(LedgerService::baseDelta).sum();
+        double running = current - marketFills.stream().mapToDouble(fill -> baseDelta(fill, base)).sum();
         for (Transaction fill : marketFills) {
-            running += baseDelta(fill);
+            running += baseDelta(fill, base);
             if (fill.getExecutedAt() != null) {
                 afterByFill.put(fill.getExecutedAt().toEpochMilli(), running);
             }
@@ -326,7 +352,7 @@ public class LedgerService {
         boolean buy = isBuy(order);
         double amount = number(order.getFilledAmount());
         double quoteAmount = number(order.getFilledAmountQuote());
-        double fee = number(order.getFeePaid());
+        double fee = orderFee(order, market);
         double result = result(order, basis, currentBid);
         String avgPrice = amount > 0 ? euro(quoteAmount / amount)
                 : order.getPrice() == null ? DASH : euro(order.getPrice().doubleValue());
@@ -381,10 +407,7 @@ public class LedgerService {
                 + amount8(number(remaining)) + " remaining";
     }
 
-    private List<RawRowView> rawRows(List<Transaction> entries, LedgerRequest request) {
-        int pageSize = pageSize(request.getSize());
-        int pages = pages(entries.size(), pageSize);
-        int page = Math.min(clamp(request.getPage()), pages);
+    private List<RawRowView> rawRows(List<Transaction> entries, int page, int pageSize) {
         int fromIndex = (page - 1) * pageSize;
         int toIndex = Math.min(fromIndex + pageSize, entries.size());
         List<Transaction> sorted = entries.stream()
@@ -416,7 +439,7 @@ public class LedgerService {
 
     private TotalsView totals(List<OrderResponse> orders, Basis basis, double currentBid,
                               double balance, String market, HistoryPeriods.Range range) {
-        double fees = orders.stream().mapToDouble(order -> number(order.getFeePaid())).sum();
+        double fees = orders.stream().mapToDouble(order -> orderFee(order, market)).sum();
         double realised = 0;
         double unrealised = 0;
         for (OrderResponse order : orders) {
@@ -583,11 +606,14 @@ public class LedgerService {
     }
 
     /**
-     * @return How the fill moved the base currency: positive when it came in (a buy), negative when
-     *         it went out (a sell)
+     * @param fill The fill
+     * @param base The market's base currency
+     * @return How the fill moved the base currency: positive when it came in, negative when it went
+     *         out — decided by which side of the trade the base currency is on, because a "buy" of
+     *         another market can pay with it
      */
-    private static double baseDelta(Transaction fill) {
-        return "buy".equalsIgnoreCase(fill.getType()) ? number(fill.getReceivedAmount())
+    private static double baseDelta(Transaction fill, String base) {
+        return base.equals(fill.getReceivedCurrency()) ? number(fill.getReceivedAmount())
                 : -number(fill.getSentAmount());
     }
 
@@ -608,6 +634,37 @@ public class LedgerService {
         double price = fill.getPriceAmount() == null ? 0 : fill.getPriceAmount().doubleValue();
         if (base.equals(fill.getFeesCurrency())) {
             return fill.getFeesAmount().doubleValue() * price;
+        }
+        return 0;
+    }
+
+    /**
+     * @param order  The order
+     * @param market The market
+     * @return The order's total fee in the quote currency. An order that filled sums its fills'
+     *         converted fees — the fills know their own currency; an order that did not sums its
+     *         fee directly, converting it through the average fill or limit price when it is paid
+     *         in the base currency.
+     */
+    private double orderFee(OrderResponse order, String market) {
+        if (order.getFills() != null && !order.getFills().isEmpty()) {
+            double fee = 0;
+            for (Fills fill : order.getFills()) {
+                fee += quoteFee(fill, market);
+            }
+            return fee;
+        }
+        if (order.getFeePaid() == null) {
+            return 0;
+        }
+        if (quote(market).equals(order.getFeeCurrency())) {
+            return order.getFeePaid().doubleValue();
+        }
+        if (base(market).equals(order.getFeeCurrency())) {
+            double amount = number(order.getFilledAmount());
+            double price = amount > 0 ? number(order.getFilledAmountQuote()) / amount
+                    : number(order.getPrice());
+            return order.getFeePaid().doubleValue() * price;
         }
         return 0;
     }
@@ -744,7 +801,8 @@ public class LedgerService {
             params.put("page", String.valueOf(page));
         }
         return "?" + params.entrySet().stream()
-                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .map(entry -> entry.getKey() + "=" + UriUtils.encodeQueryParam(entry.getValue(),
+                        StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&"));
     }
 
