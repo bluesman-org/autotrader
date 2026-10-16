@@ -90,11 +90,12 @@
         new FormData(form).forEach(function (value, key) {
             (values[key] = values[key] || []).push(String(value).trim());
         });
-        // A multiple select with nothing chosen sends no entry at all: its key has to be cleared too,
-        // or a value from the address bar survives an Apply that was meant to drop it.
-        Array.prototype.forEach.call(form.querySelectorAll('select[multiple][name]'),
-                function (select) {
-                    values[select.name] = values[select.name] || [];
+        // A multiple select or an unchecked checkbox group sends no entry at all: those keys have
+        // to be cleared too, or a value from the address bar survives an Apply meant to drop it.
+        Array.prototype.forEach.call(
+                form.querySelectorAll('select[multiple][name], input[type="checkbox"][name]'),
+                function (field) {
+                    values[field.name] = values[field.name] || [];
                 });
         Object.keys(values).forEach(function (key) {
             params.delete(key);

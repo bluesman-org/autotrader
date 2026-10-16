@@ -586,8 +586,16 @@ tr.detail details[open] summary {
     flex: 0 0 auto;
 }
 
-/* A multi-value filter select keeps the filter bar's height in check. */
-.filters select[multiple] {
-    height: auto;
-    padding: 4px 6px;
+/* A multi-value filter group: compact chips that wrap inside the filter bar. */
+.filters .f-checks {
+    min-width: 320px;
+    flex: 1 1 320px;
+}
+
+.checks-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 8px;
+    font-size: 0.9rem;
 }

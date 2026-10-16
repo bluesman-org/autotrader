@@ -147,11 +147,11 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("fills (1)")))
                 .andExpect(content().string(containsString(">Awaiting trigger<")))
                 .andExpect(content().string(containsString("awaiting trigger")))
-                // The type and status filters are multi-value selects with their choices marked.
-                .andExpect(content().string(containsString("name=\"type\" multiple")))
-                .andExpect(content().string(containsString("name=\"status\" multiple")))
-                .andExpect(content().string(containsString("selected=\"selected\">takeProfitLimit<")))
-                .andExpect(content().string(containsString("selected=\"selected\">Awaiting trigger<")))
+                // The type and status filters are checkbox groups whose choices are marked.
+                .andExpect(content().string(containsString("type=\"checkbox\" name=\"type\"")))
+                .andExpect(content().string(containsString("type=\"checkbox\" name=\"status\"")))
+                .andExpect(content().string(containsString("value=\"takeProfitLimit\" checked=\"checked\"")))
+                .andExpect(content().string(containsString("value=\"awaitingTrigger\" checked=\"checked\"")))
                 .andExpect(content().string(containsString("trigger €73.162,00 · limit €75.364,00")))
                 .andExpect(content().string(containsString("09:00:00")))
                 .andExpect(content().string(containsString("wireHistoryContent('ledger', 10)")));
