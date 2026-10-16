@@ -34,6 +34,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -67,6 +68,8 @@ import java.util.stream.Collectors;
 public class LedgerService {
 
     private static final String DASH = "—";
+    private static final String RANGE_HINT =
+            "Unrealised needs today as the end date — end the range with today to see it.";
     private static final String DEFAULT_MARKET = "BTC-EUR";
     private static final String EUR = "EUR";
     private static final String DEFAULT_VIEW = "orders";
@@ -184,7 +187,7 @@ public class LedgerService {
         int toIndex = Math.min(fromIndex + pageSize, filtered.size());
         List<OrderRowView> rows = new ArrayList<>();
         for (int i = fromIndex; i < toIndex; i++) {
-            rows.add(row(filtered.get(i), i + 1, basis, currentBid, balance, market));
+            rows.add(row(filtered.get(i), i + 1, basis, balance, market));
         }
 
         List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
@@ -360,13 +363,13 @@ public class LedgerService {
 
     // ---- the view ---------------------------------------------------------------------------
 
-    private OrderRowView row(OrderResponse order, int number, Basis basis, double currentBid,
-                             Balance balance, String market) {
+    private OrderRowView row(OrderResponse order, int number, Basis basis, Balance balance,
+                             String market) {
         boolean buy = isBuy(order);
         double amount = number(order.getFilledAmount());
         double quoteAmount = number(order.getFilledAmountQuote());
         double cashFee = cashFee(order, market);
-        double result = result(order, basis, currentBid);
+        double result = result(order, basis);
         // The average of the fills, so it is a dash until something filled; what a waiting order
         // carries is named under its status instead.
         String avgPrice = amount > 0 ? euro(quoteAmount / amount) : DASH;
@@ -467,22 +470,44 @@ public class LedgerService {
     private TotalsView totals(List<OrderResponse> orders, Basis basis, double currentBid,
                               double balance, String market, HistoryPeriods.Range range) {
         String feesText = feesText(orders, market);
-        double realised = 0;
-        double unrealised = 0;
-        for (OrderResponse order : orders) {
-            double result = result(order, basis, currentBid);
-            if (Double.isNaN(result)) {
-                continue;
-            }
-            if (isBuy(order)) {
-                unrealised += result;
-            } else {
-                realised += result;
-            }
-        }
+        double realised = orders.stream().mapToDouble(order -> result(order, basis)).filter(Double::isFinite)
+                .sum();
+        double unrealised = unrealised(basis, currentBid, range);
         return new TotalsView(range.label(), orders.size(), feesText,
-                signed(realised), signClass(realised), signed(unrealised), signClass(unrealised),
-                plain(balance) + " " + base(market));
+                signed(realised), signClass(realised),
+                Double.isNaN(unrealised) ? DASH : signed(unrealised),
+                Double.isNaN(unrealised) ? "" : signClass(unrealised),
+                plain(balance) + " " + base(market), unrealisedHint(basis, range, currentBid));
+    }
+
+    /**
+     * @return The open position's result — what the held coins are worth at the current bid against
+     *         what they cost — or {@code NaN} when there is nothing to show: a range that ends before
+     *         today cannot value a past holding at today's price, and an empty holding has no result
+     */
+    private double unrealised(Basis basis, double currentBid, HistoryPeriods.Range range) {
+        if (basis.quantity() <= 0 || !Double.isFinite(currentBid) || !endsToday(range)) {
+            return Double.NaN;
+        }
+        return basis.quantity() * (currentBid - basis.averageCost());
+    }
+
+    private boolean endsToday(HistoryPeriods.Range range) {
+        // Both sides read in the display zone — the range's end date and what the clock calls today —
+        // so a range that ends at now is "today" from 00:00 local on, as HistoryPeriods resolves it.
+        LocalDate end = Instant.ofEpochMilli(range.toMillis()).atZone(display.zone()).toLocalDate();
+        return end.equals(clock.instant().atZone(display.zone()).toLocalDate());
+    }
+
+    private String unrealisedHint(Basis basis, HistoryPeriods.Range range, double currentBid) {
+        if (!endsToday(range)) {
+            return RANGE_HINT;
+        }
+        if (basis.quantity() <= 0) {
+            return "Nothing is held, so there is no unrealised result.";
+        }
+        return Double.isFinite(currentBid) ? ""
+                : "The current price could not be read, so there is no unrealised figure.";
     }
 
     private PagerView pager(LedgerRequest request, int total, int page, int pages) {
@@ -506,7 +531,14 @@ public class LedgerService {
      * what they cost, sells take the average cost of what they sell. Inventory that was not bought
      * through the order history — a deposit — has no cost, so a sell of it counts at its own price.
      */
-    private record Basis(NavigableMap<Long, Double> costBeforeByFill) {
+    private record Basis(NavigableMap<Long, Double> costBeforeByFill, double quantity, double cost) {
+
+        /**
+         * @return What one held unit cost on average, or {@code NaN} when nothing is held
+         */
+        double averageCost() {
+            return quantity > 0 ? cost / quantity : Double.NaN;
+        }
 
         static Basis walk(List<Transaction> fills, String quote, String base) {
             NavigableMap<Long, Double> costBefore = new TreeMap<>();
@@ -526,7 +558,7 @@ public class LedgerService {
                     cost = Math.max(cost - amount * average, 0);
                 }
             }
-            return new Basis(costBefore);
+            return new Basis(costBefore, quantity, cost);
         }
 
         /**
@@ -572,12 +604,14 @@ public class LedgerService {
         }
     }
 
-    private double result(OrderResponse order, Basis basis, double currentBid) {
-        if (order.getFills() == null || order.getFills().isEmpty()) {
-            return Double.NaN;
-        }
-        boolean buy = isBuy(order);
-        if (buy && !Double.isFinite(currentBid)) {
+    /**
+     * @param order The order
+     * @param basis The market's cost walk
+     * @return What a sell realised, and {@code NaN} for anything else: a buy shows no result of its
+     *         own — the sell that closes it carries it, at the average cost of the coins it sold
+     */
+    private double result(OrderResponse order, Basis basis) {
+        if (isBuy(order) || order.getFills() == null || order.getFills().isEmpty()) {
             return Double.NaN;
         }
         String market = order.getMarket() == null ? DEFAULT_MARKET : order.getMarket();
@@ -588,13 +622,9 @@ public class LedgerService {
             double amount = number(fill.getAmount());
             double price = number(fill.getPrice());
             double fee = quoteValue(fees.get(i), market, price);
-            if (buy) {
-                result += currentBid * amount - (price * amount + fee);
-            } else {
-                double cost = fill.getTimestamp() == null ? Double.NaN
-                        : basis.averageBefore(fill.getTimestamp());
-                result += (price - (Double.isNaN(cost) ? price : cost)) * amount - fee;
-            }
+            double cost = fill.getTimestamp() == null ? Double.NaN
+                    : basis.averageBefore(fill.getTimestamp());
+            result += (price - (Double.isNaN(cost) ? price : cost)) * amount - fee;
         }
         return result;
     }

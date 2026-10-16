@@ -42,9 +42,9 @@ import static org.mockito.Mockito.when;
 /**
  * The ledger reads the real account, so everything here is a stubbed Bitvavo: a buy before the
  * period, a buy and a sell inside it and an open order, against a fixed clock and zone. The numbers
- * check the two rules that matter — a sell is measured against the average cost of the inventory
- * that was bought earlier, a buy against the current bid — and the balance walks back from today's
- * balance.
+ * check the rules that matter — a sell is measured against the average cost of the inventory that
+ * was bought earlier and a buy shows no result of its own, while the summary's unrealised figure is
+ * the open position at the current price — and the balance walks back from today's balance.
  */
 @ExtendWith(MockitoExtension.class)
 class LedgerServiceTest {
@@ -107,8 +107,8 @@ class LedgerServiceTest {
         assertEquals("+€37,92", sell.fills().get(0).netCashText());
 
         LedgerView.OrderRowView buy = view.rows().get(2);
-        // Worth €75.50 at the current bid; €75.15 was paid for it.
-        assertEquals("+€0,35", buy.pnlText());
+        // A buy shows no result of its own: the sell that closes it carries it.
+        assertEquals("—", buy.pnlText());
         assertEquals("−€75,15", buy.netCashText());
         assertEquals("0,002", buy.balanceAfterText());
         assertEquals("filled", buy.statusLabel());
@@ -117,7 +117,9 @@ class LedgerServiceTest {
         assertEquals("3", String.valueOf(view.totals().orders()));
         assertEquals("€0,23", view.totals().feesText());
         assertEquals("+€0,60", view.totals().realisedText());
-        assertEquals("+€0,35", view.totals().unrealisedText());
+        // The open position: 0,0015 BTC at the bid of €75.500,00 against an average cost of
+        // €74.650,00.
+        assertEquals("+€1,28", view.totals().unrealisedText());
         assertEquals("0,0015 BTC", view.totals().balanceText());
         assertEquals("Last 7 days", view.totals().periodText());
         assertEquals("BTC-EUR", view.price().market());
@@ -266,8 +268,7 @@ class LedgerServiceTest {
         assertEquals("€0,1000", missingRow.fills().get(0).feeText());
         assertEquals("−€75,10", missingRow.netCashText());
         assertEquals("−€75,10", missingRow.fills().get(0).netCashText());
-        // The fee enters the P&L too: worth €75.50 at the current bid against €75.10 paid.
-        assertEquals("+€0,40", missingRow.pnlText());
+        assertEquals("—", missingRow.pnlText());
         // A fill that reports no fee of its own takes its share of the order's feePaid, so the row,
         // its fill lines, the cash and the P&L all tell one story.
         LedgerView.OrderRowView fallbackRow = view.rows().get(0);
@@ -275,7 +276,7 @@ class LedgerServiceTest {
         assertEquals("−€75,20", fallbackRow.netCashText());
         assertEquals("€0,2000", fallbackRow.fills().get(0).feeText());
         assertEquals("−€75,20", fallbackRow.fills().get(0).netCashText());
-        assertEquals("+€0,30", fallbackRow.pnlText());
+        assertEquals("—", fallbackRow.pnlText());
         assertEquals("€0,30", view.totals().feesText());
     }
 
@@ -391,6 +392,42 @@ class LedgerServiceTest {
     }
 
     @Test
+    void theEndOfTodayFollowsTheDisplayZone() {
+        // 00:30 on the 16th in Amsterdam, still the 15th in UTC: the range ends at now, and "today"
+        // is the display zone's day — the clock's own zone must not decide it.
+        service = new LedgerService(client, credentials, strategies,
+                new DisplayZone(ZoneId.of("Europe/Amsterdam")),
+                Clock.fixed(Instant.parse("2026-10-15T22:30:00Z"), ZoneId.of("UTC")));
+        accountReadable();
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("+€1,28", view.totals().unrealisedText());
+        assertEquals("", view.totals().unrealisedHint());
+    }
+
+    @Test
+    void theUnrealisedFigureNeedsARangeThatEndsToday() {
+        accountReadable();
+
+        // A range that ends yesterday cannot value a past holding at today's price, so the figure
+        // stays a dash and the page explains how to see it.
+        LedgerRequest past = new LedgerRequest();
+        past.setToDate("2026-10-14");
+        LedgerView pastView = service.view(past);
+        assertEquals("—", pastView.totals().unrealisedText());
+        assertTrue(pastView.totals().unrealisedHint().contains("end the range with today"));
+
+        // A range that ends today — even at an hour already past — shows the open position.
+        LedgerRequest today = new LedgerRequest();
+        today.setToDate("2026-10-15");
+        today.setToTime("09:00");
+        LedgerView todayView = service.view(today);
+        assertEquals("+€1,28", todayView.totals().unrealisedText());
+        assertEquals("", todayView.totals().unrealisedHint());
+    }
+
+    @Test
     void waitingOrdersShowTheirTriggerAndTheirLimit() {
         accountReadableWithoutOrders();
         OrderResponse waiting = baseOrder("2026-10-14T20:00:00Z", "sell", "takeProfitLimit");
@@ -462,7 +499,9 @@ class LedgerServiceTest {
         assertEquals("—", view.price().buyText());
         assertEquals("—", view.price().sellText());
         assertEquals("—", view.rows().get(0).pnlText());
-        assertEquals("+€0,00", view.totals().unrealisedText());
+        // Without a price there is no unrealised figure, and the page says why.
+        assertEquals("—", view.totals().unrealisedText());
+        assertTrue(view.totals().unrealisedHint().contains("current price could not be read"));
     }
 
     @Test
@@ -491,7 +530,7 @@ class LedgerServiceTest {
         assertEquals("partially filled", partial.statusLabel());
         assertEquals("warn", partial.statusClass());
         assertEquals("Filled 0,00100000 of 0,00200000 BTC · 0,00100000 remaining", partial.filledText());
-        assertEquals("+€0,35", partial.pnlText());
+        assertEquals("—", partial.pnlText());
 
         LedgerView.OrderRowView buyWithBaseFee = view.rows().get(2);
         assertEquals(1, buyWithBaseFee.fills().size());
@@ -626,6 +665,9 @@ class LedgerServiceTest {
         // No buy to derive a cost from: the sell shows only what its fee cost.
         assertEquals("−€0,15", view.rows().get(0).pnlText());
         assertEquals("0,0015 BTC", view.totals().balanceText());
+        // Nothing held in the walk, so there is no position to value.
+        assertEquals("—", view.totals().unrealisedText());
+        assertTrue(view.totals().unrealisedHint().contains("Nothing is held"));
     }
 
     @Test

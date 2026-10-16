@@ -49,6 +49,40 @@
         period.value = fromUrl && period.querySelector('option[value="' + fromUrl + '"]') ? fromUrl : fallback;
     });
 
+    // The Today button beside the end date sets the range's end to now — the date to today, the time
+    // to the current clock — and applies it through the form's own submit path, so the ledger's timed
+    // refresh cannot rebuild these fields from the URL before Apply: one click is a range that ends
+    // today, which is what the unrealised figure in the summary needs. The clock it reads is the
+    // reader's; the page assumes the reader is in the display zone the server renders with.
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('button[data-today]');
+        if (!button || !button.form) {
+            return;
+        }
+        event.preventDefault();
+        var form = button.form;
+        var two = function (value) { return (value < 10 ? '0' : '') + value; };
+        var now = new Date();
+        var date = form.querySelector('input[name="toDate"]');
+        var time = form.querySelector('input[name="toTime"]');
+        var period = form.querySelector('select[name="period"]');
+        if (date) {
+            date.value = now.getFullYear() + '-' + two(now.getMonth() + 1) + '-' + two(now.getDate());
+        }
+        if (time) {
+            time.value = two(now.getHours()) + ':' + two(now.getMinutes());
+        }
+        if (period) {
+            period.value = '';
+        }
+        // The delegated submit handler swaps the tab in place, as Apply does.
+        if (form.requestSubmit) {
+            form.requestSubmit();
+        } else {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
+    });
+
     // A chosen preset replaces a custom range the form still carries: the date fields leave both the
     // request and the form, so the page shows the range it applies.
     function dropLingeringDates(form, params) {

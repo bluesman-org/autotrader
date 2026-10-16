@@ -16,7 +16,11 @@ live page (PRs #30, #33) and both tabs of the account history page — the engin
 with a hotfix for the history range queries (PR #35). The Bitvavo key now lives system-wide, outside
 the bot configurations (PR #38). The history page's numbers read Dutch-style (PR #40), its filter
 bars behave alike on both tabs and the ledger's type and status filters take several values (PR #44),
-after the custom-range flow was fixed twice over (PRs #42, #43).
+after the custom-range flow was fixed twice over (PRs #42, #43); the filters read as checkbox chips
+and the narrow-viewport pass wrapped the nav too (PR #45), the ledger's timed refresh keeps the
+table's scroll position and its open panels (PR #46), and the ledger reads as results only — a buy
+shows no P&L, the summary's Unrealised is the open position and shows only when the range ends today,
+with a Today button that ends the range at now (PR #47).
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
 next: the small live-run trial of the engine.
 
@@ -234,6 +238,11 @@ next: the small live-run trial of the engine.
 25. ⬜ Drop the live strategy's `botId`: the engine reads the system-wide key now, so the field is
     historical only — remove it from the model, the create request and the docs once no stored
     document needs it
+26. ✅ The ledger reads as results only: a sell shows what it realised at average cost, a buy shows
+    none — the sell that closes it carries it — and the summary's Unrealised is the open position at
+    the current price, shown only when the range ends today (a line says why when it does not); a
+    Today button beside the end date sets the range's end to now, so the figure is one click away
+    (PR #47)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

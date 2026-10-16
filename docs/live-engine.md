@@ -218,9 +218,13 @@ The history page's ledger tab reads the real Bitvavo account, not the engine's o
 the system-wide Bitvavo API key — the same key the engine trades with (see "The Bitvavo key").
 Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
 their fills and `feePaid`), the P&L walk and the raw transactions from `GET /account/history`, the
-balance from `GET /balance` and the prices from the public order book. The P&L is derived at average
-cost over the market's whole buy/sell history, so a sell inside the period knows what its inventory
-cost; the walk ignores deposits, so a sell of deposited coins shows without a result.
+balance from `GET /balance` and the prices from the public order book. A sell shows what it realised
+at the average cost of the coins it sold — the walk covers the market's whole buy/sell history, so a
+sell inside the period knows what its inventory cost — and a buy shows no result of its own: the
+sell that closes it carries it. The summary's unrealised figure is the open position, the coins
+still held at the current price against what they cost, and it shows only when the range ends today,
+because a range that ends earlier cannot value a past holding at today's price. The walk ignores
+deposits, so coins that arrived without a buy have no cost to compare against.
 
 ## Out of scope
 
