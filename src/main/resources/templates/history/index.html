@@ -10,6 +10,23 @@
 </head>
 <body>
 <script>
+    // Editing a date or time field means the custom range: the Time select follows the typing, so
+    // Apply uses what was just entered instead of the preset the select happened to show. Without
+    // this, a typed date is dropped on submit because the select still reads e.g. "Last 7 days".
+    document.addEventListener('input', function (event) {
+        var field = event.target;
+        if (!field || !field.name) {
+            return;
+        }
+        if (['fromDate', 'fromTime', 'toDate', 'toTime'].indexOf(field.name) === -1) {
+            return;
+        }
+        var period = field.form && field.form.querySelector('select[name="period"]');
+        if (period) {
+            period.value = '';
+        }
+    });
+
     // A chosen preset replaces a custom range the form still carries: the date fields leave both the
     // request and the form, so the page shows the range it applies. Shared by both tabs' handlers.
     function dropLingeringDates(form, params) {
