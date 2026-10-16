@@ -64,6 +64,8 @@ final class ViewText {
         DecimalFormat format = new DecimalFormat("#,##0." + "#".repeat(fractionDigits),
                 DecimalFormatSymbols.getInstance(UI));
         format.setRoundingMode(RoundingMode.HALF_UP);
-        return format.format(value);
+        String text = format.format(value);
+        // A value that rounds to zero keeps its sign in DecimalFormat; the pages show 0, not -0.
+        return "-0".equals(text) ? "0" : text;
     }
 }
