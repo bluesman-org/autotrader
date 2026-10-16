@@ -256,15 +256,21 @@ class LedgerServiceTest {
 
         LedgerView.OrderRowView buyWithBaseFee = view.rows().get(2);
         assertEquals(1, buyWithBaseFee.fills().size());
-        // The fee is paid in BTC, so it is worth its own price in euro: 0.000002 × €75,000.00.
-        assertEquals("€0.1500", buyWithBaseFee.fills().get(0).feeText());
+        // The fee was charged in bitcoin, so it reads as bitcoin — the euro value only enters the
+        // P&L, never the display.
+        assertEquals("0.000002 BTC", buyWithBaseFee.fills().get(0).feeText());
         assertEquals("maker", buyWithBaseFee.fills().get(0).makerTakerText());
-        // The period's fees convert each fill's own currency too: €0.15 + €0.15.
-        assertEquals("€0.30", view.totals().feesText());
+        // A fee taken in the coin does not move the cash, so the net cash is the euro part alone.
+        assertEquals("−€75.00", buyWithBaseFee.netCashText());
+        assertEquals("−€75.00", buyWithBaseFee.fills().get(0).netCashText());
+        assertEquals("0.000002 BTC", buyWithBaseFee.feeText());
+        // The period's fees keep each currency apart: €0.15 from the partial fill, the bitcoin fee
+        // as bitcoin.
+        assertEquals("€0.15 + 0.000002 BTC", view.totals().feesText());
     }
 
     @Test
-    void aBaseCurrencyOrderFeeIsConvertedThroughItsPrice() {
+    void aBaseCurrencyOrderFeeShowsItsOwnCurrency() {
         accountReadableWithoutOrders();
         OrderResponse order = baseOrder("2026-10-14T20:00:00Z", "buy", "limit");
         order.setStatus("canceled");
@@ -283,7 +289,8 @@ class LedgerServiceTest {
 
         LedgerView view = service.view(new LedgerRequest());
 
-        assertEquals("€0.15", view.totals().feesText());
+        assertEquals("0.000002 BTC", view.rows().get(0).feeText());
+        assertEquals("0.000002 BTC", view.totals().feesText());
     }
 
     @Test
@@ -595,8 +602,8 @@ class LedgerServiceTest {
         order.setAmount(new BigDecimal("0.001"));
         order.setFilledAmount(new BigDecimal("0.001"));
         order.setFilledAmountQuote(new BigDecimal("75.00"));
-        order.setFeePaid(new BigDecimal("0.15"));
-        order.setFeeCurrency("EUR");
+        order.setFeePaid(new BigDecimal("0.000002"));
+        order.setFeeCurrency("BTC");
         Fills fill = fill("2026-10-14T12:00:00Z", "0.001", "75000", "0.000002");
         fill.setFeeCurrency("BTC");
         fill.setTaker(false);
