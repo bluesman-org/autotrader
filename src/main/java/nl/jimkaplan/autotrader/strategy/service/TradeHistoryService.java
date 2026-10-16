@@ -266,7 +266,7 @@ public class TradeHistoryService {
                 HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
                 custom ? request.getToDate() : null,
                 HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
-                strategies, HistoryPeriods.OPTIONS);
+                HistoryPeriods.DEFAULT_PRESET, strategies, HistoryPeriods.OPTIONS);
     }
 
     private PagerView pager(TradeHistoryRequest request, int fromIndex, int toIndex, int total, int page,

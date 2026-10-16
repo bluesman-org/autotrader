@@ -84,13 +84,16 @@ public record TradeHistoryView(List<TradeRowView> rows, List<HeaderView> headers
      * @param fromTime        The custom range's start time
      * @param toDate          The custom range's end date
      * @param toTime          The custom range's end time
+     * @param defaultPeriod   The preset the app falls back to, so the page can restore it when a
+     *                        custom range no longer carries a date
      * @param strategyOptions The strategies present in the period: full IDs as values, short IDs as
      *                        labels
      * @param timeOptions     The time presets
      */
     public record FiltersView(String strategy, String type, String result, String period,
                               String fromDate, String fromTime, String toDate, String toTime,
-                              List<Option> strategyOptions, List<Option> timeOptions) {
+                              String defaultPeriod, List<Option> strategyOptions,
+                              List<Option> timeOptions) {
 
         /** Copy the option lists so the model cannot be mutated from outside. */
         public FiltersView {

@@ -28,9 +28,18 @@
         var toDate = form && form.querySelector('input[name="toDate"]');
         var hasDate = (fromDate && String(fromDate.value).trim() !== '')
             || (toDate && String(toDate.value).trim() !== '');
-        if (period && hasDate) {
-            period.value = '';
+        if (!period) {
+            return;
         }
+        if (hasDate) {
+            period.value = '';
+            return;
+        }
+        // No date left, so the custom range cannot apply: the select shows what Apply will resolve —
+        // the preset in the address bar, otherwise the model's default — never a stale Custom range.
+        var fromUrl = new URLSearchParams(window.location.search).get('period') || '';
+        var fallback = period.getAttribute('data-default-period') || '';
+        period.value = fromUrl && period.querySelector('option[value="' + fromUrl + '"]') ? fromUrl : fallback;
     });
 
     // A chosen preset replaces a custom range the form still carries: the date fields leave both the
@@ -166,7 +175,7 @@
                     </select>
                 </div>
                 <div class="f"><label>Time</label>
-                    <select name="period">
+                    <select name="period" th:attr="data-default-period=${history.filters.defaultPeriod}">
                         <option value="" th:selected="${#strings.isEmpty(history.filters.period)}">Custom range</option>
                         <option th:each="option : ${history.filters.timeOptions}" th:value="${option.value}"
                                 th:text="${option.label}"

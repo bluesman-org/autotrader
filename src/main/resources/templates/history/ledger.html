@@ -14,7 +14,7 @@
         <input type="hidden" name="tab" value="ledger">
         <div class="filters">
             <div class="f"><label>Time</label>
-                <select name="period">
+                <select name="period" th:attr="data-default-period=${ledger.filters.defaultPeriod}">
                     <option value="" th:selected="${#strings.isEmpty(ledger.filters.period)}">Custom range</option>
                     <option th:each="option : ${ledger.filters.timeOptions}" th:value="${option.value}"
                             th:text="${option.label}"

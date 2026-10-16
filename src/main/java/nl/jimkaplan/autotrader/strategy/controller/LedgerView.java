@@ -53,12 +53,15 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param fromTime      The custom range's start time
      * @param toDate        The custom range's end date
      * @param toTime        The custom range's end time
+     * @param defaultPeriod The preset the app falls back to, so the page can restore it when a
+     *                      custom range no longer carries a date
      * @param marketOptions The markets the engine knows, as values and labels
      * @param timeOptions   The time presets
      */
     public record FiltersView(String side, String market, String type, String status, String view,
                               String period, String fromDate, String fromTime, String toDate,
-                              String toTime, List<Option> marketOptions, List<Option> timeOptions) {
+                              String toTime, String defaultPeriod, List<Option> marketOptions,
+                              List<Option> timeOptions) {
 
         /** Copy the option lists so the model cannot be mutated from outside. */
         public FiltersView {
