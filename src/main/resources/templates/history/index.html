@@ -10,19 +10,25 @@
 </head>
 <body>
 <script>
-    // Editing a date or time field means the custom range: the Time select follows the typing, so
-    // Apply uses what was just entered instead of the preset the select happened to show. Without
-    // this, a typed date is dropped on submit because the select still reads e.g. "Last 7 days".
+    // The custom range's fields, declared once: the Time select follows typing in them, and choosing
+    // a preset clears them.
+    var CUSTOM_RANGE_FIELDS = ['fromDate', 'fromTime', 'toDate', 'toTime'];
+
+    // Editing a date or time field means the custom range — but only while the form actually carries
+    // a date, because the server honours the custom fields only then. Without the gate, editing a
+    // time alone would leave the select claiming "Custom range" while Apply resolved a preset.
     document.addEventListener('input', function (event) {
         var field = event.target;
-        if (!field || !field.name) {
+        if (!field || !field.name || CUSTOM_RANGE_FIELDS.indexOf(field.name) === -1) {
             return;
         }
-        if (['fromDate', 'fromTime', 'toDate', 'toTime'].indexOf(field.name) === -1) {
-            return;
-        }
-        var period = field.form && field.form.querySelector('select[name="period"]');
-        if (period) {
+        var form = field.form;
+        var period = form && form.querySelector('select[name="period"]');
+        var fromDate = form && form.querySelector('input[name="fromDate"]');
+        var toDate = form && form.querySelector('input[name="toDate"]');
+        var hasDate = (fromDate && String(fromDate.value).trim() !== '')
+            || (toDate && String(toDate.value).trim() !== '');
+        if (period && hasDate) {
             period.value = '';
         }
     });
@@ -34,7 +40,7 @@
         if (!period || String(period.value).trim() === '') {
             return;
         }
-        ['fromDate', 'fromTime', 'toDate', 'toTime'].forEach(function (name) {
+        CUSTOM_RANGE_FIELDS.forEach(function (name) {
             params.delete(name);
             var field = form.querySelector('[name="' + name + '"]');
             if (field) {
