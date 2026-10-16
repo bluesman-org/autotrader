@@ -17,11 +17,15 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,6 +34,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -141,6 +146,37 @@ class PasswordResetServiceTest {
         assertNotEquals(first, second);
         assertFalse(service.valid(first));
         assertTrue(later.valid(second));
+    }
+
+    @Test
+    void theCooldownSeesTheLinkBeforeTheMailIsOnTheWire() {
+        // The worker has not run at all: the token is minted and stored on the request thread, so
+        // the very next request already sees a link on its way and sends nothing.
+        List<Runnable> queued = new ArrayList<>();
+        PasswordResetService deferred = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, queued::add, "https://at.bluris.nl/autotrader", 30, clock);
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(account()));
+
+        deferred.request("jim@example.com");
+        deferred.request("jim@example.com");
+
+        assertEquals(1, queued.size());
+        assertNotNull(stored);
+        verify(mail, never()).send(any(), any(), any());
+    }
+
+    @Test
+    void aFullWorkerQueueStillAnswersTheSameWay() {
+        // An overloaded worker must not turn into an oracle: the account's address answers exactly
+        // like any other.
+        PasswordResetService refusing = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, command -> {
+                    throw new RejectedExecutionException("queue full");
+                }, "https://at.bluris.nl/autotrader", 30, clock);
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(account()));
+
+        assertEquals(PasswordResetService.SENT_MESSAGE, refusing.request("jim@example.com"));
+        verify(mail, never()).send(any(), any(), any());
     }
 
     @Test

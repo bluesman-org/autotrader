@@ -66,9 +66,10 @@ corrected without re-typing it. No SMTP environment variables are required.
 ## Served over HTTPS
 
 Caddy on the host terminates TLS for `at.bluris.nl` and proxies to the app on its host port; Spring
-runs behind it with `server.forward-headers-strategy=framework` and a secure session cookie
+runs behind it with `server.forward-headers-strategy=native`, Tomcat's trust list pinned to this host
+(`server.tomcat.remoteip.internal-proxies`), and a secure session cookie with `SameSite=Strict`
 (`SESSION_COOKIE_SECURE=true` in the production compose), so redirects and cookies keep the https
-scheme. The site block:
+scheme and no forwarded header can speak for a client. The site block:
 
 ```
 at.bluris.nl {

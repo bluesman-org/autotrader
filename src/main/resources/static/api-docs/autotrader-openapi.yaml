@@ -157,6 +157,7 @@ paths:
             text/plain:
               schema:
                 type: "string"
+      security: []
   /api/password-recovery:
     post:
       tags:

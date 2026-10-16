@@ -24,6 +24,7 @@ import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Password recovery by mail: a request always answers the same way, whether or not the address
@@ -50,6 +51,11 @@ public class PasswordResetService {
      * how often one address can make the SMTP server work.
      */
     static final Duration RESEND_COOLDOWN = Duration.ofMinutes(2);
+
+    /**
+     * The subject of the recovery mail.
+     */
+    static final String RECOVERY_SUBJECT = "Reset your Autotrader password";
 
     /**
      * One source of randomness for the token bytes; a fresh SecureRandom per call would be seeded
@@ -108,19 +114,30 @@ public class PasswordResetService {
                             + "nothing was sent", user.getUsername());
                     return;
                 }
-                // Off the request thread: an address that is the account's must not answer slower
-                // than one that is not, and the response must not wait for SMTP.
-                mailExecutor.execute(() -> {
-                    try {
-                        sendLink(user);
-                    } catch (RuntimeException e) {
-                        log.warn("The recovery mail for account {} could not be sent",
-                                user.getUsername(), e);
-                    }
-                });
+                // Mint and store the token here, on the request thread, so the cooldown sees it
+                // straight away; only the mail itself leaves on the worker, where a slow SMTP
+                // server makes no difference to how long this answer takes.
+                String body = message(user, mint(user));
+                try {
+                    mailExecutor.execute(() -> sendQuietly(user, body));
+                } catch (RejectedExecutionException e) {
+                    // The worker's queue is full: answer as usual, and let the next request after
+                    // the cooldown mint a fresh link. An overload must not answer differently for
+                    // an address that is the account's.
+                    log.warn("The recovery mail for {} was not queued: the worker is busy",
+                            user.getUsername(), e);
+                }
             });
         }
         return SENT_MESSAGE;
+    }
+
+    private void sendQuietly(AppUser user, String body) {
+        try {
+            mail.send(user.getEmail(), RECOVERY_SUBJECT, body);
+        } catch (RuntimeException e) {
+            log.warn("The recovery mail for account {} could not be sent", user.getUsername(), e);
+        }
     }
 
     /**
@@ -190,7 +207,13 @@ public class PasswordResetService {
                 "This recovery link is no longer valid — request a new one.");
     }
 
-    private void sendLink(AppUser user) {
+    /**
+     * Mint a link and store it, replacing whatever was there: one live token per account.
+     *
+     * @param user The account
+     * @return The token the mail carries
+     */
+    private String mint(AppUser user) {
         Instant now = clock.instant();
         String token = newToken();
         tokens.save(PasswordResetToken.builder()
@@ -199,12 +222,15 @@ public class PasswordResetService {
                 .createdTime(now)
                 .expiresTime(now.plus(lifetime))
                 .build());
-        mail.send(user.getEmail(), "Reset your Autotrader password",
-                "A password reset was requested for your Autotrader account (" + user.getUsername()
-                        + ").\n\nOpen this link within " + lifetime.toMinutes()
-                        + " minutes to set a new password:\n\n" + publicUrl + "/reset-password?token="
-                        + token + "\n\nIf you did not request this, you can ignore this message — "
-                        + "your password stays as it is.");
+        return token;
+    }
+
+    private String message(AppUser user, String token) {
+        return "A password reset was requested for your Autotrader account (" + user.getUsername()
+                + ").\n\nOpen this link within " + lifetime.toMinutes()
+                + " minutes to set a new password:\n\n" + publicUrl + "/reset-password?token="
+                + token + "\n\nIf you did not request this, you can ignore this message — "
+                + "your password stays as it is.";
     }
 
     private Optional<PasswordResetToken> live(String token) {

@@ -16,9 +16,14 @@ server:
         same-site: strict
   # Caddy terminates TLS and forwards the original scheme, so redirects and cookies keep https.
   # `native` rather than `framework`: Tomcat rewrites the client address only when the peer is a
-  # trusted proxy on this host and ignores the `Forwarded` header, so the loopback rule that admits
-  # the specification exporter cannot be spoofed by a header.
+  # trusted proxy — the list below, this host alone — and ignores the `Forwarded` header, so the
+  # loopback rule that admits the specification exporter cannot be spoofed by a header.
   forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Tomcat's default trust list covers whole private ranges, which would let anything on the
+      # LAN, a VPN or a sidecar claim a loopback address; here Caddy is the only proxy, on the host.
+      internal-proxies: '127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1'
 
 spring:
   application:

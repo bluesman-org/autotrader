@@ -246,7 +246,8 @@
               }
             }
           }
-        }
+        },
+        "security": [ ]
       }
     },
     "/api/password-recovery": {
