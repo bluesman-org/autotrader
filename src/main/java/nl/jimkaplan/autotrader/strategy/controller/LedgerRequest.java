@@ -2,6 +2,8 @@ package nl.jimkaplan.autotrader.strategy.controller;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * The Bitvavo-ledger tab's filter, view and paging state, bound from the query string.
  */
@@ -44,15 +46,15 @@ public class LedgerRequest {
     private String market;
 
     /**
-     * The selected order type (e.g. {@code market}/{@code limit}), or empty for all.
+     * The selected order types (e.g. {@code market}, {@code limit}); empty selects every type.
      */
-    private String type;
+    private List<String> type;
 
     /**
-     * The selected status ({@code open}/{@code partiallyFilled}/{@code filled}/{@code canceled}/
-     * {@code expired}), or empty for all.
+     * The selected statuses ({@code open}, {@code awaitingTrigger}, {@code partiallyFilled},
+     * {@code filled}, {@code canceled}, {@code expired}); empty selects every status.
      */
-    private String status;
+    private List<String> status;
 
     /**
      * The selected view: {@code orders} (the default) or {@code raw}.

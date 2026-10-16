@@ -75,6 +75,14 @@ public class LedgerService {
     private static final List<Integer> PAGE_SIZES = List.of(5, 10, 25, 50);
     private static final List<String> ORDER_TYPES = List.of("market", "limit", "stopLoss",
             "stopLossLimit", "takeProfit", "takeProfitLimit");
+    private static final List<Option> STATUS_OPTIONS = List.of(
+            new Option("open", "Open"),
+            new Option("awaitingTrigger", "Awaiting trigger"),
+            new Option("partiallyFilled", "Partially filled"),
+            new Option("filled", "Filled"),
+            new Option("canceled", "Canceled"),
+            new Option("expired", "Expired"));
+    private static final List<String> STATUS_VALUES = STATUS_OPTIONS.stream().map(Option::value).toList();
     private static final int ORDER_LIMIT = 1000;
     /** The API's maximum for one account-history page (a larger value is rejected with code 417). */
     private static final int HISTORY_PAGE_SIZE = 100;
@@ -164,8 +172,8 @@ public class LedgerService {
 
         List<OrderResponse> filtered = periodOrders.stream()
                 .filter(order -> matchesSide(order, request.getSide()))
-                .filter(order -> matchesType(order, request.getType()))
-                .filter(order -> matchesStatus(order, request.getStatus()))
+                .filter(order -> matchesType(order, filters.type()))
+                .filter(order -> matchesStatus(order, filters.status()))
                 .sorted(Comparator.comparingLong(LedgerService::created).reversed())
                 .toList();
 
@@ -209,6 +217,16 @@ public class LedgerService {
                 .map(LiveStrategy::getMarket)
                 .filter(Objects::nonNull)
                 .orElse(DEFAULT_MARKET);
+    }
+
+    /**
+     * @param values The submitted values, possibly null
+     * @param known  The values the filter understands
+     * @return The submitted values that are known, in the catalogue's order, so the select shows
+     *         exactly what the request means
+     */
+    private static List<String> selected(List<String> values, List<String> known) {
+        return values == null ? List.of() : known.stream().filter(values::contains).toList();
     }
 
     private List<Option> marketOptions(String market) {
@@ -433,14 +451,17 @@ public class LedgerService {
     private FiltersView filters(LedgerRequest request, String market, boolean raw) {
         boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
                 request.getToDate());
-        return new FiltersView(request.getSide(), market, request.getType(), request.getStatus(),
+        return new FiltersView(request.getSide(), market, selected(request.getType(), ORDER_TYPES),
+                selected(request.getStatus(), STATUS_VALUES),
                 raw ? RAW_VIEW : DEFAULT_VIEW,
                 custom ? "" : HistoryPeriods.preset(request.getPeriod()),
                 custom ? request.getFromDate() : null,
                 HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
                 custom ? request.getToDate() : null,
                 HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
-                HistoryPeriods.DEFAULT_PRESET, marketOptions(market), HistoryPeriods.OPTIONS);
+                HistoryPeriods.DEFAULT_PRESET, marketOptions(market),
+                ORDER_TYPES.stream().map(type -> new Option(type, type)).toList(), STATUS_OPTIONS,
+                HistoryPeriods.OPTIONS);
     }
 
     private TotalsView totals(List<OrderResponse> orders, Basis basis, double currentBid,
@@ -585,24 +606,25 @@ public class LedgerService {
                 || side.equalsIgnoreCase(order.getSide());
     }
 
-    private static boolean matchesType(OrderResponse order, String type) {
-        if (type == null || type.isBlank() || !ORDER_TYPES.contains(type)) {
-            return true;
-        }
-        return type.equalsIgnoreCase(order.getOrderType());
+    private static boolean matchesType(OrderResponse order, List<String> types) {
+        // The filter bar hands over the normalized lists, so a value the filter cannot use is
+        // already gone: an empty list means every type.
+        return types.isEmpty()
+                || types.stream().anyMatch(type -> type.equalsIgnoreCase(order.getOrderType()));
     }
 
-    private static boolean matchesStatus(OrderResponse order, String status) {
-        if (status == null || status.isBlank()) {
-            return true;
-        }
+    private static boolean matchesStatus(OrderResponse order, List<String> statuses) {
+        return statuses.isEmpty() || statuses.stream()
+                .anyMatch(status -> matchesOneStatus(order.getStatus(), status));
+    }
+
+    private static boolean matchesOneStatus(String actual, String wanted) {
         // The API calls a resting order "new" and a stop or take-profit waiting for its trigger
-        // "awaitingTrigger"; "Open" is both, and the other choices name one status each.
-        if ("open".equalsIgnoreCase(status)) {
-            return "new".equalsIgnoreCase(order.getStatus())
-                    || "awaitingtrigger".equalsIgnoreCase(order.getStatus());
+        // "awaitingTrigger"; "Open" covers both, and the other choices name one status each.
+        if ("open".equalsIgnoreCase(wanted)) {
+            return "new".equalsIgnoreCase(actual) || "awaitingtrigger".equalsIgnoreCase(actual);
         }
-        return status.equalsIgnoreCase(order.getStatus());
+        return wanted.equalsIgnoreCase(actual);
     }
 
     private static boolean isBuy(OrderResponse order) {
@@ -955,35 +977,46 @@ public class LedgerService {
     }
 
     private String query(LedgerRequest request, int page, int size) {
-        Map<String, String> params = new LinkedHashMap<>();
-        params.put("tab", "ledger");
-        add(params, "side", request.getSide());
-        add(params, "market", request.getMarket());
-        add(params, "type", request.getType());
-        add(params, "status", request.getStatus());
-        add(params, "view", request.getView());
+        List<String> pairs = new ArrayList<>();
+        pairs.add("tab=ledger");
+        add(pairs, "side", request.getSide());
+        add(pairs, "market", request.getMarket());
+        addAll(pairs, "type", request.getType());
+        addAll(pairs, "status", request.getStatus());
+        add(pairs, "view", request.getView());
         if (HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
                 request.getToDate())) {
-            add(params, "fromDate", request.getFromDate());
-            add(params, "fromTime", request.getFromTime());
-            add(params, "toDate", request.getToDate());
-            add(params, "toTime", request.getToTime());
+            add(pairs, "fromDate", request.getFromDate());
+            add(pairs, "fromTime", request.getFromTime());
+            add(pairs, "toDate", request.getToDate());
+            add(pairs, "toTime", request.getToTime());
         } else {
-            add(params, "period", request.getPeriod());
+            add(pairs, "period", request.getPeriod());
         }
-        params.put("size", String.valueOf(size));
+        pairs.add("size=" + size);
         if (page > 1) {
-            params.put("page", String.valueOf(page));
+            pairs.add("page=" + page);
         }
-        return "?" + params.entrySet().stream()
-                .map(entry -> entry.getKey() + "=" + UriUtils.encodeQueryParam(entry.getValue(),
-                        StandardCharsets.UTF_8))
+        return "?" + pairs.stream().map(LedgerService::encodedPair)
                 .collect(Collectors.joining("&"));
     }
 
-    private static void add(Map<String, String> params, String key, String value) {
+    private static String encodedPair(String pair) {
+        int at = pair.indexOf('=');
+        return pair.substring(0, at) + "="
+                + UriUtils.encodeQueryParam(pair.substring(at + 1), StandardCharsets.UTF_8);
+    }
+
+    private static void add(List<String> pairs, String key, String value) {
         if (notBlank(value)) {
-            params.put(key, value);
+            pairs.add(key + "=" + value);
+        }
+    }
+
+    private static void addAll(List<String> pairs, String key, List<String> values) {
+        if (values != null) {
+            values.stream().filter(LedgerService::notBlank)
+                    .forEach(value -> pairs.add(key + "=" + value));
         }
     }
 }
