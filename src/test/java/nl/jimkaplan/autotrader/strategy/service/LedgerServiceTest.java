@@ -206,6 +206,88 @@ class LedgerServiceTest {
     }
 
     @Test
+    void feesFallBackToTheOrderAndFollowTheMarketWhenACurrencyIsMissing() {
+        accountReadableWithoutOrders();
+        OrderResponse missingCurrency = baseOrder("2026-10-14T10:00:00Z", "buy", "market");
+        missingCurrency.setStatus("filled");
+        missingCurrency.setAmount(new BigDecimal("0.001"));
+        missingCurrency.setFilledAmount(new BigDecimal("0.001"));
+        missingCurrency.setFilledAmountQuote(new BigDecimal("75.00"));
+        Fills missing = fill("2026-10-14T10:00:00Z", "0.001", "75000", "0.10");
+        missing.setFeeCurrency(null);
+        missingCurrency.setFills(List.of(missing));
+
+        OrderResponse orderLevelFee = baseOrder("2026-10-14T11:00:00Z", "buy", "market");
+        orderLevelFee.setStatus("filled");
+        orderLevelFee.setAmount(new BigDecimal("0.001"));
+        orderLevelFee.setFilledAmount(new BigDecimal("0.001"));
+        orderLevelFee.setFilledAmountQuote(new BigDecimal("75.00"));
+        orderLevelFee.setFeePaid(new BigDecimal("0.20"));
+        orderLevelFee.setFeeCurrency("EUR");
+        Fills withoutFee = fill("2026-10-14T11:00:00Z", "0.001", "75000", "0");
+        withoutFee.setFee(null);
+        orderLevelFee.setFills(List.of(withoutFee));
+
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{orderLevelFee, missingCurrency});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        // A missing currency counts as the market's quote, so the row, its fill, the cash and the
+        // period total all carry the same figure.
+        LedgerView.OrderRowView missingRow = view.rows().get(1);
+        assertEquals("€0.10", missingRow.feeText());
+        assertEquals("€0.1000", missingRow.fills().get(0).feeText());
+        assertEquals("−€75.10", missingRow.netCashText());
+        assertEquals("−€75.10", missingRow.fills().get(0).netCashText());
+        // The fee enters the P&L too: worth €75.50 at the current bid against €75.10 paid.
+        assertEquals("+€0.40", missingRow.pnlText());
+        // A fill that reports no fee of its own takes its share of the order's feePaid, so the row,
+        // its fill lines, the cash and the P&L all tell one story.
+        LedgerView.OrderRowView fallbackRow = view.rows().get(0);
+        assertEquals("€0.20", fallbackRow.feeText());
+        assertEquals("−€75.20", fallbackRow.netCashText());
+        assertEquals("€0.2000", fallbackRow.fills().get(0).feeText());
+        assertEquals("−€75.20", fallbackRow.fills().get(0).netCashText());
+        assertEquals("+€0.30", fallbackRow.pnlText());
+        assertEquals("€0.30", view.totals().feesText());
+    }
+
+    @Test
+    void fillsWithoutAnyFeeShowNoFeeAtAll() {
+        accountReadableWithoutOrders();
+        OrderResponse noFee = baseOrder("2026-10-14T10:00:00Z", "buy", "market");
+        noFee.setStatus("filled");
+        noFee.setAmount(new BigDecimal("0.001"));
+        noFee.setFilledAmount(new BigDecimal("0.001"));
+        noFee.setFilledAmountQuote(new BigDecimal("75.00"));
+        Fills withoutFee = fill("2026-10-14T10:00:00Z", "0.001", "75000", "0");
+        withoutFee.setFee(null);
+        noFee.setFills(List.of(withoutFee));
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{noFee});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        LedgerView.OrderRowView row = view.rows().get(0);
+        assertEquals("—", row.feeText());
+        assertEquals("—", row.fills().get(0).feeText());
+        assertEquals("−€75.00", row.netCashText());
+        assertEquals("−€75.00", row.fills().get(0).netCashText());
+        assertEquals("€0.00", view.totals().feesText());
+    }
+
+    @Test
     void aFailingPriceLookupLeavesDashesInsteadOfBreaking() {
         accountReadableWithoutOrders();
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
@@ -256,15 +338,21 @@ class LedgerServiceTest {
 
         LedgerView.OrderRowView buyWithBaseFee = view.rows().get(2);
         assertEquals(1, buyWithBaseFee.fills().size());
-        // The fee is paid in BTC, so it is worth its own price in euro: 0.000002 × €75,000.00.
-        assertEquals("€0.1500", buyWithBaseFee.fills().get(0).feeText());
+        // The fee was charged in bitcoin, so it reads as bitcoin — the euro value only enters the
+        // P&L, never the display.
+        assertEquals("0.000002 BTC", buyWithBaseFee.fills().get(0).feeText());
         assertEquals("maker", buyWithBaseFee.fills().get(0).makerTakerText());
-        // The period's fees convert each fill's own currency too: €0.15 + €0.15.
-        assertEquals("€0.30", view.totals().feesText());
+        // A fee taken in the coin does not move the cash, so the net cash is the euro part alone.
+        assertEquals("−€75.00", buyWithBaseFee.netCashText());
+        assertEquals("−€75.00", buyWithBaseFee.fills().get(0).netCashText());
+        assertEquals("0.000002 BTC", buyWithBaseFee.feeText());
+        // The period's fees keep each currency apart: €0.15 from the partial fill, the bitcoin fee
+        // as bitcoin.
+        assertEquals("€0.15 + 0.000002 BTC", view.totals().feesText());
     }
 
     @Test
-    void aBaseCurrencyOrderFeeIsConvertedThroughItsPrice() {
+    void aBaseCurrencyOrderFeeShowsItsOwnCurrency() {
         accountReadableWithoutOrders();
         OrderResponse order = baseOrder("2026-10-14T20:00:00Z", "buy", "limit");
         order.setStatus("canceled");
@@ -283,7 +371,8 @@ class LedgerServiceTest {
 
         LedgerView view = service.view(new LedgerRequest());
 
-        assertEquals("€0.15", view.totals().feesText());
+        assertEquals("0.000002 BTC", view.rows().get(0).feeText());
+        assertEquals("0.000002 BTC", view.totals().feesText());
     }
 
     @Test
@@ -595,8 +684,8 @@ class LedgerServiceTest {
         order.setAmount(new BigDecimal("0.001"));
         order.setFilledAmount(new BigDecimal("0.001"));
         order.setFilledAmountQuote(new BigDecimal("75.00"));
-        order.setFeePaid(new BigDecimal("0.15"));
-        order.setFeeCurrency("EUR");
+        order.setFeePaid(new BigDecimal("0.000002"));
+        order.setFeeCurrency("BTC");
         Fills fill = fill("2026-10-14T12:00:00Z", "0.001", "75000", "0.000002");
         fill.setFeeCurrency("BTC");
         fill.setTaker(false);

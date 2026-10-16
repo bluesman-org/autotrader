@@ -103,7 +103,9 @@
                 realised; buys show what they are worth at the current bid; the math looks back before
                 the period to know what those sells cost).</li>
             <li>If Status shows open, nothing is filled yet.</li>
-            <li>Net cash amounts show only the filled parts of paid or received.</li>
+            <li>Net cash amounts show only the filled parts of paid or received, and a fee is shown in
+                the currency the exchange charged it in; a fee charged in the coin is not part of the
+                cash.</li>
         </ul>
 
         <th:block th:unless="${ledger.raw}">
