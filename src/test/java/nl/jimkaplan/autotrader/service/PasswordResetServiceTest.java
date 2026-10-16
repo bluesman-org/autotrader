@@ -6,7 +6,9 @@ import nl.jimkaplan.autotrader.repository.AppUserRepository;
 import nl.jimkaplan.autotrader.repository.PasswordResetTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
+import org.bson.Document;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
@@ -70,15 +72,38 @@ class PasswordResetServiceTest {
         when(tokens.findByTokenHash(any())).thenAnswer(invocation ->
                 Optional.ofNullable(stored)
                         .filter(token -> token.getTokenHash().equals(invocation.getArgument(0))));
-        // The claim is the one atomic step: it spends the token in the store, which the in-memory
-        // double mirrors so a second claim finds nothing to take.
+        // The two conditional writes the service makes are mirrored on the in-memory document: the
+        // claim spends a live token, and the restore puts an earlier one back — but only while the
+        // stored token is still the one the request minted.
         when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(PasswordResetToken.class)))
                 .thenAnswer(invocation -> {
+                    Query query = invocation.getArgument(0);
+                    Update update = invocation.getArgument(1);
+                    if (query.getQueryObject().containsKey("_id")) {
+                        if (stored == null || !stored.getTokenHash()
+                                .equals(query.getQueryObject().getString("token_hash"))) {
+                            return UpdateResult.acknowledged(0, 0L, null);
+                        }
+                        Document changes = update.getUpdateObject().get("$set", Document.class);
+                        stored.setTokenHash(changes.getString("token_hash"));
+                        stored.setCreatedTime(instantOf(changes.get("created_time")));
+                        stored.setExpiresTime(instantOf(changes.get("expires_time")));
+                        return UpdateResult.acknowledged(1, 1L, null);
+                    }
                     if (stored == null || stored.getUsedTime() != null) {
                         return UpdateResult.acknowledged(0, 0L, null);
                     }
                     stored.setUsedTime(NOW);
                     return UpdateResult.acknowledged(1, 1L, null);
+                });
+        when(mongoTemplate.remove(any(Query.class), eq(PasswordResetToken.class)))
+                .thenAnswer(invocation -> {
+                    Query query = invocation.getArgument(0);
+                    if (stored != null && stored.getTokenHash()
+                            .equals(query.getQueryObject().getString("token_hash"))) {
+                        stored = null;
+                    }
+                    return DeleteResult.acknowledged(0);
                 });
     }
 
@@ -222,6 +247,33 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void theRestoreLeavesATokenAnotherRequestMintedAlone() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        service.request("jim@example.com");
+        verify(mail).send(any(), any(), body.capture());
+        String first = tokenOf(body.getValue());
+
+        // The submission is refused while, in the same window, another request has already minted
+        // its own token: the restore must not take that one away.
+        PasswordResetToken anotherRequest = PasswordResetToken.builder().id("u1")
+                .tokenHash("another-request-minted-this").createdTime(NOW)
+                .expiresTime(NOW.plus(Duration.ofMinutes(30))).build();
+        PasswordResetService refusing = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, command -> {
+                    stored = anotherRequest;
+                    throw new RejectedExecutionException("queue full");
+                }, "https://at.bluris.nl/autotrader", 30,
+                Clock.fixed(NOW.plus(Duration.ofMinutes(3)), ZoneOffset.UTC));
+
+        refusing.request("jim@example.com");
+
+        assertEquals("another-request-minted-this", stored.getTokenHash());
+        assertFalse(service.valid(first));
+    }
+
+    @Test
     void aUsedTokenIsSpent() {
         AppUser user = account();
         when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
@@ -322,6 +374,13 @@ class PasswordResetServiceTest {
                 () -> service.reset("nope", "long-password", "long-password"));
 
         assertTrue(error.getMessage().contains("no longer valid"));
+    }
+
+    private static Instant instantOf(Object value) {
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        return value instanceof java.util.Date date ? date.toInstant() : null;
     }
 
     private static AppUser account() {

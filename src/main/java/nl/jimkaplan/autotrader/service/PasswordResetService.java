@@ -118,15 +118,18 @@ public class PasswordResetService {
                 // straight away; only the mail itself leaves on the worker, where a slow SMTP
                 // server makes no difference to how long this answer takes.
                 Optional<PasswordResetToken> previous = tokens.findById(user.getId());
-                String body = message(user, mint(user));
+                String token = newToken();
+                String mintedHash = hash(token);
+                mint(user, mintedHash);
+                String body = message(user, token);
                 try {
-                    mailExecutor.execute(() -> sendQuietly(user, body, previous));
+                    mailExecutor.execute(() -> sendQuietly(user, body, previous, mintedHash));
                 } catch (RejectedExecutionException e) {
                     // The worker's queue is full: the token just minted was never mailed, so the
                     // link already in the reader's inbox takes its place again. An overload must
                     // answer like any other request, and must not leave them without a working
                     // link.
-                    restore(user, previous);
+                    restore(user, previous, mintedHash);
                     log.warn("The recovery mail for {} was not queued: the worker is busy",
                             user.getUsername(), e);
                 }
@@ -135,26 +138,46 @@ public class PasswordResetService {
         return SENT_MESSAGE;
     }
 
-    private void sendQuietly(AppUser user, String body, Optional<PasswordResetToken> previous) {
+    private void sendQuietly(AppUser user, String body, Optional<PasswordResetToken> previous,
+                             String mintedHash) {
         try {
             mail.send(user.getEmail(), RECOVERY_SUBJECT, body);
         } catch (RuntimeException e) {
             // The new link never left either: put the previous one back, so a mail server that is
             // down does not cost the reader the link they already hold.
-            restore(user, previous);
+            restore(user, previous, mintedHash);
             log.warn("The recovery mail for account {} could not be sent", user.getUsername(), e);
         }
     }
 
     /**
      * Put the token that was stored before this request back (or clear the account's token when
-     * there was none), because the replacement never reached anybody.
+     * there was none), because the replacement never reached anybody — and only while the stored
+     * token is still the one this request minted: another request may have replaced it meanwhile,
+     * and undoing that would take away a link that is already on its way. {@code used_time} is left
+     * alone on purpose, so a claim that landed in this window keeps its mark and stays spent.
      *
-     * @param user     The account
-     * @param previous What was stored before
+     * <p>Two limits are accepted rather than engineered away. A send that fails after the server
+     * accepted the message — a missing final {@code 250}, a read timeout — has been delivered, and
+     * this puts the previous token back over it; when that token has expired meanwhile, the reader
+     * is left with no working link where they had one. And because the token put back normally
+     * predates the cooldown, repeated requests do reach the SMTP server again while sends are
+     * failing: {@link #RESEND_COOLDOWN} caps repeats only while links are minted and delivered.</p>
+     *
+     * @param user       The account
+     * @param previous   What was stored before this request
+     * @param mintedHash The hash of the token this request minted
      */
-    private void restore(AppUser user, Optional<PasswordResetToken> previous) {
-        previous.ifPresentOrElse(tokens::save, () -> tokens.deleteById(user.getId()));
+    private void restore(AppUser user, Optional<PasswordResetToken> previous, String mintedHash) {
+        Query stillOurs = Query.query(Criteria.where("_id").is(user.getId())
+                .and("token_hash").is(mintedHash));
+        previous.ifPresentOrElse(
+                old -> mongoTemplate.updateFirst(stillOurs, new Update()
+                                .set("token_hash", old.getTokenHash())
+                                .set("created_time", old.getCreatedTime())
+                                .set("expires_time", old.getExpiresTime()),
+                        PasswordResetToken.class),
+                () -> mongoTemplate.remove(stillOurs, PasswordResetToken.class));
     }
 
     /**
@@ -225,21 +248,19 @@ public class PasswordResetService {
     }
 
     /**
-     * Mint a link and store it, replacing whatever was there: one live token per account.
+     * Store a minted link, replacing whatever was there: one live token per account.
      *
-     * @param user The account
-     * @return The token the mail carries
+     * @param user       The account
+     * @param mintedHash The hash of the token the mail carries
      */
-    private String mint(AppUser user) {
+    private void mint(AppUser user, String mintedHash) {
         Instant now = clock.instant();
-        String token = newToken();
         tokens.save(PasswordResetToken.builder()
                 .id(user.getId())
-                .tokenHash(hash(token))
+                .tokenHash(mintedHash)
                 .createdTime(now)
                 .expiresTime(now.plus(lifetime))
                 .build());
-        return token;
     }
 
     private String message(AppUser user, String token) {
