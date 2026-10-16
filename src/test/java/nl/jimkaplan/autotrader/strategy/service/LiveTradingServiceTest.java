@@ -5,11 +5,11 @@ import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
-import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
@@ -55,7 +55,7 @@ class LiveTradingServiceTest {
     private static final long HOUR = 3_600_000L;
 
     @Mock
-    private BotConfigurationService botConfigurationService;
+    private BitvavoCredentialsService credentialsService;
 
     @Mock
     private BitvavoApiClient bitvavoApiClient;
@@ -83,7 +83,7 @@ class LiveTradingServiceTest {
         assertEquals("BUY", decision.side());
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("MACD_BULLISH_CROSSOVER"));
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, botConfigurationService);
+        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, credentialsService);
     }
 
     @Test
@@ -92,7 +92,7 @@ class LiveTradingServiceTest {
 
         assertNull(liveTradingService.decide(strategy, rising(60)));
 
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, botConfigurationService);
+        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, credentialsService);
     }
 
     @Test
@@ -160,7 +160,7 @@ class LiveTradingServiceTest {
         assertEquals("OPEN", position.getStatus());
         assertEquals(62.0, position.getEntryPrice(), 1e-9);
         assertEquals(decision.signalOpenTime(), position.getEntryTime());
-        verifyNoInteractions(bitvavoApiClient, botConfigurationService);
+        verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
 
     @Test
@@ -210,9 +210,9 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void fill_liveBuyWithoutAnActiveBot_recordsARejection() {
+    void fill_liveBuyWithoutAnApiKey_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.empty());
+        when(credentialsService.get()).thenReturn(Optional.empty());
 
         liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
@@ -220,7 +220,7 @@ class LiveTradingServiceTest {
         assertEquals("BUY", order.getSide());
         assertEquals("REJECTED", order.getStatus());
         assertNull(order.getClientOrderId());
-        assertTrue(order.getErrorMessage().contains("No active bot configuration"));
+        assertTrue(order.getErrorMessage().contains("No Bitvavo API key is configured"));
         verify(livePositionRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient);
     }
@@ -228,7 +228,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyWithInsufficientBalance_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1.0)});
 
@@ -244,7 +244,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyPlacesAMarketOrderAndTracksTheFill() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
@@ -305,7 +305,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyBelowTheMarketMinimum_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
@@ -323,7 +323,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyWhenTheBalanceCallFails_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenThrow(new ResourceAccessException("connect timed out"));
 
@@ -339,7 +339,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyDerivesTheClientOrderIdFromTheSequenceAndAdvancesIt() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
@@ -367,7 +367,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyAdvancesTheSequenceBeforeTheRowIsWritten() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
@@ -394,7 +394,7 @@ class LiveTradingServiceTest {
         LivePosition position = openPosition(0.001, 100000.0, 0.2);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(position));
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 8));
         UUID orderId = UUID.randomUUID();
@@ -444,7 +444,7 @@ class LiveTradingServiceTest {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.000_000_001, 100000.0, 0.2)));
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 4));
 
@@ -461,7 +461,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyWhenThePostFails_marksThePendingRowFailed() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
@@ -490,7 +490,7 @@ class LiveTradingServiceTest {
         LivePosition position = openPosition(0.001, 100000.0, 0.2);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(position));
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 8));
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
@@ -515,7 +515,7 @@ class LiveTradingServiceTest {
     @Test
     void fill_liveBuyKeepsTheRowFilledWhenSavingThePositionFails() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
                 .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
@@ -546,7 +546,7 @@ class LiveTradingServiceTest {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.001, 100000.0, 0.2)));
-        when(botConfigurationService.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 8));
         UUID orderId = UUID.randomUUID();
@@ -579,7 +579,7 @@ class LiveTradingServiceTest {
         liveTradingService.fill(strategy, decision("SELL"), 160.0);
 
         verify(liveOrderRepository, never()).save(any());
-        verifyNoInteractions(bitvavoApiClient, botConfigurationService);
+        verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
 
     private static LiveDecision decision(String side) {
@@ -625,7 +625,6 @@ class LiveTradingServiceTest {
 
     private static LiveStrategy strategy(boolean dryRun, int warmUp, RuleCondition exitCondition) {
         LiveStrategy strategy = LiveStrategy.builder()
-                .botId("bot-1")
                 .market("BTC-EUR")
                 .interval("1h")
                 .macdFastPeriod(12)
@@ -661,14 +660,12 @@ class LiveTradingServiceTest {
         return position;
     }
 
-    private static BotConfiguration bot() {
-        return BotConfiguration.builder()
-                .botId("bot-1")
+    private static BitvavoCredentials stored() {
+        return BitvavoCredentials.builder()
+                .id(BitvavoCredentials.ID)
                 .operatorId(1L)
                 .apiKey(KEY)
                 .apiSecret(SECRET)
-                .tradingPair("BTC-EUR")
-                .active(true)
                 .build();
     }
 

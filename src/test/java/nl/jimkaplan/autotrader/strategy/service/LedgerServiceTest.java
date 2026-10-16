@@ -7,8 +7,8 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetAccountHistoryResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
-import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
+import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView;
@@ -50,7 +50,7 @@ class LedgerServiceTest {
     @Mock
     private BitvavoApiClient client;
     @Mock
-    private BotConfigurationService bots;
+    private BitvavoCredentialsService credentials;
     @Mock
     private LiveStrategyService strategies;
 
@@ -58,7 +58,7 @@ class LedgerServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new LedgerService(client, bots, strategies, new DisplayZone(ZoneId.of("UTC")),
+        service = new LedgerService(client, credentials, strategies, new DisplayZone(ZoneId.of("UTC")),
                 Clock.fixed(NOW, ZoneId.of("UTC")));
     }
 
@@ -181,13 +181,13 @@ class LedgerServiceTest {
     @Test
     void withoutAnAccountThePageExplainsItself() {
         when(strategies.all()).thenReturn(List.of());
-        when(bots.getAllBotConfigurations()).thenReturn(List.of());
+        when(credentials.get()).thenReturn(Optional.empty());
         when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
 
         LedgerView view = service.view(new LedgerRequest());
 
         assertNotNull(view.message());
-        assertTrue(view.message().contains("No active Bitvavo API key is configured"));
+        assertTrue(view.message().contains("No Bitvavo API key is configured"));
         assertEquals(0, view.rows().size());
         assertEquals(null, view.totals());
         assertEquals("BTC-EUR", view.price().market());
@@ -472,9 +472,9 @@ class LedgerServiceTest {
     }
 
     @Test
-    void theAccountFallsBackToAConfiguredBotAndTheMarketToTheRequest() {
+    void theMarketFollowsTheRequestOtherwiseTheEngine() {
         when(strategies.all()).thenReturn(List.of());
-        when(bots.getAllBotConfigurations()).thenReturn(List.of(bot()));
+        when(credentials.get()).thenReturn(Optional.of(stored()));
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
                 .thenReturn(new OrderResponse[]{});
         when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
@@ -525,18 +525,17 @@ class LedgerServiceTest {
 
     private void accountReadableWithoutOrders() {
         LiveStrategy strategy = org.mockito.Mockito.mock(LiveStrategy.class);
-        when(strategy.getBotId()).thenReturn("bot-1");
         when(strategy.getMarket()).thenReturn("BTC-EUR");
         when(strategies.all()).thenReturn(List.of(strategy));
-        when(bots.getBotConfiguration("bot-1")).thenReturn(Optional.of(bot()));
+        when(credentials.get()).thenReturn(Optional.of(stored()));
     }
 
-    private static BotConfiguration bot() {
-        BotConfiguration bot = new BotConfiguration();
-        bot.setBotId("bot-1");
-        bot.setApiKey("key");
-        bot.setApiSecret("secret");
-        return bot;
+    private static BitvavoCredentials stored() {
+        return BitvavoCredentials.builder()
+                .id(BitvavoCredentials.ID)
+                .apiKey("key")
+                .apiSecret("secret")
+                .build();
     }
 
     private static GetAccountHistoryResponse history(String endpoint) {

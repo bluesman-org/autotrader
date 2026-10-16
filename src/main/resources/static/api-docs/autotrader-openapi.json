@@ -17,6 +17,10 @@
       "description": "API for running strategies live on closed candles"
     },
     {
+      "name": "Bitvavo credentials",
+      "description": "The system-wide Bitvavo API key the engine and the ledger use"
+    },
+    {
       "name": "TradingView Webhook",
       "description": "API for receiving and processing TradingView alerts"
     },
@@ -34,6 +38,68 @@
     }
   ],
   "paths": {
+    "/api/bitvavo-credentials": {
+      "get": {
+        "tags": [
+          "Bitvavo credentials"
+        ],
+        "summary": "Read the system-wide Bitvavo API key (masked)",
+        "description": "Returns whether a key is configured, a hint that identifies it and the operator id. The key and the secret are never returned.",
+        "operationId": "get",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BitvavoCredentialsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Bitvavo credentials"
+        ],
+        "summary": "Store or replace the system-wide Bitvavo API key",
+        "description": "Stores the key encrypted; it is used by the live engine and the ledger.",
+        "operationId": "replace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BitvavoCredentialsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The key was stored",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BitvavoCredentialsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The key or the secret was missing",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BitvavoCredentialsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/webhook/tradingview": {
       "post": {
         "tags": [
@@ -752,6 +818,40 @@
   },
   "components": {
     "schemas": {
+      "BitvavoCredentialsRequest": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          },
+          "apiSecret": {
+            "type": "string"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BitvavoCredentialsResponse": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "apiKeyHint": {
+            "type": "string"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updatedTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "TradingViewAlertRequest": {
         "type": "object",
         "description": "Alert details from TradingView",

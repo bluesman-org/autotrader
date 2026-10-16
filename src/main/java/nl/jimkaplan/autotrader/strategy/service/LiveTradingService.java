@@ -7,11 +7,11 @@ import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetAccountBalanceResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
-import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
@@ -61,7 +61,7 @@ public class LiveTradingService {
 
     static final double MINIMUM_ORDER_EUR = 5.0;
 
-    private final BotConfigurationService botConfigurationService;
+    private final BitvavoCredentialsService credentialsService;
     private final BitvavoApiClient bitvavoApiClient;
     private final LiveOrderRepository liveOrderRepository;
     private final LivePositionRepository livePositionRepository;
@@ -156,22 +156,22 @@ public class LiveTradingService {
             return;
         }
 
-        BotConfiguration bot = activeBot(strategy);
-        if (bot == null) {
+        BitvavoCredentials credentials = credentialsService.get().orElse(null);
+        if (credentials == null) {
             recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
-                    null, null, null, "No active bot configuration for " + strategy.getBotId());
+                    null, null, null, "No Bitvavo API key is configured");
             return;
         }
         LiveOrder pending = null;
         try {
-            double eur = eurBalance(bot);
+            double eur = eurBalance(credentials);
             if (eur < strategy.getAmountPerBuy() || eur < MINIMUM_ORDER_EUR) {
                 recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                         null, null, null, "Insufficient EUR balance: " + eur);
                 return;
             }
             GetMarketResponse market = bitvavoApiClient.get("/markets?market=" + strategy.getMarket(),
-                    GetMarketResponse.class, bot.getApiKey(), bot.getApiSecret());
+                    GetMarketResponse.class, credentials.getApiKey(), credentials.getApiSecret());
             int notionalDecimals = market.getNotionalDecimals() == null ? 2 : market.getNotionalDecimals();
             BigDecimal amountQuote = BigDecimal.valueOf(strategy.getAmountPerBuy())
                     .setScale(notionalDecimals, RoundingMode.DOWN);
@@ -193,11 +193,11 @@ public class LiveTradingService {
                     .side("buy")
                     .orderType("market")
                     .amountQuote(amountQuote)
-                    .operatorId(bot.getOperatorId())
+                    .operatorId(credentials.getOperatorId())
                     .clientOrderId(clientOrderId)
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
-                    CreateOrderResponse.class, bot.getApiKey(), bot.getApiSecret());
+                    CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
             applyFill(pending, response);
             livePositionRepository.save(LivePosition.builder()
                     .strategyId(strategy.getId())
@@ -244,16 +244,16 @@ public class LiveTradingService {
             return;
         }
 
-        BotConfiguration bot = activeBot(strategy);
-        if (bot == null) {
+        BitvavoCredentials credentials = credentialsService.get().orElse(null);
+        if (credentials == null) {
             recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
-                    null, null, null, "No active bot configuration for " + strategy.getBotId());
+                    null, null, null, "No Bitvavo API key is configured");
             return;
         }
         LiveOrder pending = null;
         try {
             GetMarketResponse market = bitvavoApiClient.get("/markets?market=" + strategy.getMarket(),
-                    GetMarketResponse.class, bot.getApiKey(), bot.getApiSecret());
+                    GetMarketResponse.class, credentials.getApiKey(), credentials.getApiSecret());
             int quantityDecimals = market.getQuantityDecimals() == null ? 8 : market.getQuantityDecimals();
             BigDecimal amount = BigDecimal.valueOf(position.getQuantity())
                     .setScale(quantityDecimals, RoundingMode.DOWN);
@@ -275,11 +275,11 @@ public class LiveTradingService {
                     .side("sell")
                     .orderType("market")
                     .amount(amount)
-                    .operatorId(bot.getOperatorId())
+                    .operatorId(credentials.getOperatorId())
                     .clientOrderId(clientOrderId)
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
-                    CreateOrderResponse.class, bot.getApiKey(), bot.getApiSecret());
+                    CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
             applyFill(pending, response);
             double profit = TradeMath.closeProfit(TradeMath.zeroIfNull(pending.getAmountQuote()),
                     position.getQuantity(), position.getEntryPrice(), position.getEntryFee(),
@@ -382,16 +382,9 @@ public class LiveTradingService {
         livePositionRepository.save(position);
     }
 
-    private BotConfiguration activeBot(LiveStrategy strategy) {
-        if (strategy.getBotId() == null) {
-            return null;
-        }
-        return botConfigurationService.getBotConfiguration(strategy.getBotId()).orElse(null);
-    }
-
-    private double eurBalance(BotConfiguration bot) {
+    private double eurBalance(BitvavoCredentials credentials) {
         GetAccountBalanceResponse[] balances = bitvavoApiClient.get("/balance?symbol=EUR",
-                GetAccountBalanceResponse[].class, bot.getApiKey(), bot.getApiSecret());
+                GetAccountBalanceResponse[].class, credentials.getApiKey(), credentials.getApiSecret());
         if (balances == null) {
             return 0;
         }

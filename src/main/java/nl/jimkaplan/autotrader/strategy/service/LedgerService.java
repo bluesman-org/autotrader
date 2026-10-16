@@ -9,8 +9,8 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetAccountHistoryResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
-import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
+import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.FillRowView;
@@ -48,8 +48,8 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
- * Builds the Bitvavo-ledger tab: the account the engine trades on, read through the bot's API
- * credentials — its orders for the selected market and period with their fills, the raw
+ * Builds the Bitvavo-ledger tab: the account the engine trades on, read through the system-wide
+ * Bitvavo API key — its orders for the selected market and period with their fills, the raw
  * transactions behind them, the current prices and the period's totals.
  *
  * <p>The ledger is the real account, not the engine's own records, so everything here is read from
@@ -87,7 +87,7 @@ public class LedgerService {
     private static final long GENESIS_MILLIS = Instant.parse("2020-01-01T00:00:00Z").toEpochMilli();
 
     private final BitvavoApiClient bitvavoApiClient;
-    private final BotConfigurationService botConfigurationService;
+    private final BitvavoCredentialsService credentialsService;
     private final LiveStrategyService liveStrategyService;
     private final DisplayZone display;
     private final HistoryPeriods periods;
@@ -95,17 +95,17 @@ public class LedgerService {
 
     @Autowired
     public LedgerService(BitvavoApiClient bitvavoApiClient,
-                         BotConfigurationService botConfigurationService,
+                         BitvavoCredentialsService credentialsService,
                          LiveStrategyService liveStrategyService,
                          @Value("${autotrader.ui.time-zone:}") String timeZone) {
-        this(bitvavoApiClient, botConfigurationService, liveStrategyService, new DisplayZone(timeZone),
+        this(bitvavoApiClient, credentialsService, liveStrategyService, new DisplayZone(timeZone),
                 Clock.systemUTC());
     }
 
-    LedgerService(BitvavoApiClient bitvavoApiClient, BotConfigurationService botConfigurationService,
+    LedgerService(BitvavoApiClient bitvavoApiClient, BitvavoCredentialsService credentialsService,
                   LiveStrategyService liveStrategyService, DisplayZone display, Clock clock) {
         this.bitvavoApiClient = bitvavoApiClient;
-        this.botConfigurationService = botConfigurationService;
+        this.credentialsService = credentialsService;
         this.liveStrategyService = liveStrategyService;
         this.display = display;
         this.periods = new HistoryPeriods(display, clock);
@@ -133,19 +133,18 @@ public class LedgerService {
         GetBookResponse book = book(market);
         PriceView price = price(market, book);
         FiltersView filters = filters(request, market, raw);
-        Optional<BotConfiguration> account = account();
+        Optional<BitvavoCredentials> account = credentialsService.get();
         if (account.isEmpty()) {
             return new LedgerView(
-                    "No active Bitvavo API key is configured, so the account cannot be read. Reactivate "
-                            + "it with PATCH /api/bots/activate/{botId}, or configure it once with "
-                            + "POST /api/bots/create — the ledger uses the same key the engine trades "
-                            + "with.",
+                    "No Bitvavo API key is configured, so the account cannot be read. Store the "
+                            + "account's key on the Settings page (/ui/settings) — the ledger uses the "
+                            + "same key the engine trades with.",
                     price, filters, null, List.of(), pager(request, 0, 1, 1), raw, List.of(),
                     pager(request, 0, 1, 1));
         }
-        BotConfiguration bot = account.get();
+        BitvavoCredentials credentials = account.get();
         try {
-            return ledger(request, range, market, raw, book, price, filters, bot);
+            return ledger(request, range, market, raw, book, price, filters, credentials);
         } catch (RestClientException e) {
             log.warn("Could not read the Bitvavo ledger for {}: {}", market, e.getMessage());
             return new LedgerView("Could not read the Bitvavo account: " + e.getMessage(), price,
@@ -156,10 +155,10 @@ public class LedgerService {
 
     private LedgerView ledger(LedgerRequest request, HistoryPeriods.Range range, String market,
                               boolean raw, GetBookResponse book, PriceView price, FiltersView filters,
-                              BotConfiguration bot) {
-        List<OrderResponse> periodOrders = orders(bot, market, range);
-        List<Transaction> marketFills = marketFills(bot, market, clock.instant().toEpochMilli());
-        Balance balance = balance(bot, market, marketFills);
+                              BitvavoCredentials credentials) {
+        List<OrderResponse> periodOrders = orders(credentials, market, range);
+        List<Transaction> marketFills = marketFills(credentials, market, clock.instant().toEpochMilli());
+        Balance balance = balance(credentials, market, marketFills);
         double currentBid = book == null || book.getBid() == null ? Double.NaN : book.getBid().doubleValue();
         Basis basis = Basis.walk(marketFills, quote(market), base(market));
 
@@ -180,7 +179,7 @@ public class LedgerService {
             rows.add(row(filtered.get(i), i + 1, basis, currentBid, balance, market));
         }
 
-        List<Transaction> rawEntries = raw ? history(bot, null, range.fromMillis(), range.toMillis())
+        List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
                 : List.of();
         int rawPages = pages(rawEntries.size(), pageSize);
         int rawPage = Math.min(clamp(request.getPage()), rawPages);
@@ -193,23 +192,6 @@ public class LedgerService {
     }
 
     // ---- the account ------------------------------------------------------------------------
-
-    /**
-     * The account the engine trades on: the key stored for the engine's strategy when it names one,
-     * otherwise the active key with the greatest id — a stable pick that only matters when more
-     * than one is stored. The deployment keeps a single key for the account, so both paths normally
-     * lead to the same record.
-     */
-    private Optional<BotConfiguration> account() {
-        Optional<BotConfiguration> fromEngine = liveStrategyService.all().stream()
-                .filter(strategy -> notBlank(strategy.getBotId()))
-                .max(Comparator.comparing(LiveStrategy::getCreatedTime,
-                        Comparator.nullsFirst(Comparator.naturalOrder())))
-                .flatMap(strategy -> botConfigurationService.getBotConfiguration(strategy.getBotId()));
-        return fromEngine.or(() -> botConfigurationService.getAllBotConfigurations().stream()
-                .max(Comparator.comparing(BotConfiguration::getBotId,
-                        Comparator.nullsFirst(Comparator.naturalOrder()))));
-    }
 
     private String market(LedgerRequest request) {
         if (notBlank(request.getMarket())) {
@@ -244,7 +226,8 @@ public class LedgerService {
 
     // ---- reads ------------------------------------------------------------------------------
 
-    private List<OrderResponse> orders(BotConfiguration bot, String market, HistoryPeriods.Range range) {
+    private List<OrderResponse> orders(BitvavoCredentials credentials, String market,
+                                       HistoryPeriods.Range range) {
         String endpoint = UriComponentsBuilder.fromPath("/orders")
                 .queryParam("market", market)
                 .queryParam("start", range.fromMillis())
@@ -252,7 +235,7 @@ public class LedgerService {
                 .queryParam("limit", ORDER_LIMIT)
                 .build().encode().toUriString();
         OrderResponse[] response = bitvavoApiClient.get(endpoint, OrderResponse[].class,
-                bot.getApiKey(), bot.getApiSecret());
+                credentials.getApiKey(), credentials.getApiSecret());
         return response == null ? List.of() : List.of(response);
     }
 
@@ -261,11 +244,11 @@ public class LedgerService {
      * the period — a sell's inventory was bought earlier — so this reads from the account's start,
      * not from the period's.
      */
-    private List<Transaction> marketFills(BotConfiguration bot, String market, long toMillis) {
+    private List<Transaction> marketFills(BitvavoCredentials credentials, String market, long toMillis) {
         String base = base(market);
         List<Transaction> fills = new ArrayList<>();
         for (String type : List.of("buy", "sell")) {
-            for (Transaction entry : history(bot, type, GENESIS_MILLIS, toMillis)) {
+            for (Transaction entry : history(credentials, type, GENESIS_MILLIS, toMillis)) {
                 if (base.equals(entry.getReceivedCurrency()) || base.equals(entry.getSentCurrency())) {
                     fills.add(entry);
                 }
@@ -276,7 +259,8 @@ public class LedgerService {
         return fills;
     }
 
-    private List<Transaction> history(BotConfiguration bot, String type, long fromMillis, long toMillis) {
+    private List<Transaction> history(BitvavoCredentials credentials, String type, long fromMillis,
+                                      long toMillis) {
         List<Transaction> entries = new ArrayList<>();
         for (int page = 1; page <= MAX_HISTORY_PAGES; page++) {
             UriComponentsBuilder endpoint = UriComponentsBuilder.fromPath("/account/history")
@@ -288,7 +272,7 @@ public class LedgerService {
                 endpoint.queryParam("type", type);
             }
             GetAccountHistoryResponse response = bitvavoApiClient.get(endpoint.build().encode().toUriString(),
-                    GetAccountHistoryResponse.class, bot.getApiKey(), bot.getApiSecret());
+                    GetAccountHistoryResponse.class, credentials.getApiKey(), credentials.getApiSecret());
             if (response == null || response.getItems() == null || response.getItems().isEmpty()) {
                 break;
             }
@@ -305,12 +289,13 @@ public class LedgerService {
      * after a given order: the walk counts fills backwards from today's balance, so "Balance after"
      * counts only filled orders.
      */
-    private Balance balance(BotConfiguration bot, String market, List<Transaction> marketFills) {
+    private Balance balance(BitvavoCredentials credentials, String market,
+                            List<Transaction> marketFills) {
         String endpoint = UriComponentsBuilder.fromPath("/balance")
                 .queryParam("symbol", base(market))
                 .build().encode().toUriString();
         GetAccountBalanceResponse[] balances = bitvavoApiClient.get(endpoint,
-                GetAccountBalanceResponse[].class, bot.getApiKey(), bot.getApiSecret());
+                GetAccountBalanceResponse[].class, credentials.getApiKey(), credentials.getApiSecret());
         String base = base(market);
         double current = 0;
         if (balances != null) {

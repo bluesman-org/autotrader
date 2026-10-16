@@ -1,9 +1,9 @@
 package nl.jimkaplan.autotrader.strategy.service;
 
-import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
-import nl.jimkaplan.autotrader.service.BotConfigurationService;
+import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.controller.LiveStrategyRequest;
 import nl.jimkaplan.autotrader.strategy.controller.MacdParametersRequest;
@@ -57,7 +57,7 @@ class LiveStrategyServiceTest {
     private LiveTradingService liveTradingService;
 
     @Mock
-    private BotConfigurationService botConfigurationService;
+    private BitvavoCredentialsService credentialsService;
 
     @Mock
     private CandleStreamFactory streamFactory;
@@ -95,7 +95,7 @@ class LiveStrategyServiceTest {
         assertEquals(List.of("MACD_BULLISH_CROSSOVER"), stored.getEntryConditions());
         assertEquals(List.of("SAR_BEARISH_CROSSOVER"), stored.getExitConditions());
         verify(liveStrategyRepository).save(any(LiveStrategy.class));
-        verifyNoInteractions(botConfigurationService);
+        verifyNoInteractions(credentialsService);
     }
 
     @Test
@@ -112,8 +112,7 @@ class LiveStrategyServiceTest {
         request.setEntryRules(new RuleSetRequest(LogicalOperator.ANY,
                 List.of(RuleCondition.MACD_BULLISH_CROSSOVER, RuleCondition.PRICE_ABOVE_SAR)));
         request.setExitRules(new RuleSetRequest(LogicalOperator.ALL, List.of(RuleCondition.PRICE_BELOW_SAR)));
-        when(botConfigurationService.getBotConfiguration("bot-1"))
-                .thenReturn(Optional.of(BotConfiguration.builder().botId("bot-1").build()));
+        when(credentialsService.configured()).thenReturn(true);
         when(liveStrategyRepository.save(any(LiveStrategy.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -162,14 +161,9 @@ class LiveStrategyServiceTest {
         noConditions.setEntryRules(new RuleSetRequest(LogicalOperator.ALL, List.of()));
         assertMessage("select at least one entry condition", noConditions);
 
-        LiveStrategyRequest liveWithoutBot = request();
-        liveWithoutBot.setDryRun(false);
-        assertMessage("the botId is required", liveWithoutBot);
-
-        LiveStrategyRequest liveWithUnknownBot = request();
-        liveWithUnknownBot.setDryRun(false);
-        liveWithUnknownBot.setBotId("bot-9");
-        assertMessage("no active bot configuration: bot-9", liveWithUnknownBot);
+        LiveStrategyRequest liveWithoutKey = request();
+        liveWithoutKey.setDryRun(false);
+        assertMessage("no Bitvavo API key is configured: store it on the settings page", liveWithoutKey);
     }
 
     @Test

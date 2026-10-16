@@ -2,7 +2,7 @@
 
 The live engine trades the same rules a backtest optimises, on the same candles, from Bitvavo's
 WebSocket feed. It is **dry-run by default**: orders are recorded, never sent, until a strategy is
-created with `dryRun: false` and a bot configuration whose credentials and operator ID it uses.
+created with `dryRun: false`, once the system-wide Bitvavo API key is stored (see "The Bitvavo key").
 
 ## The stream
 
@@ -71,7 +71,7 @@ candle channel of its market and interval. Our own policies:
   The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee, or
   to `FAILED` with the error — so an ambiguous timeout between the write and the response stays
   reconcilable at the next boot (see "Reconciliation on startup"). An order rejected before it is
-  sent (no active bot, insufficient balance, below the market minimum, an exchange error before the
+  sent (no API key, insufficient balance, below the market minimum, an exchange error before the
   pre-write) is recorded as `REJECTED` with no client order ID; dry-run rows carry none either.
 - One position at a time: entry signals are ignored while a position is open, exit signals while
   flat.
@@ -80,7 +80,7 @@ candle channel of its market and interval. Our own policies:
   market's quantity decimals. Only EUR-quoted markets are accepted, since the sizing, the balance
   check and the recorded amounts are all EUR. Simulated fees use the taker rate the backtester
   defaults to (0.20%); live fills record the exchange's `feePaid`.
-- A rejected or failed order (no active bot configuration, insufficient balance, below the market
+- A rejected or failed order (no Bitvavo API key configured, insufficient balance, below the market
   minimum, an exchange error) is recorded with its reason, never thrown, so a running strategy
   survives it. Skipped buys stay distinguishable from plain no-signal bars through these records.
 
@@ -185,6 +185,18 @@ brings the two back together:
 | `GET /ui/live` | The live page: one card per strategy, refreshed in place every 10 seconds |
 | `GET /ui/history` | The account history page's engine-trades tab: the closed round trips with filters, sorting, period totals and realised P&L by day |
 | `GET /ui/history?tab=ledger` | The account history page's Bitvavo-ledger tab: the account's orders with their fills, average-cost P&L, the raw transactions and the current prices |
+| `GET /api/bitvavo-credentials` | The system-wide Bitvavo API key, masked: whether one is configured, a hint that identifies it and the operator id |
+| `PUT /api/bitvavo-credentials` | Store or replace that key (the secret is write-only) |
+| `GET /ui/settings` | The settings page: the key's state and a form to replace it |
+
+## The Bitvavo key
+
+The engine's real orders and the account ledgers sign with one system-wide Bitvavo API key, stored
+encrypted in `bitvavo_credentials` and managed on `/ui/settings` (or through the API above). It is
+deliberately not tied to a bot configuration: the bots belong to the legacy TradingView path, which
+keeps its own per-bot keys. An installation that only has the key inside a bot configuration copies
+it once into the system-wide record on startup — Bitvavo shows a secret only when it is created, so
+re-entering it would mean creating a new key.
 
 ## Configuration
 
@@ -203,14 +215,12 @@ The pages show times in `autotrader.ui.time-zone` — the machine's zone when un
 with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken for UTC.
 
 The history page's ledger tab reads the real Bitvavo account, not the engine's own records, with
-the stored Bitvavo API key — the same key the engine trades with; the deployment keeps one key for
-the account, and the ledger takes the engine's strategy's key when it names one and otherwise the
-active key with the greatest id. Without an active key the page says so instead of showing data.
-The orders come from `GET /orders` (with their fills and `feePaid`), the P&L walk and the raw
-transactions from `GET /account/history`, the balance from `GET /balance` and the prices from the
-public order book. The P&L is derived at average cost over the market's whole buy/sell history, so
-a sell inside the period knows what its inventory cost; the walk ignores deposits, so a sell of
-deposited coins shows without a result.
+the system-wide Bitvavo API key — the same key the engine trades with (see "The Bitvavo key").
+Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
+their fills and `feePaid`), the P&L walk and the raw transactions from `GET /account/history`, the
+balance from `GET /balance` and the prices from the public order book. The P&L is derived at average
+cost over the market's whole buy/sell history, so a sell inside the period knows what its inventory
+cost; the walk ignores deposits, so a sell of deposited coins shows without a result.
 
 ## Out of scope
 
