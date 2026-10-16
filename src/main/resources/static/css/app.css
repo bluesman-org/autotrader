@@ -28,6 +28,7 @@ body {
 
 .nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 18px;
     align-items: center;
     padding: 12px 22px;
