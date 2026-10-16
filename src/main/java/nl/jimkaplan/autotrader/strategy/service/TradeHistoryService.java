@@ -198,13 +198,13 @@ public class TradeHistoryService {
                         : display.minute(Instant.ofEpochMilli(position.getExitTime())),
                 euro(position.getEntryPrice()) + " → "
                         + (position.getExitPrice() == null ? DASH : euro(position.getExitPrice())),
-                String.format(Locale.ENGLISH, "%.8f", position.getQuantity()),
+                ViewText.decimal(position.getQuantity(), 8),
                 signed(result), result >= 0 ? "pos" : "neg", details(position, refs));
     }
 
     private DetailsView details(LivePosition position, Map<String, LiveOrder> refs) {
         String asset = position.getMarket() == null ? "" : position.getMarket().split("-")[0];
-        String quantity = String.format(Locale.ENGLISH, "%.8f", position.getQuantity());
+        String quantity = ViewText.decimal(position.getQuantity(), 8);
         LiveOrder buy = refs.get(position.getStrategyId() + "|" + position.getEntryTime());
         LiveOrder sell = position.getExitTime() == null ? null
                 : refs.get(position.getStrategyId() + "|" + position.getExitTime());

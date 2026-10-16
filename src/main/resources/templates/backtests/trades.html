@@ -29,10 +29,10 @@
                 <b th:text="${entry.acceleration + '/' + entry.maximum}">0.02/0.2</b>SAR accel/max
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(run.amountPerBuy, 1, 0) + ' EUR'}">100 EUR</b>Per buy
+                <b th:text="${#numbers.formatDecimal(run.amountPerBuy, 1, 'COMMA', 0, 'POINT') + ' EUR'}">100 EUR</b>Per buy
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(run.feeRate * 100, 1, 2) + '%'}">0.20%</b>Fee per side
+                <b th:text="${#numbers.formatDecimal(run.feeRate * 100, 1, 'COMMA', 2, 'POINT') + '%'}">0.20%</b>Fee per side
             </div>
         </div>
         <p class="muted">
@@ -59,22 +59,22 @@
     <div class="card">
         <div class="stat-row">
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(trainMetrics.finalEquity, 1, 2) + ' EUR'}">1000.00 EUR</b>Final
+                <b th:text="${#numbers.formatDecimal(trainMetrics.finalEquity, 1, 'COMMA', 2, 'POINT') + ' EUR'}">1000.00 EUR</b>Final
                 equity
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(trainMetrics.totalReturnPercent, 1, 2)}">0.00</b>Return %
+                <b th:text="${#numbers.formatDecimal(trainMetrics.totalReturnPercent, 1, 'COMMA', 2, 'POINT')}">0.00</b>Return %
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(trainMetrics.maxDrawdownPercent, 1, 2)}">0.00</b>Max DD %
+                <b th:text="${#numbers.formatDecimal(trainMetrics.maxDrawdownPercent, 1, 'COMMA', 2, 'POINT')}">0.00</b>Max DD %
             </div>
             <div class="stat"><b th:text="${trainMetrics.tradeCount}">0</b>Trades</div>
             <div class="stat"><b th:text="${trainMetrics.skippedSignals}">0</b>Skipped</div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(trainMetrics.winRatePercent, 1, 1)}">0.0</b>Win %
+                <b th:text="${#numbers.formatDecimal(trainMetrics.winRatePercent, 1, 'COMMA', 1, 'POINT')}">0.0</b>Win %
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(trainMetrics.profitFactor, 1, 2)}">0.00</b>PF
+                <b th:text="${#numbers.formatDecimal(trainMetrics.profitFactor, 1, 'COMMA', 2, 'POINT')}">0.00</b>PF
             </div>
         </div>
     </div>
@@ -85,22 +85,22 @@
     <div class="card">
         <div class="stat-row">
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(validateMetrics.finalEquity, 1, 2) + ' EUR'}">1000.00 EUR</b>Final
+                <b th:text="${#numbers.formatDecimal(validateMetrics.finalEquity, 1, 'COMMA', 2, 'POINT') + ' EUR'}">1000.00 EUR</b>Final
                 equity
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(validateMetrics.totalReturnPercent, 1, 2)}">0.00</b>Return %
+                <b th:text="${#numbers.formatDecimal(validateMetrics.totalReturnPercent, 1, 'COMMA', 2, 'POINT')}">0.00</b>Return %
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(validateMetrics.maxDrawdownPercent, 1, 2)}">0.00</b>Max DD %
+                <b th:text="${#numbers.formatDecimal(validateMetrics.maxDrawdownPercent, 1, 'COMMA', 2, 'POINT')}">0.00</b>Max DD %
             </div>
             <div class="stat"><b th:text="${validateMetrics.tradeCount}">0</b>Trades</div>
             <div class="stat"><b th:text="${validateMetrics.skippedSignals}">0</b>Skipped</div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(validateMetrics.winRatePercent, 1, 1)}">0.0</b>Win %
+                <b th:text="${#numbers.formatDecimal(validateMetrics.winRatePercent, 1, 'COMMA', 1, 'POINT')}">0.0</b>Win %
             </div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(validateMetrics.profitFactor, 1, 2)}">0.00</b>PF
+                <b th:text="${#numbers.formatDecimal(validateMetrics.profitFactor, 1, 'COMMA', 2, 'POINT')}">0.00</b>PF
             </div>
         </div>
     </div>

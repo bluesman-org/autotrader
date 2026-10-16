@@ -23,13 +23,13 @@
             <div class="stat"><b th:text="${run.candleCount}">2399</b>Bars</div>
             <div class="stat"><b th:text="${run.combinationsEvaluated}">1</b>Combinations</div>
             <div class="stat"><b th:text="${#strings.replace(run.rankingMetric, '_', ' ')}">TOTAL RETURN</b>Ranking</div>
-            <div class="stat"><b th:text="${#numbers.formatDecimal(run.initialCapital, 1, 0) + ' EUR'}">1000 EUR</b>Initial capital</div>
-            <div class="stat"><b th:text="${#numbers.formatDecimal(run.amountPerBuy, 1, 0) + ' EUR'}">100 EUR</b>Per buy</div>
-            <div class="stat"><b th:text="${#numbers.formatDecimal(run.feeRate * 100, 1, 2) + '%'}">0.20%</b>Fee per side</div>
+            <div class="stat"><b th:text="${#numbers.formatDecimal(run.initialCapital, 1, 'COMMA', 0, 'POINT') + ' EUR'}">1000 EUR</b>Initial capital</div>
+            <div class="stat"><b th:text="${#numbers.formatDecimal(run.amountPerBuy, 1, 'COMMA', 0, 'POINT') + ' EUR'}">100 EUR</b>Per buy</div>
+            <div class="stat"><b th:text="${#numbers.formatDecimal(run.feeRate * 100, 1, 'COMMA', 2, 'POINT') + '%'}">0.20%</b>Fee per side</div>
             <div class="stat"><b th:text="${run.warmUpCandles}">200</b>Warm-up</div>
             <div class="stat">
-                <b th:text="${#numbers.formatDecimal(run.trainRatio * 100, 1, 0) + '% / '
-                        + #numbers.formatDecimal((1 - run.trainRatio) * 100, 1, 0) + '%'}">70% / 30%</b>Train / validate
+                <b th:text="${#numbers.formatDecimal(run.trainRatio * 100, 1, 'COMMA', 0, 'POINT') + '% / '
+                        + #numbers.formatDecimal((1 - run.trainRatio) * 100, 1, 'COMMA', 0, 'POINT') + '%'}">70% / 30%</b>Train / validate
             </div>
         </div>
     </div>
@@ -86,16 +86,16 @@
                 </td>
                 <td th:text="${entry.train.tradeCount}">0</td>
                 <td th:text="${entry.train.skippedSignals != null ? entry.train.skippedSignals : '—'}">0</td>
-                <td th:text="${#numbers.formatDecimal(entry.train.totalReturnPercent, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(entry.train.maxDrawdownPercent, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(entry.train.winRatePercent, 1, 1)}">0.0</td>
-                <td th:text="${#numbers.formatDecimal(entry.train.profitFactor, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.totalReturnPercent, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.maxDrawdownPercent, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.winRatePercent, 1, 'COMMA', 1, 'POINT')}">0.0</td>
+                <td th:text="${#numbers.formatDecimal(entry.train.profitFactor, 1, 'COMMA', 2, 'POINT')}">0.00</td>
                 <td th:text="${entry.validate.tradeCount}">0</td>
                 <td th:text="${entry.validate.skippedSignals != null ? entry.validate.skippedSignals : '—'}">0</td>
-                <td th:text="${#numbers.formatDecimal(entry.validate.totalReturnPercent, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(entry.validate.maxDrawdownPercent, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(entry.validate.winRatePercent, 1, 1)}">0.0</td>
-                <td th:text="${#numbers.formatDecimal(entry.validate.profitFactor, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.totalReturnPercent, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.maxDrawdownPercent, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.winRatePercent, 1, 'COMMA', 1, 'POINT')}">0.0</td>
+                <td th:text="${#numbers.formatDecimal(entry.validate.profitFactor, 1, 'COMMA', 2, 'POINT')}">0.00</td>
             </tr>
             </tbody>
         </table>

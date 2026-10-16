@@ -25,15 +25,15 @@
             <tr th:each="trade, iter : ${trades}">
                 <td th:text="${iter.count}">1</td>
                 <td th:text="${trade.entryTimeText}">2026-09-01 10:00</td>
-                <td th:text="${#numbers.formatDecimal(trade.entryPrice, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryPrice, 1, 'COMMA', 2, 'POINT')}">0.00</td>
                 <td th:text="${trade.exitTimeText}">2026-09-02 10:00</td>
-                <td th:text="${#numbers.formatDecimal(trade.exitPrice, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.quantity, 1, 8)}">0.00000000</td>
-                <td th:text="${#numbers.formatDecimal(trade.amount, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.entryFee, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.exitFee, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.profit, 1, 2)}">0.00</td>
-                <td th:text="${#numbers.formatDecimal(trade.profit / trade.amount * 100, 1, 2)}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitPrice, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.quantity, 1, 'COMMA', 8, 'POINT')}">0.00000000</td>
+                <td th:text="${#numbers.formatDecimal(trade.amount, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.entryFee, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.exitFee, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+                <td th:text="${#numbers.formatDecimal(trade.profit / trade.amount * 100, 1, 'COMMA', 2, 'POINT')}">0.00</td>
             </tr>
             </tbody>
         </table>
