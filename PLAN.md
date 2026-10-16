@@ -5,14 +5,16 @@ indicators. TradingView is kept as a legacy fallback (Phase 6 records that decis
 file with every PR**: check off completed steps, add new follow-ups, and keep the status line
 current.
 
-**Status (2026-10-14):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
+**Status (2026-10-16):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
 default, replay gate); the live series is anchored to a fixed start (PR #27) and the anchored
 design is verified live — restarts kept the same anchor and the engine's trades matched a
 from-anchor backtest exactly. The `.junie/` design notes live under `docs/` (PR #29) and 406
-responses come from the advice (PR #28). Quality gates hardened (PR #13). TradingView is kept as a
-legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: the live/history UI
-(item 10), then the small live-run trial of the engine.
+responses come from the advice (PR #28). Quality gates hardened (PR #13). Item 10's UI landed: the
+live page (PRs #30, #33) and both tabs of the account history page — the engine's round trips
+(PR #34) and the Bitvavo ledger (PR #36) — with a hotfix for the history range queries (PR #35).
+TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
+next: the small live-run trial of the engine.
 
 ## Objective
 
@@ -153,7 +155,7 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
    webhook path as built (plus the proposed pieces that were never implemented) and
    `docs/archive/user-system-design.md` keeps the unimplemented user-system design with a status
    header (PR #29)
-10. ⬜ UI improvements, starting from watching the live engine (spec agreed 2026-10-14; mock-ups to be
+10. ✅ UI improvements, starting from watching the live engine (spec agreed 2026-10-14; mock-ups to be
     approved first): a **live page** (`/ui/live`) with one card per strategy — running/connected and
     dry-run/real badges, the last error, how fresh the last evaluated candle is, the open position
     with the result "if closed now" after both fees, realised totals, the last few orders, Start/Stop
@@ -167,8 +169,8 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
     column sorts on the underlying value, never the displayed text — and Bitvavo's account ledger:
     per-order rows with the order's total fee (`feePaid`) expanding into their fills, plus the raw
     transactions (deposits, withdrawals, staking, rebates) — modelled on the broker-app screenshots
-    shared 2026-10-13. The live page landed (PR #30, its "last refresh" indicator in PR #33) and the
-    engine-trades tab of the history page landed (PR #34); the Bitvavo ledger tab follows
+    shared 2026-10-13. The live page landed (PR #30, its "last refresh" indicator in PR #33), the
+    engine-trades tab (PR #34) and the Bitvavo ledger tab (PR #36) ✅
 11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
     was closed
@@ -216,6 +218,10 @@ legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: 
     builds the repository proxies and materializes each query document without a database, so a
     malformed query now fails in CI; executing the queries against real documents still needs a
     Mongo service in the coverage workflow (flagged after PR #34)
+23. ⬜ Keep the ledger's reads flat as the account grows: the ledger's ten-second refresh re-reads
+    the market's whole buy/sell history from the account's start on every tick, because the
+    average-cost walk needs it; a long-lived account makes that many pages. Cache the walk and
+    extend it with the new fills, or bound the look-back with a stated rule (flagged in PR #36)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

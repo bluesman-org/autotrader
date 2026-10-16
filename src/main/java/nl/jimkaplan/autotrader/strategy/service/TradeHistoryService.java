@@ -21,16 +21,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
-import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.YearMonth;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.TextStyle;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -57,33 +50,14 @@ public class TradeHistoryService {
     private static final String DASH = "—";
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final List<Integer> PAGE_SIZES = List.of(5, 10, 25, 50);
-    private static final String DEFAULT_PERIOD = "7d";
     private static final String DEFAULT_SORT = "entry";
     private static final List<String> HUES = List.of("hue-0", "hue-1", "hue-2", "hue-3", "hue-4", "hue-5");
-    private static final List<Option> TIME_OPTIONS = List.of(
-            new Option("1h", "Last hour"),
-            new Option("2h", "Last 2 hours"),
-            new Option("4h", "Last 4 hours"),
-            new Option("8h", "Last 8 hours"),
-            new Option("24h", "Last 24 hours"),
-            new Option("3d", "Last 3 days"),
-            new Option("7d", "Last 7 days"),
-            new Option("14d", "Last 14 days"),
-            new Option("30d", "Last 30 days"),
-            new Option("last-week", "Last week (Mon–Sun)"),
-            new Option("last-two-weeks", "Last two weeks"),
-            new Option("last-month", "Last month"),
-            new Option("ytd", "Year to date"),
-            new Option("last-year", "Last year"));
-    private static final Map<String, String> PERIOD_LABELS = TIME_OPTIONS.stream()
-            .collect(Collectors.toMap(Option::value, Option::label));
 
     private final LivePositionRepository positions;
     private final LiveOrderRepository orders;
-    private final ZoneId zone;
+    private final DisplayZone display;
+    private final HistoryPeriods periods;
     private final Clock clock;
-    private final DateTimeFormatter minuteFormat;
-    private final DateTimeFormatter dayFormat;
 
     @Autowired
     public TradeHistoryService(LivePositionRepository positions, LiveOrderRepository orders,
@@ -97,17 +71,16 @@ public class TradeHistoryService {
                         Clock clock) {
         this.positions = positions;
         this.orders = orders;
-        this.zone = zone;
+        this.display = new DisplayZone(zone);
+        this.periods = new HistoryPeriods(display, clock);
         this.clock = clock;
-        this.minuteFormat = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH).withZone(zone);
-        this.dayFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH).withZone(zone);
     }
 
     /**
      * @return The label of the zone times are shown in, e.g. {@code CEST} or {@code UTC}
      */
     public String zoneLabel() {
-        return zone.getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
+        return display.label();
     }
 
     /**
@@ -117,7 +90,8 @@ public class TradeHistoryService {
      * @return The model
      */
     public TradeHistoryView view(TradeHistoryRequest request) {
-        Range range = range(request);
+        HistoryPeriods.Range range = periods.resolve(request.getPeriod(), request.getFromDate(),
+                request.getFromTime(), request.getToDate(), request.getToTime());
         // The filter bar's strategy options come from the whole period, so narrowing by one
         // strategy never collapses the list to that strategy.
         List<LivePosition> periodRows = positions
@@ -147,95 +121,6 @@ public class TradeHistoryService {
         return new TradeHistoryView(rows, headers(request, sortKey, ascending, size),
                 filters(request, periodRows), pager(request, fromIndex, toIndex, sorted.size(), page, pages, size),
                 totals(sorted, range), daily(sorted));
-    }
-
-    // ---- the period -------------------------------------------------------------------------
-
-    private record Range(long fromMillis, long toMillis, String label) {
-    }
-
-    private Range range(TradeHistoryRequest request) {
-        if (hasCustomRange(request)) {
-            LocalDate fromDate = parseDate(request.getFromDate());
-            LocalDate toDate = parseDate(request.getToDate());
-            if (fromDate != null && toDate != null) {
-                LocalTime fromTime = parseTime(request.getFromTime());
-                LocalDateTime from = fromDate.atTime(fromTime == null ? LocalTime.MIN : fromTime);
-                // An explicit minute means "through the end of that minute"; a date alone means the
-                // whole day.
-                LocalTime toTime = parseTime(request.getToTime());
-                long toMillis = toTime == null ? endOfDay(toDate)
-                        : toDate.atTime(toTime).plusMinutes(1).atZone(zone).toInstant().toEpochMilli() - 1;
-                LocalDateTime labelTo = toDate.atTime(toTime == null ? LocalTime.of(23, 59) : toTime);
-                String label = minuteFormat.format(from.atZone(zone).toInstant()) + " → "
-                        + minuteFormat.format(labelTo.atZone(zone).toInstant());
-                return new Range(from.atZone(zone).toInstant().toEpochMilli(), toMillis, label);
-            }
-        }
-        String preset = request.getPeriod() == null || !PERIOD_LABELS.containsKey(request.getPeriod())
-                ? DEFAULT_PERIOD : request.getPeriod();
-        Instant now = clock.instant();
-        LocalDate today = now.atZone(zone).toLocalDate();
-        long from = switch (preset) {
-            case "1h" -> now.minusSeconds(3600).toEpochMilli();
-            case "2h" -> now.minusSeconds(2 * 3600).toEpochMilli();
-            case "4h" -> now.minusSeconds(4 * 3600).toEpochMilli();
-            case "8h" -> now.minusSeconds(8 * 3600).toEpochMilli();
-            case "24h" -> now.minusSeconds(24 * 3600).toEpochMilli();
-            case "3d" -> now.minusSeconds(3 * 86400).toEpochMilli();
-            case "14d" -> now.minusSeconds(14 * 86400).toEpochMilli();
-            case "30d" -> now.minusSeconds(30 * 86400).toEpochMilli();
-            case "last-week" -> weekStart(today).minusWeeks(1).atStartOfDay(zone).toInstant().toEpochMilli();
-            case "last-two-weeks" -> weekStart(today).minusWeeks(2).atStartOfDay(zone).toInstant().toEpochMilli();
-            case "last-month" -> YearMonth.from(today).minusMonths(1).atDay(1)
-                    .atStartOfDay(zone).toInstant().toEpochMilli();
-            case "ytd" -> today.withDayOfYear(1).atStartOfDay(zone).toInstant().toEpochMilli();
-            case "last-year" -> today.withDayOfYear(1).minusYears(1)
-                    .atStartOfDay(zone).toInstant().toEpochMilli();
-            default -> now.minusSeconds(7 * 86400).toEpochMilli();
-        };
-        long to = switch (preset) {
-            case "last-week", "last-two-weeks" -> endOfDay(weekStart(today).minusDays(1));
-            case "last-month" -> endOfDay(YearMonth.from(today).minusMonths(1).atEndOfMonth());
-            case "last-year" -> endOfDay(YearMonth.of(today.getYear() - 1, 12).atEndOfMonth());
-            default -> now.toEpochMilli();
-        };
-        return new Range(from, to, PERIOD_LABELS.get(preset));
-    }
-
-    private LocalDate weekStart(LocalDate day) {
-        return day.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-    }
-
-    private long endOfDay(LocalDate day) {
-        return day.atTime(LocalTime.MAX).atZone(zone).toInstant().toEpochMilli();
-    }
-
-    private static boolean hasCustomRange(TradeHistoryRequest request) {
-        return notBlank(request.getFromDate()) || notBlank(request.getToDate());
-    }
-
-    private static LocalDate parseDate(String value) {
-        if (!notBlank(value)) {
-            return null;
-        }
-        try {
-            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
-        } catch (RuntimeException e) {
-            return null;
-        }
-    }
-
-    private static LocalTime parseTime(String value) {
-        if (!notBlank(value)) {
-            return null;
-        }
-        try {
-            return LocalTime.parse(value.length() <= 2 ? value + ":00" : value,
-                    DateTimeFormatter.ofPattern("H:mm"));
-        } catch (RuntimeException e) {
-            return null;
-        }
     }
 
     // ---- filtering, sorting, paging ---------------------------------------------------------
@@ -308,9 +193,9 @@ public class TradeHistoryService {
         String hue = HUES.get(Math.floorMod(Objects.hashCode(position.getStrategyId()), HUES.size()));
         return new TradeRowView(number, shortId(position.getStrategyId()), "schip " + hue, hue,
                 dry ? "DRY RUN" : "REAL", dry ? "dry" : "real",
-                minuteFormat.format(Instant.ofEpochMilli(position.getEntryTime())),
+                display.minute(Instant.ofEpochMilli(position.getEntryTime())),
                 position.getExitTime() == null ? DASH
-                        : minuteFormat.format(Instant.ofEpochMilli(position.getExitTime())),
+                        : display.minute(Instant.ofEpochMilli(position.getExitTime())),
                 euro(position.getEntryPrice()) + " → "
                         + (position.getExitPrice() == null ? DASH : euro(position.getExitPrice())),
                 String.format(Locale.ENGLISH, "%.8f", position.getQuantity()),
@@ -333,11 +218,11 @@ public class TradeHistoryService {
         String references = position.isDryRun() ? "none — dry run (simulated)"
                 : "buy " + shortRef(buy) + " · sell " + shortRef(sell);
         return new DetailsView(
-                minuteFormat.format(Instant.ofEpochMilli(position.getEntryTime())) + " · " + quantity + " "
+                display.minute(Instant.ofEpochMilli(position.getEntryTime())) + " · " + quantity + " "
                         + asset + " @ " + euro(position.getEntryPrice()),
                 "fee " + boughtFee,
                 position.getExitTime() == null ? DASH
-                        : minuteFormat.format(Instant.ofEpochMilli(position.getExitTime())) + " · " + quantity
+                        : display.minute(Instant.ofEpochMilli(position.getExitTime())) + " · " + quantity
                         + " " + asset + " @ " + (position.getExitPrice() == null ? DASH
                         : euro(position.getExitPrice())),
                 "fee " + soldFee,
@@ -372,13 +257,12 @@ public class TradeHistoryService {
                 && strategies.stream().noneMatch(option -> option.value().equals(request.getStrategy()))) {
             strategies.add(new Option(request.getStrategy(), shortId(request.getStrategy())));
         }
-        boolean custom = hasCustomRange(request);
-        String preset = request.getPeriod() != null && PERIOD_LABELS.containsKey(request.getPeriod())
-                ? request.getPeriod() : DEFAULT_PERIOD;
+        boolean custom = HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate());
+        String preset = HistoryPeriods.preset(request.getPeriod());
         return new FiltersView(request.getStrategy(), request.getType(), request.getResult(),
                 custom ? "" : preset,
                 request.getFromDate(), request.getFromTime(), request.getToDate(), request.getToTime(),
-                strategies, TIME_OPTIONS);
+                strategies, HistoryPeriods.OPTIONS);
     }
 
     private PagerView pager(TradeHistoryRequest request, int fromIndex, int toIndex, int total, int page,
@@ -394,7 +278,7 @@ public class TradeHistoryService {
                 prev, next, sizes);
     }
 
-    private TotalsView totals(List<LivePosition> rows, Range range) {
+    private TotalsView totals(List<LivePosition> rows, HistoryPeriods.Range range) {
         double total = rows.stream().mapToDouble(TradeHistoryService::profit).sum();
         long wins = rows.stream().filter(position -> profit(position) >= 0).count();
         String winRate = rows.isEmpty() ? DASH : Math.round(100.0 * wins / rows.size()) + "%";
@@ -407,7 +291,7 @@ public class TradeHistoryService {
             if (position.isDryRun() || position.getExitTime() == null) {
                 continue;
             }
-            LocalDate day = Instant.ofEpochMilli(position.getExitTime()).atZone(zone).toLocalDate();
+            LocalDate day = Instant.ofEpochMilli(position.getExitTime()).atZone(display.zone()).toLocalDate();
             double[] accumulator = byDay.computeIfAbsent(day, key -> new double[2]);
             accumulator[0] += profit(position);
             accumulator[1] += 1;
@@ -417,7 +301,7 @@ public class TradeHistoryService {
         for (Map.Entry<LocalDate, double[]> entry : byDay.entrySet()) {
             double dayTotal = entry.getValue()[0];
             cumulative += dayTotal;
-            daily.add(new DailyView(dayFormat.format(entry.getKey()), (int) entry.getValue()[1],
+            daily.add(new DailyView(display.day(entry.getKey()), (int) entry.getValue()[1],
                     signed(dayTotal), dayTotal >= 0 ? "pos" : "neg",
                     signed(cumulative), cumulative >= 0 ? "pos" : "neg"));
         }
@@ -431,7 +315,7 @@ public class TradeHistoryService {
         add(params, "strategy", request.getStrategy());
         add(params, "type", request.getType());
         add(params, "result", request.getResult());
-        if (!hasCustomRange(request)) {
+        if (!HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate())) {
             add(params, "period", request.getPeriod());
         }
         add(params, "fromDate", request.getFromDate());

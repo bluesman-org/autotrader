@@ -18,10 +18,6 @@ import org.springframework.web.client.RestClientException;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.TextStyle;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -50,10 +46,7 @@ public class LiveViewService {
     private final LiveOrderRepository liveOrderRepository;
     private final BitvavoApiClient bitvavoApiClient;
 
-    private final ZoneId zone;
-    private final DateTimeFormatter minuteFormat;
-    private final DateTimeFormatter secondFormat;
-    private final DateTimeFormatter clockFormat;
+    private final DisplayZone display;
 
     public LiveViewService(LiveStrategyService liveStrategyService,
                            LivePositionRepository livePositionRepository,
@@ -64,17 +57,14 @@ public class LiveViewService {
         this.livePositionRepository = livePositionRepository;
         this.liveOrderRepository = liveOrderRepository;
         this.bitvavoApiClient = bitvavoApiClient;
-        this.zone = timeZone == null || timeZone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(timeZone);
-        this.minuteFormat = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH).withZone(zone);
-        this.secondFormat = DateTimeFormatter.ofPattern("d MMM HH:mm:ss", Locale.ENGLISH).withZone(zone);
-        this.clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH).withZone(zone);
+        this.display = new DisplayZone(timeZone);
     }
 
     /**
      * @return The label of the zone times are shown in, e.g. {@code CEST} or {@code UTC}
      */
     public String zoneLabel() {
-        return zone.getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
+        return display.label();
     }
 
     /**
@@ -82,7 +72,7 @@ public class LiveViewService {
      *         refresh script so the "last refresh" stamp renders in the same zone and format
      */
     public String zoneId() {
-        return zone.getId();
+        return display.id();
     }
 
     /**
@@ -135,14 +125,14 @@ public class LiveViewService {
     private String statusLine(LiveStrategy strategy, boolean running, String lastError, Instant now) {
         StringBuilder line = new StringBuilder();
         if (running && strategy.getLastStartedTime() != null) {
-            line.append("Running since ").append(minuteFormat.format(strategy.getLastStartedTime()))
+            line.append("Running since ").append(display.minute(strategy.getLastStartedTime()))
                     .append(" (").append(age(strategy.getLastStartedTime(), now)).append(')');
         } else if (strategy.getCreatedTime() != null) {
-            line.append("Created ").append(minuteFormat.format(strategy.getCreatedTime()));
+            line.append("Created ").append(display.minute(strategy.getCreatedTime()));
         }
         if (strategy.getLastEvaluatedOpenTime() > 0) {
             Instant evaluated = Instant.ofEpochMilli(strategy.getLastEvaluatedOpenTime());
-            line.append(" · Last evaluated ").append(secondFormat.format(evaluated));
+            line.append(" · Last evaluated ").append(display.second(evaluated));
             if (running) {
                 line.append(" (").append(age(evaluated.plusMillis(intervalMillis(strategy)), now)).append(" ago)");
             }
@@ -202,7 +192,7 @@ public class LiveViewService {
         String asset = strategy.getMarket().split("-")[0];
         return new LiveCardView.PositionView(
                 String.format(Locale.ENGLISH, "LONG %.8f %s", position.getQuantity(), asset),
-                minuteFormat.format(filled) + " · " + euro(position.getEntryPrice()),
+                display.minute(filled) + " · " + euro(position.getEntryPrice()),
                 buyText, sellText, valueText, ifClosedText, ifClosedClass,
                 position.getEntryFee() == null ? DASH : euro(position.getEntryFee()));
     }
@@ -275,18 +265,13 @@ public class LiveViewService {
         boolean opened = "BUY".equals(order.getSide()) && openPosition != null
                 && openPosition.getEntryTime() == order.getSignalOpenTime();
         return new LiveCardView.OrderView(
-                order.getCreatedTime() == null ? DASH : clockText(order.getCreatedTime()),
+                order.getCreatedTime() == null ? DASH : display.clockText(order.getCreatedTime()),
                 order.getSide(),
                 order.getQuantity() == null ? DASH : String.format(Locale.ENGLISH, "%.8f", order.getQuantity()),
                 order.getPrice() == null ? DASH : euro(order.getPrice()), badge, badgeClass,
                 result == null ? DASH : signed(result),
                 result == null ? "" : (result >= 0 ? "pos" : "neg"),
                 opened);
-    }
-
-    private String clockText(Instant when) {
-        return when.atZone(zone).toLocalDate().equals(LocalDate.now(zone))
-                ? clockFormat.format(when) : minuteFormat.format(when);
     }
 
     private long intervalMillis(LiveStrategy strategy) {
