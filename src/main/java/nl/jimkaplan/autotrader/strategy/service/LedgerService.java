@@ -380,19 +380,21 @@ public class LedgerService {
         if (order.getFills() == null) {
             return List.of();
         }
+        List<FillFee> fees = fillFees(order, market);
         List<FillRowView> rows = new ArrayList<>();
-        for (Fills fill : order.getFills()) {
+        for (int i = 0; i < order.getFills().size(); i++) {
+            Fills fill = order.getFills().get(i);
+            FillFee fee = fees.get(i);
             double amount = number(fill.getAmount());
             double price = number(fill.getPrice());
             // Only a fee charged in the quote currency moves the cash; a coin fee leaves the euro
-            // flow alone and shows in the fee column instead. A missing currency follows the same
-            // rule as the row's, so an order's cash always equals the sum of its fills'.
-            double cashFee = quote(market).equals(currency(fill.getFeeCurrency(), market))
-                    ? number(fill.getFee()) : 0;
+            // flow alone and shows in the fee column instead. The fee is the same one the row shows,
+            // so an order's cash equals the sum of its fills'.
+            double cashFee = quote(market).equals(fee.currency()) ? fee.amount() : 0;
             double netCash = isBuy(order) ? -(amount * price + cashFee) : amount * price - cashFee;
             rows.add(new FillRowView(
                     fill.getTimestamp() == null ? DASH : display.clockSecond(fill.getTimestamp()),
-                    amount8(amount), euro(price), fee(fill, market),
+                    amount8(amount), euro(price), feeText(fee),
                     Boolean.TRUE.equals(fill.getTaker()) ? "taker" : "maker",
                     signed(netCash), signClass(netCash)));
         }
@@ -561,11 +563,13 @@ public class LedgerService {
             return Double.NaN;
         }
         String market = order.getMarket() == null ? DEFAULT_MARKET : order.getMarket();
+        List<FillFee> fees = fillFees(order, market);
         double result = 0;
-        for (Fills fill : order.getFills()) {
+        for (int i = 0; i < order.getFills().size(); i++) {
+            Fills fill = order.getFills().get(i);
             double amount = number(fill.getAmount());
             double price = number(fill.getPrice());
-            double fee = quoteFee(fill, market);
+            double fee = quoteValue(fees.get(i), market, price);
             if (buy) {
                 result += currentBid * amount - (price * amount + fee);
             } else {
@@ -635,14 +639,14 @@ public class LedgerService {
         if (fill.getFeesAmount() == null) {
             return 0;
         }
-        if (quote.equals(fill.getFeesCurrency())) {
+        // A missing currency follows the same rule as the orders side: it counts as the quote.
+        String currency = fill.getFeesCurrency() == null || fill.getFeesCurrency().isBlank()
+                ? quote : fill.getFeesCurrency();
+        if (quote.equals(currency)) {
             return fill.getFeesAmount().doubleValue();
         }
         double price = fill.getPriceAmount() == null ? 0 : fill.getPriceAmount().doubleValue();
-        if (base.equals(fill.getFeesCurrency())) {
-            return fill.getFeesAmount().doubleValue() * price;
-        }
-        return 0;
+        return base.equals(currency) ? fill.getFeesAmount().doubleValue() * price : 0;
     }
 
     /**
@@ -657,17 +661,68 @@ public class LedgerService {
     }
 
     /**
-     * @param fill   The fill
-     * @param market The market
-     * @return The fill's fee in the currency it was charged in, euro amounts at their own precision
+     * A fill's fee with the currency it was charged in.
      */
-    private static String fee(Fills fill, String market) {
-        if (fill.getFee() == null) {
-            return DASH;
+    private record FillFee(double amount, String currency) {
+    }
+
+    /**
+     * The fees of an order's fills, in fill order. The exchange reports every fill's own fee and
+     * currency; an order whose fills report no fee at all splits its order-level {@code feePaid}
+     * over them by amount, so the row, its fill lines, the cash flow, the P&amp;L and the period
+     * total always tell one story.
+     */
+    private static List<FillFee> fillFees(OrderResponse order, String market) {
+        if (order.getFills() == null || order.getFills().isEmpty()) {
+            return List.of();
         }
-        String currency = currency(fill.getFeeCurrency(), market);
-        return EUR.equals(currency) ? euro4(fill.getFee().doubleValue())
-                : money(fill.getFee().doubleValue(), currency);
+        boolean reported = order.getFills().stream()
+                .anyMatch(fill -> fill.getFee() != null && fill.getFee().signum() != 0);
+        if (reported) {
+            return order.getFills().stream()
+                    .map(fill -> new FillFee(number(fill.getFee()), currency(fill.getFeeCurrency(), market)))
+                    .toList();
+        }
+        double orderFee = number(order.getFeePaid());
+        double total = order.getFills().stream().mapToDouble(fill -> number(fill.getAmount())).sum();
+        String currency = currency(order.getFeeCurrency(), market);
+        if (orderFee == 0 || total <= 0) {
+            return order.getFills().stream().map(fill -> new FillFee(0, currency)).toList();
+        }
+        List<FillFee> fees = new ArrayList<>();
+        double allocated = 0;
+        for (int i = 0; i < order.getFills().size(); i++) {
+            // The last fill takes the remainder, so the shares add up to the order's fee exactly.
+            double share = i == order.getFills().size() - 1 ? orderFee - allocated
+                    : orderFee * number(order.getFills().get(i).getAmount()) / total;
+            allocated += share;
+            fees.add(new FillFee(share, currency));
+        }
+        return fees;
+    }
+
+    /**
+     * @param fee    The fill's fee
+     * @param market The market
+     * @param price  The fill's price
+     * @return What the fee costs in the market's quote currency — a coin fee is worth its own price
+     *         — which is what the P&amp;L, expressed in euro, needs
+     */
+    private static double quoteValue(FillFee fee, String market, double price) {
+        if (quote(market).equals(fee.currency())) {
+            return fee.amount();
+        }
+        return base(market).equals(fee.currency()) ? fee.amount() * price : 0;
+    }
+
+    /**
+     * @param fee The fill's fee
+     * @return The fee in its own currency — euro amounts at their own precision — or a dash when
+     *         the fill paid nothing
+     */
+    private static String feeText(FillFee fee) {
+        return fee.amount() == 0 ? DASH
+                : EUR.equals(fee.currency()) ? euro4(fee.amount()) : money(fee.amount(), fee.currency());
     }
 
     /**
@@ -730,23 +785,21 @@ public class LedgerService {
      * @return One part per currency the order's fee was charged in
      */
     private static List<Fee> feeParts(OrderResponse order, String market) {
-        if (order.getFills() != null) {
-            Map<String, Double> byCurrency = new LinkedHashMap<>();
-            for (Fills fill : order.getFills()) {
-                if (fill.getFee() != null && fill.getFee().signum() != 0) {
-                    byCurrency.merge(currency(fill.getFeeCurrency(), market),
-                            fill.getFee().doubleValue(), Double::sum);
-                }
-            }
-            if (!byCurrency.isEmpty()) {
-                return byCurrency.entrySet().stream()
-                        .map(part -> new Fee(part.getKey(), part.getValue())).toList();
+        Map<String, Double> byCurrency = new LinkedHashMap<>();
+        for (FillFee fee : fillFees(order, market)) {
+            if (fee.amount() != 0) {
+                byCurrency.merge(fee.currency(), fee.amount(), Double::sum);
             }
         }
-        if (order.getFeePaid() == null || order.getFeePaid().signum() == 0) {
+        if (!byCurrency.isEmpty()) {
+            return byCurrency.entrySet().stream()
+                    .map(part -> new Fee(part.getKey(), part.getValue())).toList();
+        }
+        double feePaid = number(order.getFeePaid());
+        if (feePaid == 0) {
             return List.of();
         }
-        return List.of(new Fee(currency(order.getFeeCurrency(), market), order.getFeePaid().doubleValue()));
+        return List.of(new Fee(currency(order.getFeeCurrency(), market), feePaid));
     }
 
     /**
@@ -773,20 +826,6 @@ public class LedgerService {
         }
         others.forEach((currency, amount) -> parts.add(plain(amount) + " " + currency));
         return String.join(" + ", parts);
-    }
-
-    private double quoteFee(Fills fill, String market) {
-        if (fill.getFee() == null) {
-            return 0;
-        }
-        if (quote(market).equals(fill.getFeeCurrency())) {
-            return fill.getFee().doubleValue();
-        }
-        double price = fill.getPrice() == null ? 0 : fill.getPrice().doubleValue();
-        if (base(market).equals(fill.getFeeCurrency())) {
-            return fill.getFee().doubleValue() * price;
-        }
-        return 0;
     }
 
     private static String statusLabel(String status) {

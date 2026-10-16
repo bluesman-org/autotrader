@@ -245,11 +245,46 @@ class LedgerServiceTest {
         assertEquals("€0.1000", missingRow.fills().get(0).feeText());
         assertEquals("−€75.10", missingRow.netCashText());
         assertEquals("−€75.10", missingRow.fills().get(0).netCashText());
-        // A fill that reports no fee of its own falls back to the order's feePaid.
+        // The fee enters the P&L too: worth €75.50 at the current bid against €75.10 paid.
+        assertEquals("+€0.40", missingRow.pnlText());
+        // A fill that reports no fee of its own takes its share of the order's feePaid, so the row,
+        // its fill lines, the cash and the P&L all tell one story.
         LedgerView.OrderRowView fallbackRow = view.rows().get(0);
         assertEquals("€0.20", fallbackRow.feeText());
         assertEquals("−€75.20", fallbackRow.netCashText());
+        assertEquals("€0.2000", fallbackRow.fills().get(0).feeText());
+        assertEquals("−€75.20", fallbackRow.fills().get(0).netCashText());
+        assertEquals("+€0.30", fallbackRow.pnlText());
         assertEquals("€0.30", view.totals().feesText());
+    }
+
+    @Test
+    void fillsWithoutAnyFeeShowNoFeeAtAll() {
+        accountReadableWithoutOrders();
+        OrderResponse noFee = baseOrder("2026-10-14T10:00:00Z", "buy", "market");
+        noFee.setStatus("filled");
+        noFee.setAmount(new BigDecimal("0.001"));
+        noFee.setFilledAmount(new BigDecimal("0.001"));
+        noFee.setFilledAmountQuote(new BigDecimal("75.00"));
+        Fills withoutFee = fill("2026-10-14T10:00:00Z", "0.001", "75000", "0");
+        withoutFee.setFee(null);
+        noFee.setFills(List.of(withoutFee));
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{noFee});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        LedgerView.OrderRowView row = view.rows().get(0);
+        assertEquals("—", row.feeText());
+        assertEquals("—", row.fills().get(0).feeText());
+        assertEquals("−€75.00", row.netCashText());
+        assertEquals("−€75.00", row.fills().get(0).netCashText());
+        assertEquals("€0.00", view.totals().feesText());
     }
 
     @Test
