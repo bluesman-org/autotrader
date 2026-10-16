@@ -586,16 +586,21 @@ tr.detail details[open] summary {
     flex: 0 0 auto;
 }
 
-/* A multi-value filter group: compact chips that wrap inside the filter bar. */
+/* A multi-value filter group: compact chips that wrap inside the filter bar. The group may shrink
+   below its preferred width on a narrow viewport; the chips wrap instead. */
 .filters .f-checks {
-    min-width: 320px;
+    min-width: 0;
     flex: 1 1 320px;
 }
 
-.checks-inline {
+.filters .checks-inline {
     display: flex;
     flex-wrap: wrap;
     gap: 4px 14px;
     margin-top: 8px;
+}
+
+/* The chip labels set their own size: the filter bar's label rule is smaller. */
+.filters .checks-inline label {
     font-size: 0.9rem;
 }
