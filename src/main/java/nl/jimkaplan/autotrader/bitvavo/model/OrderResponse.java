@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -12,7 +13,8 @@ import java.util.UUID;
  * Based on the <a href="https://docs.bitvavo.com/docs/rest-api/get-orders">Bitvavo API documentation</a>.
  *
  * <p>Only the fields the live engine reconciles against are modelled: the order's identity, when it
- * was created, its status and side, and the amounts and fee it filled with.</p>
+ * was created, its status and side, and the amounts and fee it filled with. The ledger tab also
+ * reads the order type, price, remaining amount and the individual fills.</p>
  */
 @Data
 @NoArgsConstructor
@@ -41,6 +43,11 @@ public class OrderResponse {
     private Long created;
 
     /**
+     * The Unix timestamp in milliseconds when the order was last updated.
+     */
+    private Long updated;
+
+    /**
      * The status of the order, e.g. "filled", "partiallyFilled", "canceled" or "expired".
      */
     private String status;
@@ -49,6 +56,23 @@ public class OrderResponse {
      * The side of the order: "buy" or "sell".
      */
     private String side;
+
+    /**
+     * The type of the order: "market", "limit", "stopLoss", "stopLossLimit", "takeProfit" or
+     * "takeProfitLimit".
+     */
+    private String orderType;
+
+    /**
+     * The quantity of the base currency remaining after the fills are subtracted from
+     * {@code amount}. Not returned when the order was placed with {@code amountQuote}.
+     */
+    private BigDecimal amountRemaining;
+
+    /**
+     * The limit price of the order, when it has one.
+     */
+    private BigDecimal price;
 
     /**
      * The quantity of the base currency to buy or sell. Not returned when the order was placed with
@@ -76,4 +100,14 @@ public class OrderResponse {
      * The amount paid to Bitvavo to process the order. This value is negative for rebates.
      */
     private BigDecimal feePaid;
+
+    /**
+     * The currency the fee is paid in.
+     */
+    private String feeCurrency;
+
+    /**
+     * The individual fills the order was executed in.
+     */
+    private List<Fills> fills;
 }

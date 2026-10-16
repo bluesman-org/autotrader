@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.controller;
 
+import nl.jimkaplan.autotrader.strategy.service.LedgerService;
 import nl.jimkaplan.autotrader.strategy.service.TradeHistoryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,9 @@ class HistoryUiControllerRenderTest {
 
     @MockitoBean
     private TradeHistoryService tradeHistoryService;
+
+    @MockitoBean
+    private LedgerService ledgerService;
 
     @Test
     void pageRendersTheTableTotalsAndDailyBreakdown() throws Exception {
@@ -116,5 +120,61 @@ class HistoryUiControllerRenderTest {
         TradeHistoryView.TotalsView totals = new TradeHistoryView.TotalsView(0, "+€0.00", "pos", "—",
                 "Last 7 days");
         return new TradeHistoryView(List.of(), List.of(), filters, pager, totals, List.of());
+    }
+
+    @Test
+    void theLedgerTabRendersPricesTotalsAndOrders() throws Exception {
+        when(ledgerService.view(any())).thenReturn(ledgerView());
+        when(ledgerService.zoneLabel()).thenReturn("UTC");
+
+        mockMvc.perform(get("/ui/history").param("tab", "ledger"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Account history")))
+                .andExpect(content().string(containsString("Prices and P&amp;L values refresh every 10 seconds")))
+                .andExpect(content().string(containsString("Bitvavo ledger")))
+                .andExpect(content().string(containsString("Current price of")))
+                .andExpect(content().string(containsString("BTC-EUR")))
+                .andExpect(content().string(containsString("€75,600.00")))
+                .andExpect(content().string(containsString("€75,500.00")))
+                .andExpect(content().string(containsString("Total fees")))
+                .andExpect(content().string(containsString("€0.23")))
+                .andExpect(content().string(containsString("0.0015 BTC")))
+                .andExpect(content().string(containsString("Balance after")))
+                .andExpect(content().string(containsString("counts only filled orders")))
+                .andExpect(content().string(containsString("14 Oct 09:00")))
+                .andExpect(content().string(containsString("+€0.60")))
+                .andExpect(content().string(containsString("side-sell")))
+                .andExpect(content().string(containsString("fills (1)")))
+                .andExpect(content().string(containsString("09:00:00")))
+                .andExpect(content().string(containsString("fragment=ledger")));
+    }
+
+    @Test
+    void theLedgerFragmentRendersTheContentAlone() throws Exception {
+        when(ledgerService.view(any())).thenReturn(ledgerView());
+
+        mockMvc.perform(get("/ui/history").param("tab", "ledger").param("fragment", "ledger"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Current price of")))
+                .andExpect(content().string(containsString("+€0.60")))
+                .andExpect(content().string(not(containsString("Account history"))));
+    }
+
+    private static LedgerView ledgerView() {
+        LedgerView.FillRowView fill = new LedgerView.FillRowView("09:00:00", "0.00050000", "€76,000.00",
+                "€0.0800", "taker", "+€37.92", "pos");
+        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 09:00", "SELL", "side-sell",
+                "market", "BTC-EUR", "0.00050000", "€76,000.00", "filled", "ok", "0.0015", "€0.08",
+                "+€37.92", "pos", 1, "+€0.60", "pos", List.of(fill), "");
+        LedgerView.FiltersView filters = new LedgerView.FiltersView("", "BTC-EUR", "", "", "orders",
+                "7d", "", "", "", "",
+                List.of(new TradeHistoryView.Option("BTC-EUR", "BTC-EUR")),
+                List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
+        LedgerView.TotalsView totals = new LedgerView.TotalsView("Last 7 days", 1, "€0.23", "+€0.60",
+                "pos", "+€0.35", "pos", "0.0015 BTC");
+        TradeHistoryView.PagerView pager = new TradeHistoryView.PagerView(1, 1, 1, 1, 1, 10, null, null,
+                List.of(new TradeHistoryView.SizeOption("10", "?tab=ledger&size=10", true)));
+        return new LedgerView(null, new LedgerView.PriceView("BTC-EUR", "€75,600.00", "€75,500.00"),
+                filters, totals, List.of(row), pager, false, List.of(), pager);
     }
 }

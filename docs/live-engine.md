@@ -183,6 +183,8 @@ brings the two back together:
 | `POST /api/live-strategies/{id}/stop` | Disconnect and clear `enabled` |
 | `GET /api/live-strategies/{id}/orders` | The strategy's orders, newest first |
 | `GET /ui/live` | The live page: one card per strategy, refreshed in place every 10 seconds |
+| `GET /ui/history` | The account history page's engine-trades tab: the closed round trips with filters, sorting, period totals and realised P&L by day |
+| `GET /ui/history?tab=ledger` | The account history page's Bitvavo-ledger tab: the account's orders with their fills, average-cost P&L, the raw transactions and the current prices |
 
 ## Configuration
 
@@ -199,6 +201,16 @@ autotrader:
 
 The pages show times in `autotrader.ui.time-zone` — the machine's zone when unset — and label them
 with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken for UTC.
+
+The history page's ledger tab reads the real Bitvavo account, not the engine's own records, with
+the stored Bitvavo API key — the same key the engine trades with; the deployment keeps one key for
+the account, and the ledger takes the engine's strategy's key when it names one and otherwise the
+active key with the greatest id. Without an active key the page says so instead of showing data.
+The orders come from `GET /orders` (with their fills and `feePaid`), the P&L walk and the raw
+transactions from `GET /account/history`, the balance from `GET /balance` and the prices from the
+public order book. The P&L is derived at average cost over the market's whole buy/sell history, so
+a sell inside the period knows what its inventory cost; the walk ignores deposits, so a sell of
+deposited coins shows without a result.
 
 ## Out of scope
 

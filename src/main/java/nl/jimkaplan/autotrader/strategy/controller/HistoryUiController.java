@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.controller;
 
+import nl.jimkaplan.autotrader.strategy.service.LedgerService;
 import nl.jimkaplan.autotrader.strategy.service.TradeHistoryService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -9,32 +10,49 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
- * The account history page, starting with the engine-trades tab: the closed round trips with their
- * filters, sorting and paging. Sorting, paging and applying filters swap the table in place; the
- * links carry the whole state, so a reload or a shared URL shows the same view.
+ * The account history page with its two tabs: the engine's closed round trips and the Bitvavo
+ * ledger of the account the engine trades on. Sorting, paging, filtering and switching the ledger's
+ * view swap the content in place; the links carry the whole state, so a reload or a shared URL
+ * shows the same view.
  */
 @Controller
 @RequestMapping("/ui/history")
 public class HistoryUiController {
 
     private final TradeHistoryService tradeHistoryService;
+    private final LedgerService ledgerService;
 
-    public HistoryUiController(TradeHistoryService tradeHistoryService) {
+    public HistoryUiController(TradeHistoryService tradeHistoryService, LedgerService ledgerService) {
         this.tradeHistoryService = tradeHistoryService;
+        this.ledgerService = ledgerService;
     }
 
     /**
-     * @param request  The filter, sort and paging state, bound from the query string
-     * @param fragment When present, render only the table (the in-place swap)
-     * @param model    The view model
-     * @return The page, or the table fragment
+     * @param request       The engine-trades tab's filter, sort and paging state
+     * @param ledgerRequest The ledger tab's filter, view and paging state
+     * @param tab           {@code ledger} selects the ledger tab; anything else the engine trades
+     * @param fragment      When present, render only the tab's content (the in-place swap)
+     * @param model         The view model
+     * @return The page, or the tab's content fragment
      */
     @GetMapping
     public String page(@ModelAttribute TradeHistoryRequest request,
+                       @ModelAttribute LedgerRequest ledgerRequest,
+                       @RequestParam(required = false) String tab,
                        @RequestParam(required = false) String fragment,
                        Model model) {
-        model.addAttribute("history", tradeHistoryService.view(request));
-        model.addAttribute("timeZoneLabel", tradeHistoryService.zoneLabel());
-        return fragment != null ? "history/trades" : "history/index";
+        boolean ledger = "ledger".equalsIgnoreCase(tab);
+        model.addAttribute("ledgerTab", ledger);
+        if (ledger) {
+            model.addAttribute("ledger", ledgerService.view(ledgerRequest));
+            model.addAttribute("timeZoneLabel", ledgerService.zoneLabel());
+        } else {
+            model.addAttribute("history", tradeHistoryService.view(request));
+            model.addAttribute("timeZoneLabel", tradeHistoryService.zoneLabel());
+        }
+        if (fragment != null) {
+            return ledger ? "history/ledger" : "history/trades";
+        }
+        return "history/index";
     }
 }

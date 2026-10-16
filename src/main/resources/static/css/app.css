@@ -509,3 +509,72 @@ tr.detail details[open] summary {
         animation: none;
     }
 }
+
+/* ---- the ledger tab ---- */
+
+/* Sides: a buy came in green, a sell went out red — the same reading as the live page. */
+.schip.side-buy {
+    background: #eafaf1;
+    color: #1e8449;
+}
+
+.schip.side-sell {
+    background: #fdecea;
+    color: #b03a2e;
+}
+
+.badge.bad {
+    background: #f2f3f5;
+    color: #7f8c8d;
+}
+
+.price-now {
+    display: flex;
+    gap: 26px;
+    flex-wrap: wrap;
+    align-items: baseline;
+}
+
+.pn-label {
+    color: #566573;
+}
+
+.pn-value {
+    font-weight: 600;
+}
+
+.pn-buy {
+    color: #1e8449;
+}
+
+.pn-sell {
+    color: #b03a2e;
+}
+
+/* The fills of an expanded order sit inside its row, one size down. */
+.fills-table {
+    table-layout: fixed;
+    width: 760px;
+    font-size: 0.85rem;
+    border-collapse: collapse;
+}
+
+.fills-table th {
+    text-align: right;
+    padding: 5px 9px;
+    background: #f0f4f7;
+    color: #2c3e50;
+    font-weight: 600;
+    cursor: default;
+}
+
+.fills-table th.left,
+.fills-table td.left {
+    text-align: left;
+}
+
+.fills-table td {
+    padding: 5px 9px;
+    text-align: right;
+    border-bottom: 1px solid #e3e7ea;
+}
