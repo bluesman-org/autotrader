@@ -75,6 +75,11 @@ public class OrderResponse {
     private BigDecimal price;
 
     /**
+     * The price at which a stop or take-profit order triggers.
+     */
+    private BigDecimal triggerPrice;
+
+    /**
      * The quantity of the base currency to buy or sell. Not returned when the order was placed with
      * {@code amountQuote}.
      */

@@ -61,6 +61,7 @@
                 <select name="status">
                     <option value="" th:selected="${#strings.isEmpty(ledger.filters.status)}">All statuses</option>
                     <option value="open" th:selected="${ledger.filters.status == 'open'}">Open</option>
+                    <option value="awaitingTrigger" th:selected="${ledger.filters.status == 'awaitingTrigger'}">Awaiting trigger</option>
                     <option value="partiallyFilled" th:selected="${ledger.filters.status == 'partiallyFilled'}">Partially filled</option>
                     <option value="filled" th:selected="${ledger.filters.status == 'filled'}">Filled</option>
                     <option value="canceled" th:selected="${ledger.filters.status == 'canceled'}">Canceled</option>
@@ -141,8 +142,12 @@
                             <td class="left" th:text="${row.marketText}">BTC-EUR</td>
                             <td th:text="${row.amountText}">0.00150000</td>
                             <td th:text="${row.avgPriceText}">€73,500.00</td>
-                            <td class="left"><span class="badge" th:classappend="${row.statusClass}"
-                                                   th:text="${row.statusLabel}">open</span></td>
+                            <td class="left">
+                                <span class="badge" th:classappend="${row.statusClass}"
+                                      th:text="${row.statusLabel}">open</span>
+                                <div class="muted" style="font-size:0.8rem" th:if="${not #strings.isEmpty(row.triggerText)}"
+                                     th:text="${row.triggerText}">trigger €73.162,00 · limit €75.364,00</div>
+                            </td>
                             <td th:text="${row.balanceAfterText}">0.00214403</td>
                             <td th:text="${row.feeText}">€0.12</td>
                             <td th:classappend="${row.netCashClass}" th:text="${row.netCashText}">−€59.16</td>

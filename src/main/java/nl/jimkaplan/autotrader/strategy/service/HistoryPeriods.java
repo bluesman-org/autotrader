@@ -61,11 +61,33 @@ final class HistoryPeriods {
     record Range(long fromMillis, long toMillis, String label) {
     }
 
+    /** The start time the custom range shows when its field is empty. */
+    static final String SHOWN_FROM_TIME = "00:00";
+
+    /** The end time the custom range shows when its field is empty. */
+    static final String SHOWN_TO_TIME = "23:59";
+
     /**
      * @return Whether the request carries a custom range instead of a preset
      */
     static boolean hasCustomRange(String fromDate, String toDate) {
         return notBlank(fromDate) || notBlank(toDate);
+    }
+
+    /**
+     * @param value The submitted start time, possibly empty
+     * @return The submitted time, or the whole day's default the form shows
+     */
+    static String shownFromTime(String value) {
+        return notBlank(value) ? value : SHOWN_FROM_TIME;
+    }
+
+    /**
+     * @param value The submitted end time, possibly empty
+     * @return The submitted time, or the whole day's default the form shows
+     */
+    static String shownToTime(String value) {
+        return notBlank(value) ? value : SHOWN_TO_TIME;
     }
 
     /**
@@ -88,18 +110,32 @@ final class HistoryPeriods {
         if (hasCustomRange(fromDate, toDate)) {
             LocalDate from = parseDate(fromDate);
             LocalDate to = parseDate(toDate);
-            if (from != null && to != null) {
+            boolean unparseable = (notBlank(fromDate) && from == null) || (notBlank(toDate) && to == null)
+                    || (notBlank(fromTime) && parseTime(fromTime) == null)
+                    || (notBlank(toTime) && parseTime(toTime) == null);
+            if (!unparseable) {
+                // Each side stands on its own: an empty start date means "everything before the
+                // end", an empty end date means "through today", and an empty time means the whole
+                // day (an explicit minute runs through the end of that minute). Anything that is
+                // present but unreadable — a date or a time — falls back to the preset below rather
+                // than widening the range silently, and so does a pair that runs backwards.
+                LocalDate end = to == null ? clock.instant().atZone(display.zone()).toLocalDate() : to;
                 LocalTime fromClock = parseTime(fromTime);
-                LocalDateTime start = from.atTime(fromClock == null ? LocalTime.MIN : fromClock);
-                // An explicit minute means "through the end of that minute"; a date alone means the
-                // whole day.
                 LocalTime toClock = parseTime(toTime);
-                long toMillis = toClock == null ? endOfDay(to)
-                        : to.atTime(toClock).plusMinutes(1).atZone(display.zone()).toInstant().toEpochMilli() - 1;
-                LocalDateTime labelTo = to.atTime(toClock == null ? LocalTime.of(23, 59) : toClock);
-                String label = display.minute(start.atZone(display.zone()).toInstant()) + " → "
-                        + display.minute(labelTo.atZone(display.zone()).toInstant());
-                return new Range(start.atZone(display.zone()).toInstant().toEpochMilli(), toMillis, label);
+                LocalDateTime start = from == null ? null : from.atTime(fromClock == null ? LocalTime.MIN : fromClock);
+                long fromMillis = start == null ? 0 : start.atZone(display.zone()).toInstant().toEpochMilli();
+                long toMillis = toClock == null ? endOfDay(end)
+                        : end.atTime(toClock).plusMinutes(1).atZone(display.zone()).toInstant().toEpochMilli() - 1;
+                // A range that runs backwards (a start in the future, swapped dates) falls back to
+                // the preset rather than asking the database or the exchange for an impossible pair;
+                // the REST layer rejects the same combination.
+                if (fromMillis <= toMillis) {
+                    LocalDateTime labelTo = end.atTime(toClock == null ? LocalTime.of(23, 59) : toClock);
+                    String label = (start == null ? "the start"
+                            : display.minute(start.atZone(display.zone()).toInstant()))
+                            + " → " + display.minute(labelTo.atZone(display.zone()).toInstant());
+                    return new Range(fromMillis, toMillis, label);
+                }
             }
         }
         String resolved = preset(period);

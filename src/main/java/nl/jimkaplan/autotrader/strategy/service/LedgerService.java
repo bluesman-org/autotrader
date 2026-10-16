@@ -349,8 +349,9 @@ public class LedgerService {
         double quoteAmount = number(order.getFilledAmountQuote());
         double cashFee = cashFee(order, market);
         double result = result(order, basis, currentBid);
-        String avgPrice = amount > 0 ? euro(quoteAmount / amount)
-                : order.getPrice() == null ? DASH : euro(order.getPrice().doubleValue());
+        // The average of the fills, so it is a dash until something filled; what a waiting order
+        // carries is named under its status instead.
+        String avgPrice = amount > 0 ? euro(quoteAmount / amount) : DASH;
         double netCash = buy ? -(quoteAmount + cashFee) : quoteAmount - cashFee;
         return new OrderRowView(number,
                 order.getCreated() == null ? DASH : display.minute(Instant.ofEpochMilli(order.getCreated())),
@@ -359,7 +360,7 @@ public class LedgerService {
                 order.getMarket() == null ? market : order.getMarket(),
                 order.getAmount() == null ? amountText(order.getAmountQuote(), market) : amount8(number(order.getAmount())),
                 avgPrice, statusLabel(order.getStatus()), statusClass(order.getStatus()),
-                balance.after(order), fee(order, market),
+                triggerText(order), balance.after(order), fee(order, market),
                 amount > 0 || quoteAmount > 0 ? signed(netCash) : DASH,
                 amount > 0 || quoteAmount > 0 ? signClass(netCash) : "",
                 order.getFills() == null ? 0 : order.getFills().size(),
@@ -434,7 +435,8 @@ public class LedgerService {
                 raw ? RAW_VIEW : DEFAULT_VIEW,
                 HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate()) ? ""
                         : HistoryPeriods.preset(request.getPeriod()),
-                request.getFromDate(), request.getFromTime(), request.getToDate(), request.getToTime(),
+                request.getFromDate(), HistoryPeriods.shownFromTime(request.getFromTime()),
+                request.getToDate(), HistoryPeriods.shownToTime(request.getToTime()),
                 marketOptions(market), HistoryPeriods.OPTIONS);
     }
 
@@ -591,9 +593,13 @@ public class LedgerService {
         if (status == null || status.isBlank()) {
             return true;
         }
-        // The API calls an open order "new"; the filter spells it out.
-        String wanted = "open".equalsIgnoreCase(status) ? "new" : status;
-        return wanted.equalsIgnoreCase(order.getStatus());
+        // The API calls a resting order "new" and a stop or take-profit waiting for its trigger
+        // "awaitingTrigger"; "Open" is both, and the other choices name one status each.
+        if ("open".equalsIgnoreCase(status)) {
+            return "new".equalsIgnoreCase(order.getStatus())
+                    || "awaitingtrigger".equalsIgnoreCase(order.getStatus());
+        }
+        return status.equalsIgnoreCase(order.getStatus());
     }
 
     private static boolean isBuy(OrderResponse order) {
@@ -705,6 +711,34 @@ public class LedgerService {
             return fee.amount();
         }
         return base(market).equals(fee.currency()) ? fee.amount() * price : 0;
+    }
+
+    /**
+     * @param order The order
+     * @return For a resting or trigger-waiting order: its trigger price and, when the order type
+     *         carries one, its limit price; empty once it traded or when it carries neither
+     */
+    private static String triggerText(OrderResponse order) {
+        boolean waiting = "awaitingtrigger".equalsIgnoreCase(order.getStatus())
+                || "new".equalsIgnoreCase(order.getStatus());
+        if (!waiting) {
+            return "";
+        }
+        boolean hasTrigger = order.getTriggerPrice() != null && order.getTriggerPrice().signum() != 0;
+        boolean hasPrice = order.getPrice() != null && order.getPrice().signum() != 0;
+        if (!hasTrigger && !hasPrice) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        if (hasTrigger) {
+            parts.add("trigger " + euro(order.getTriggerPrice().doubleValue()));
+        }
+        if (hasPrice) {
+            boolean limit = order.getOrderType() != null
+                    && order.getOrderType().toLowerCase(Locale.ENGLISH).endsWith("limit");
+            parts.add((limit ? "limit " : "price ") + euro(order.getPrice().doubleValue()));
+        }
+        return String.join(" · ", parts);
     }
 
     /**
@@ -827,6 +861,7 @@ public class LedgerService {
         return switch (status.toLowerCase(Locale.ENGLISH)) {
             case "new" -> "open";
             case "partiallyfilled" -> "partially filled";
+            case "awaitingtrigger" -> "awaiting trigger";
             default -> status.toLowerCase(Locale.ENGLISH);
         };
     }
