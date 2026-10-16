@@ -117,13 +117,16 @@ public class PasswordResetService {
                 // Mint and store the token here, on the request thread, so the cooldown sees it
                 // straight away; only the mail itself leaves on the worker, where a slow SMTP
                 // server makes no difference to how long this answer takes.
+                Optional<PasswordResetToken> previous = tokens.findById(user.getId());
                 String body = message(user, mint(user));
                 try {
-                    mailExecutor.execute(() -> sendQuietly(user, body));
+                    mailExecutor.execute(() -> sendQuietly(user, body, previous));
                 } catch (RejectedExecutionException e) {
-                    // The worker's queue is full: answer as usual, and let the next request after
-                    // the cooldown mint a fresh link. An overload must not answer differently for
-                    // an address that is the account's.
+                    // The worker's queue is full: the token just minted was never mailed, so the
+                    // link already in the reader's inbox takes its place again. An overload must
+                    // answer like any other request, and must not leave them without a working
+                    // link.
+                    restore(user, previous);
                     log.warn("The recovery mail for {} was not queued: the worker is busy",
                             user.getUsername(), e);
                 }
@@ -132,12 +135,26 @@ public class PasswordResetService {
         return SENT_MESSAGE;
     }
 
-    private void sendQuietly(AppUser user, String body) {
+    private void sendQuietly(AppUser user, String body, Optional<PasswordResetToken> previous) {
         try {
             mail.send(user.getEmail(), RECOVERY_SUBJECT, body);
         } catch (RuntimeException e) {
+            // The new link never left either: put the previous one back, so a mail server that is
+            // down does not cost the reader the link they already hold.
+            restore(user, previous);
             log.warn("The recovery mail for account {} could not be sent", user.getUsername(), e);
         }
+    }
+
+    /**
+     * Put the token that was stored before this request back (or clear the account's token when
+     * there was none), because the replacement never reached anybody.
+     *
+     * @param user     The account
+     * @param previous What was stored before
+     */
+    private void restore(AppUser user, Optional<PasswordResetToken> previous) {
+        previous.ifPresentOrElse(tokens::save, () -> tokens.deleteById(user.getId()));
     }
 
     /**

@@ -180,6 +180,48 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void aRefusedSubmissionLeavesThePreviousLinkAlive() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        service.request("jim@example.com");
+        verify(mail).send(any(), any(), body.capture());
+        String first = tokenOf(body.getValue());
+
+        // Three minutes later the cooldown has passed, but the worker refuses the new send: the link
+        // already in the inbox must keep working, and the unsent token must not replace it.
+        PasswordResetService refusing = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, command -> {
+                    throw new RejectedExecutionException("queue full");
+                }, "https://at.bluris.nl/autotrader", 30,
+                Clock.fixed(NOW.plus(Duration.ofMinutes(3)), ZoneOffset.UTC));
+
+        assertEquals(PasswordResetService.SENT_MESSAGE, refusing.request("jim@example.com"));
+
+        assertTrue(service.valid(first));
+        verify(mail, org.mockito.Mockito.times(1)).send(any(), any(), any());
+    }
+
+    @Test
+    void aFailedSendKeepsThePreviousLinkAlive() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        service.request("jim@example.com");
+        verify(mail).send(any(), any(), body.capture());
+        String first = tokenOf(body.getValue());
+
+        // The mail server is down for the next request: the link that already arrived stays live.
+        doThrow(new MailSendException("smtp down")).when(mail).send(any(), any(), any());
+        PasswordResetService failing = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, Runnable::run, "https://at.bluris.nl/autotrader", 30,
+                Clock.fixed(NOW.plus(Duration.ofMinutes(3)), ZoneOffset.UTC));
+        failing.request("jim@example.com");
+
+        assertTrue(service.valid(first));
+    }
+
+    @Test
     void aUsedTokenIsSpent() {
         AppUser user = account();
         when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
