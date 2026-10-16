@@ -412,6 +412,7 @@ table.orders td, table.orders th {
     display: flex;
     gap: 16px;
     align-items: center;
+    flex-wrap: wrap;
     margin-top: 10px;
     font-size: 0.9rem;
     color: var(--muted);
