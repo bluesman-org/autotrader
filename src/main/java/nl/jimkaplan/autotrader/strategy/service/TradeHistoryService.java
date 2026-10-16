@@ -257,12 +257,15 @@ public class TradeHistoryService {
                 && strategies.stream().noneMatch(option -> option.value().equals(request.getStrategy()))) {
             strategies.add(new Option(request.getStrategy(), shortId(request.getStrategy())));
         }
-        boolean custom = HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate());
+        boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
+                request.getToDate());
         String preset = HistoryPeriods.preset(request.getPeriod());
         return new FiltersView(request.getStrategy(), request.getType(), request.getResult(),
                 custom ? "" : preset,
-                request.getFromDate(), HistoryPeriods.shownFromTime(request.getFromTime()),
-                request.getToDate(), HistoryPeriods.shownToTime(request.getToTime()),
+                custom ? request.getFromDate() : null,
+                HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
+                custom ? request.getToDate() : null,
+                HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
                 strategies, HistoryPeriods.OPTIONS);
     }
 
@@ -316,13 +319,15 @@ public class TradeHistoryService {
         add(params, "strategy", request.getStrategy());
         add(params, "type", request.getType());
         add(params, "result", request.getResult());
-        if (!HistoryPeriods.hasCustomRange(request.getFromDate(), request.getToDate())) {
+        if (HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
+                request.getToDate())) {
+            add(params, "fromDate", request.getFromDate());
+            add(params, "fromTime", request.getFromTime());
+            add(params, "toDate", request.getToDate());
+            add(params, "toTime", request.getToTime());
+        } else {
             add(params, "period", request.getPeriod());
         }
-        add(params, "fromDate", request.getFromDate());
-        add(params, "fromTime", request.getFromTime());
-        add(params, "toDate", request.getToDate());
-        add(params, "toTime", request.getToTime());
         if (sort != null) {
             params.put("sort", sort);
         }

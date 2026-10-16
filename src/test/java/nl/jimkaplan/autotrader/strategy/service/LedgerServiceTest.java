@@ -344,6 +344,25 @@ class LedgerServiceTest {
     }
 
     @Test
+    void aChosenPresetWinsOverLingeringCustomDates() {
+        accountReadable();
+
+        // Picking a preset while the form still carries a start date shows and applies the preset.
+        LedgerRequest request = new LedgerRequest();
+        request.setPeriod("ytd");
+        request.setFromDate("2026-09-22");
+        LedgerView view = service.view(request);
+
+        assertEquals("Year to date", view.totals().periodText());
+        assertEquals(null, view.filters().fromDate());
+        assertEquals("ytd", view.filters().period());
+        ArgumentCaptor<String> orders = ArgumentCaptor.forClass(String.class);
+        verify(client).get(orders.capture(), eq(OrderResponse[].class), anyString(), anyString());
+        assertEquals(String.valueOf(Instant.parse("2026-01-01T00:00:00Z").toEpochMilli()),
+                queryParam(orders.getValue(), "start"));
+    }
+
+    @Test
     void anEmptyStartDateMeansEverythingBeforeTheEnd() {
         accountReadable();
 
