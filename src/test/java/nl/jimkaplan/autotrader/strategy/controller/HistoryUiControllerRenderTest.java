@@ -154,7 +154,22 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("value=\"awaitingTrigger\" checked=\"checked\"")))
                 .andExpect(content().string(containsString("trigger €73.162,00 · limit €75.364,00")))
                 .andExpect(content().string(containsString("09:00:00")))
+                // The Today button sets the range's end to now, and the caption carries the P&L rules.
+                .andExpect(content().string(containsString("data-today")))
+                .andExpect(content().string(containsString(">Today</button>")))
+                .andExpect(content().string(containsString("the sell that closes it carries it")))
+                .andExpect(content().string(containsString("shows only when the range ends today")))
                 .andExpect(content().string(containsString("wireHistoryContent('ledger', 10)")));
+    }
+
+    @Test
+    void theLedgerExplainsWhyUnrealisedIsEmpty() throws Exception {
+        when(ledgerService.view(any())).thenReturn(ledgerView(
+                "Unrealised needs today as the end date — end the range with today to see it.", "—"));
+
+        mockMvc.perform(get("/ui/history").param("tab", "ledger"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("end the range with today to see it")));
     }
 
     @Test
@@ -169,6 +184,10 @@ class HistoryUiControllerRenderTest {
     }
 
     private static LedgerView ledgerView() {
+        return ledgerView("", "+€1,28");
+    }
+
+    private static LedgerView ledgerView(String unrealisedHint, String unrealisedText) {
         LedgerView.FillRowView fill = new LedgerView.FillRowView("09:00:00", "0.00050000", "€76.000,00",
                 "€0,0800", "taker", "+€37,92", "pos");
         LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 09:00", "SELL", "side-sell",
@@ -183,7 +202,7 @@ class HistoryUiControllerRenderTest {
                 List.of(new TradeHistoryView.Option("awaitingTrigger", "Awaiting trigger")),
                 List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
         LedgerView.TotalsView totals = new LedgerView.TotalsView("Last 7 days", 1, "€0,23", "+€0,60",
-                "pos", "+€0,35", "pos", "0,0015 BTC");
+                "pos", unrealisedText, "pos", "0,0015 BTC", unrealisedHint);
         TradeHistoryView.PagerView pager = new TradeHistoryView.PagerView(1, 1, 1, 1, 1, 10, null, null,
                 List.of(new TradeHistoryView.SizeOption("10", "?tab=ledger&size=10", true)));
         return new LedgerView(null, new LedgerView.PriceView("BTC-EUR", "€75.600,00", "€75.500,00"),

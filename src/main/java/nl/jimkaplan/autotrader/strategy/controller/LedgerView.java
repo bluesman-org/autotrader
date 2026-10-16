@@ -85,13 +85,14 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param feesText         The fees the orders paid
      * @param realisedText     What the period's sells realised
      * @param realisedClass    {@code pos}/{@code neg}
-     * @param unrealisedText   What the period's buys are worth against the current price
+     * @param unrealisedText   The open position's result at the current price, or a dash
      * @param unrealisedClass  {@code pos}/{@code neg}
      * @param balanceText      The account's current balance of the market's base currency
+     * @param unrealisedHint   Why the unrealised figure is a dash, when it is; empty otherwise
      */
     public record TotalsView(String periodText, int orders, String feesText, String realisedText,
                              String realisedClass, String unrealisedText, String unrealisedClass,
-                             String balanceText) {
+                             String balanceText, String unrealisedHint) {
     }
 
     /**

@@ -49,6 +49,33 @@
         period.value = fromUrl && period.querySelector('option[value="' + fromUrl + '"]') ? fromUrl : fallback;
     });
 
+    // The Today button beside the end date sets the range's end to now — the date to today, the time
+    // to the current clock — and the Time select to "Custom range", because those fields are now the
+    // range. It is the one-click way to a range that ends today, which is what the unrealised figure
+    // in the summary needs.
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('button[data-today]');
+        if (!button || !button.form) {
+            return;
+        }
+        event.preventDefault();
+        var form = button.form;
+        var two = function (value) { return (value < 10 ? '0' : '') + value; };
+        var now = new Date();
+        var date = form.querySelector('input[name="toDate"]');
+        var time = form.querySelector('input[name="toTime"]');
+        var period = form.querySelector('select[name="period"]');
+        if (date) {
+            date.value = now.getFullYear() + '-' + two(now.getMonth() + 1) + '-' + two(now.getDate());
+        }
+        if (time) {
+            time.value = two(now.getHours()) + ':' + two(now.getMinutes());
+        }
+        if (period) {
+            period.value = '';
+        }
+    });
+
     // A chosen preset replaces a custom range the form still carries: the date fields leave both the
     // request and the form, so the page shows the range it applies.
     function dropLingeringDates(form, params) {
