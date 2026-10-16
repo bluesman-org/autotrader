@@ -61,8 +61,10 @@ class LiveUiControllerRenderTest {
                 .andExpect(content().string(containsString("DRY RUN")))
                 .andExpect(content().string(containsString("ui/live/cards")))
                 .andExpect(content().string(containsString("If closed now (after fees)")))
-                .andExpect(content().string(containsString("−€0.19")))
-                .andExpect(content().string(containsString("Realised since start: 36 round trips · −€14.25")))
+                // The parameter line reads in the page's number style, like the fixture expects.
+                .andExpect(content().string(containsString("SAR 0,02/0,2")))
+                .andExpect(content().string(containsString("−€0,19")))
+                .andExpect(content().string(containsString("Realised since start: 36 round trips · −€14,25")))
                 .andExpect(content().string(containsString("opened position")))
                 .andExpect(content().string(containsString("Skipped — candle unavailable")))
                 .andExpect(content().string(containsString(">Stop<")));
@@ -117,27 +119,27 @@ class LiveUiControllerRenderTest {
 
     private static LiveCardView card(boolean running) {
         LiveCardView.PositionView position = running
-                ? new LiveCardView.PositionView("LONG 0.00134403 BTC", "14 Oct 14:45 · €74,403.00",
-                "€74,578.00", "€74,562.00", "€100.21", "−€0.19", "neg", "€0.20")
+                ? new LiveCardView.PositionView("LONG 0,00134403 BTC", "14 Oct 14:45 · €74.403,00",
+                "€74.578,00", "€74.562,00", "€100,21", "−€0,19", "neg", "€0,20")
                 : null;
         List<LiveCardView.OrderView> orders = running
-                ? List.of(new LiveCardView.OrderView("14:46", "SELL", "0.00134403", "€74,412.00",
-                        "DRY RUN", "dry", "+€0.12", "pos", false),
-                new LiveCardView.OrderView("14:45", "BUY", "0.00134403", "€74,403.00",
+                ? List.of(new LiveCardView.OrderView("14:46", "SELL", "0.00134403", "€74.412,00",
+                        "DRY RUN", "dry", "+€0,12", "pos", false),
+                new LiveCardView.OrderView("14:45", "BUY", "0.00134403", "€74.403,00",
                         "DRY RUN", "dry", "—", "", true),
                 new LiveCardView.OrderView("14:48", "SKIP", "—", "—",
                         "Skipped — candle unavailable", "", "—", "", false))
                 : List.of();
         return new LiveCardView("6ace5dbf7b4e0870883058cb", "BTC-EUR", "1m", running, running, true,
-                "MACD 12/26/9 · SAR 0.02/0.2 · entry: MACD bullish crossover · exit: SAR bearish "
+                "MACD 12/26/9 · SAR 0,02/0,2 · entry: MACD bullish crossover · exit: SAR bearish "
                         + "crossover · €100 per buy · warm-up 60 bars",
                 running
                         ? "Running since 13 Oct 16:35 (1 d 22 h) · Last evaluated 14 Oct 14:48:00 "
                         + "(12 s ago) · Last error: —"
                         : "Created 14 Oct 09:20 · Last evaluated 14 Oct 12:20:00 · Last error: —",
                 position,
-                "Realised since start: 36 round trips · −€14.25 · 8 wins / 28 losses · avg win "
-                        + "+€0.35 · avg loss −€0.61",
+                "Realised since start: 36 round trips · −€14,25 · 8 wins / 28 losses · avg win "
+                        + "+€0.35 · avg loss −€0,61",
                 orders);
     }
 }

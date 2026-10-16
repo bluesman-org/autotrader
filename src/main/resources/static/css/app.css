@@ -578,3 +578,10 @@ tr.detail details[open] summary {
     text-align: right;
     border-bottom: 1px solid #e3e7ea;
 }
+
+/* The rows-per-page select keeps its own width: it sits in a row of pager text and links, and the
+   global select rule would stretch it across the line. */
+.pager select {
+    width: 80px;
+    flex: 0 0 auto;
+}

@@ -63,12 +63,12 @@ class TradeHistoryServiceTest {
         assertEquals("15 Oct 09:00", view.rows().get(1).entryText());
         assertEquals("DRY RUN", view.rows().get(0).typeLabel());
         assertEquals("REAL", view.rows().get(1).typeLabel());
-        assertEquals("+€0.12", view.rows().get(0).resultText());
+        assertEquals("+€0,12", view.rows().get(0).resultText());
         assertEquals("pos", view.rows().get(0).resultClass());
-        assertEquals("−€0.11", view.rows().get(1).resultText());
+        assertEquals("−€0,11", view.rows().get(1).resultText());
 
         assertEquals(2, view.totals().roundTrips());
-        assertEquals("+€0.01", view.totals().realisedText());
+        assertEquals("+€0,01", view.totals().realisedText());
         assertEquals("50%", view.totals().winRateText());
         assertEquals("Last 7 days", view.totals().periodText());
         assertEquals(1, view.pager().page());
@@ -97,7 +97,7 @@ class TradeHistoryServiceTest {
         TradeHistoryView view = service.view(dryLosses);
 
         assertEquals(1, view.rows().size());
-        assertEquals("−€0.11", view.rows().get(0).resultText());
+        assertEquals("−€0,11", view.rows().get(0).resultText());
         assertEquals(1, view.totals().roundTrips());
         assertEquals(0, view.totals().winRateText().equals("50%") ? 1 : 0);
         assertEquals("0%", view.totals().winRateText());
@@ -115,9 +115,9 @@ class TradeHistoryServiceTest {
         request.setDir("asc");
         TradeHistoryView view = service.view(request);
 
-        assertEquals("−€0.11", view.rows().get(0).resultText());
-        assertEquals("+€0.12", view.rows().get(1).resultText());
-        assertEquals("+€0.53", view.rows().get(2).resultText());
+        assertEquals("−€0,11", view.rows().get(0).resultText());
+        assertEquals("+€0,12", view.rows().get(1).resultText());
+        assertEquals("+€0,53", view.rows().get(2).resultText());
         TradeHistoryView.HeaderView result = view.headers().stream()
                 .filter(header -> header.label().equals("Result")).findFirst().orElseThrow();
         assertTrue(result.active());
@@ -248,10 +248,10 @@ class TradeHistoryServiceTest {
 
         TradeHistoryView.DetailsView details = view.rows().get(0).details();
         assertEquals("buy 8f14e2c7… · sell c92b71a0…", details.orderRefsText());
-        assertEquals("fee €0.20", details.boughtFeeText());
-        assertEquals("fee €0.20", details.soldFeeText());
+        assertEquals("fee €0,20", details.boughtFeeText());
+        assertEquals("fee €0,20", details.soldFeeText());
         assertEquals("1 min 0 s", details.heldText());
-        assertTrue(details.boughtText().contains("0.00134403 BTC @ €74,403.00"));
+        assertTrue(details.boughtText().contains("0,00134403 BTC @ €74.403,00"));
     }
 
     @Test
@@ -275,10 +275,10 @@ class TradeHistoryServiceTest {
         assertEquals(2, view.daily().size());
         assertEquals("13 Oct", view.daily().get(0).dayText());
         assertEquals(1, view.daily().get(0).roundTrips());
-        assertEquals("−€0.11", view.daily().get(0).realisedText());
-        assertEquals("−€0.11", view.daily().get(0).cumulativeText());
+        assertEquals("−€0,11", view.daily().get(0).realisedText());
+        assertEquals("−€0,11", view.daily().get(0).cumulativeText());
         assertEquals("14 Oct", view.daily().get(1).dayText());
-        assertEquals("+€0.01", view.daily().get(1).cumulativeText());
+        assertEquals("+€0,01", view.daily().get(1).cumulativeText());
         assertEquals("pos", view.daily().get(1).cumulativeClass());
     }
 
@@ -341,8 +341,8 @@ class TradeHistoryServiceTest {
         TradeHistoryView.TradeRowView row = view.rows().get(0);
         assertEquals("short", row.strategyId());
         assertEquals("—", row.exitText());
-        assertEquals("€100.00 → —", row.priceText());
-        assertEquals("+€0.00", row.resultText());
+        assertEquals("€100,00 → —", row.priceText());
+        assertEquals("+€0,00", row.resultText());
         assertEquals("fee —", row.details().boughtFeeText());
         assertEquals("—", row.details().soldText());
         assertEquals("fee —", row.details().soldFeeText());

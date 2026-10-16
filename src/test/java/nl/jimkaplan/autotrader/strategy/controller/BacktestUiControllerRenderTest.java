@@ -80,7 +80,12 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 // A profit factor with no losses prints as the infinity symbol, not a broken cell
                 .andExpect(content().string(containsString("∞")))
-                .andExpect(content().string(containsString("0.64")))
+                // The percentages follow the page's number style: a comma decimal, and the grouped
+                // initial capital proves the thousands separator is not the en_US one.
+                .andExpect(content().string(containsString("0,64")))
+                .andExpect(content().string(containsString("1.000 EUR")))
+                // The SAR parameter readout follows it too, without rounding a non-standard step.
+                .andExpect(content().string(containsString("0,02/0,2")))
                 // The skipped column renders the stored count, and the em dash when it is absent
                 .andExpect(content().string(containsString("<th>Skipped</th>")))
                 .andExpect(content().string(containsString("<td>2</td>")))

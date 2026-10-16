@@ -79,10 +79,10 @@ class LedgerServiceTest {
         assertEquals("BUY", open.side());
         assertEquals("side-buy", open.sideClass());
         assertEquals("limit", open.typeText());
-        assertEquals("0.00200000", open.amountText());
-        assertEquals("€73,000.00", open.avgPriceText());
+        assertEquals("0,00200000", open.amountText());
+        assertEquals("€73.000,00", open.avgPriceText());
         assertEquals("open", open.statusLabel());
-        assertEquals("0.0015", open.balanceAfterText());
+        assertEquals("0,0015", open.balanceAfterText());
         assertEquals("—", open.feeText());
         assertEquals("0", String.valueOf(open.fillsCount()));
         assertEquals("—", open.pnlText());
@@ -90,38 +90,38 @@ class LedgerServiceTest {
         LedgerView.OrderRowView sell = view.rows().get(1);
         assertEquals("SELL", sell.side());
         assertEquals("side-sell", sell.sideClass());
-        // Sold 0.0005 of an inventory that cost €74,650.00 on average (two buys of €74.15 and
-        // €75.15) at €76,000.00, minus the €0.08 fee.
-        assertEquals("+€0.60", sell.pnlText());
+        // Sold 0,0005 of an inventory that cost €74.650,00 on average (two buys of €74,15 and
+        // €75,15) at €76.000,00, minus the €0,08 fee.
+        assertEquals("+€0,60", sell.pnlText());
         assertEquals("pos", sell.pnlClass());
-        assertEquals("+€37.92", sell.netCashText());
-        assertEquals("€0.08", sell.feeText());
-        assertEquals("0.0015", sell.balanceAfterText());
+        assertEquals("+€37,92", sell.netCashText());
+        assertEquals("€0,08", sell.feeText());
+        assertEquals("0,0015", sell.balanceAfterText());
         assertEquals(1, sell.fills().size());
         assertEquals("09:00:00", sell.fills().get(0).timeText());
-        assertEquals("0.00050000", sell.fills().get(0).amountText());
-        assertEquals("€76,000.00", sell.fills().get(0).priceText());
-        assertEquals("€0.0800", sell.fills().get(0).feeText());
+        assertEquals("0,00050000", sell.fills().get(0).amountText());
+        assertEquals("€76.000,00", sell.fills().get(0).priceText());
+        assertEquals("€0,0800", sell.fills().get(0).feeText());
         assertEquals("taker", sell.fills().get(0).makerTakerText());
-        assertEquals("+€37.92", sell.fills().get(0).netCashText());
+        assertEquals("+€37,92", sell.fills().get(0).netCashText());
 
         LedgerView.OrderRowView buy = view.rows().get(2);
         // Worth €75.50 at the current bid; €75.15 was paid for it.
-        assertEquals("+€0.35", buy.pnlText());
-        assertEquals("−€75.15", buy.netCashText());
-        assertEquals("0.002", buy.balanceAfterText());
+        assertEquals("+€0,35", buy.pnlText());
+        assertEquals("−€75,15", buy.netCashText());
+        assertEquals("0,002", buy.balanceAfterText());
         assertEquals("filled", buy.statusLabel());
         assertEquals("ok", buy.statusClass());
 
         assertEquals("3", String.valueOf(view.totals().orders()));
-        assertEquals("€0.23", view.totals().feesText());
-        assertEquals("+€0.60", view.totals().realisedText());
-        assertEquals("+€0.35", view.totals().unrealisedText());
-        assertEquals("0.0015 BTC", view.totals().balanceText());
+        assertEquals("€0,23", view.totals().feesText());
+        assertEquals("+€0,60", view.totals().realisedText());
+        assertEquals("+€0,35", view.totals().unrealisedText());
+        assertEquals("0,0015 BTC", view.totals().balanceText());
         assertEquals("Last 7 days", view.totals().periodText());
         assertEquals("BTC-EUR", view.price().market());
-        assertEquals("€75,600.00", view.price().buyText());
-        assertEquals("€75,500.00", view.price().sellText());
+        assertEquals("€75.600,00", view.price().buyText());
+        assertEquals("€75.500,00", view.price().sellText());
     }
 
     @Test
@@ -173,9 +173,9 @@ class LedgerServiceTest {
         assertEquals("14 Oct 09:00", fill.timeText());
         assertEquals("sell", fill.typeText());
         assertEquals("side-sell", fill.typeClass());
-        assertEquals("0.0005 BTC", fill.sentText());
-        assertEquals("€38.00 EUR", fill.receivedText());
-        assertEquals("€0.08 EUR", fill.feeText());
+        assertEquals("0,0005 BTC", fill.sentText());
+        assertEquals("€38,00 EUR", fill.receivedText());
+        assertEquals("€0,08 EUR", fill.feeText());
         LedgerView.RawRowView deposit = view.rawRows().get(3);
         assertEquals("deposit", deposit.typeText());
         assertEquals("", deposit.typeClass());
@@ -245,21 +245,21 @@ class LedgerServiceTest {
         // A missing currency counts as the market's quote, so the row, its fill, the cash and the
         // period total all carry the same figure.
         LedgerView.OrderRowView missingRow = view.rows().get(1);
-        assertEquals("€0.10", missingRow.feeText());
-        assertEquals("€0.1000", missingRow.fills().get(0).feeText());
-        assertEquals("−€75.10", missingRow.netCashText());
-        assertEquals("−€75.10", missingRow.fills().get(0).netCashText());
+        assertEquals("€0,10", missingRow.feeText());
+        assertEquals("€0,1000", missingRow.fills().get(0).feeText());
+        assertEquals("−€75,10", missingRow.netCashText());
+        assertEquals("−€75,10", missingRow.fills().get(0).netCashText());
         // The fee enters the P&L too: worth €75.50 at the current bid against €75.10 paid.
-        assertEquals("+€0.40", missingRow.pnlText());
+        assertEquals("+€0,40", missingRow.pnlText());
         // A fill that reports no fee of its own takes its share of the order's feePaid, so the row,
         // its fill lines, the cash and the P&L all tell one story.
         LedgerView.OrderRowView fallbackRow = view.rows().get(0);
-        assertEquals("€0.20", fallbackRow.feeText());
-        assertEquals("−€75.20", fallbackRow.netCashText());
-        assertEquals("€0.2000", fallbackRow.fills().get(0).feeText());
-        assertEquals("−€75.20", fallbackRow.fills().get(0).netCashText());
-        assertEquals("+€0.30", fallbackRow.pnlText());
-        assertEquals("€0.30", view.totals().feesText());
+        assertEquals("€0,20", fallbackRow.feeText());
+        assertEquals("−€75,20", fallbackRow.netCashText());
+        assertEquals("€0,2000", fallbackRow.fills().get(0).feeText());
+        assertEquals("−€75,20", fallbackRow.fills().get(0).netCashText());
+        assertEquals("+€0,30", fallbackRow.pnlText());
+        assertEquals("€0,30", view.totals().feesText());
     }
 
     @Test
@@ -286,9 +286,9 @@ class LedgerServiceTest {
         LedgerView.OrderRowView row = view.rows().get(0);
         assertEquals("—", row.feeText());
         assertEquals("—", row.fills().get(0).feeText());
-        assertEquals("−€75.00", row.netCashText());
-        assertEquals("−€75.00", row.fills().get(0).netCashText());
-        assertEquals("€0.00", view.totals().feesText());
+        assertEquals("−€75,00", row.netCashText());
+        assertEquals("−€75,00", row.fills().get(0).netCashText());
+        assertEquals("€0,00", view.totals().feesText());
     }
 
     @Test
@@ -337,7 +337,7 @@ class LedgerServiceTest {
         assertEquals("—", view.price().buyText());
         assertEquals("—", view.price().sellText());
         assertEquals("—", view.rows().get(0).pnlText());
-        assertEquals("+€0.00", view.totals().unrealisedText());
+        assertEquals("+€0,00", view.totals().unrealisedText());
     }
 
     @Test
@@ -356,31 +356,31 @@ class LedgerServiceTest {
         LedgerView.OrderRowView canceled = view.rows().get(0);
         assertEquals("canceled", canceled.statusLabel());
         assertEquals("bad", canceled.statusClass());
-        assertEquals("€100.00 EUR", canceled.amountText());
+        assertEquals("€100,00 EUR", canceled.amountText());
         assertEquals("—", canceled.feeText());
         assertEquals("—", canceled.netCashText());
         assertEquals("—", canceled.pnlText());
-        assertEquals("0.0015", canceled.balanceAfterText());
+        assertEquals("0,0015", canceled.balanceAfterText());
 
         LedgerView.OrderRowView partial = view.rows().get(1);
         assertEquals("partially filled", partial.statusLabel());
         assertEquals("warn", partial.statusClass());
-        assertEquals("Filled 0.00100000 of 0.00200000 BTC · 0.00100000 remaining", partial.filledText());
-        assertEquals("+€0.35", partial.pnlText());
+        assertEquals("Filled 0,00100000 of 0,00200000 BTC · 0,00100000 remaining", partial.filledText());
+        assertEquals("+€0,35", partial.pnlText());
 
         LedgerView.OrderRowView buyWithBaseFee = view.rows().get(2);
         assertEquals(1, buyWithBaseFee.fills().size());
         // The fee was charged in bitcoin, so it reads as bitcoin — the euro value only enters the
         // P&L, never the display.
-        assertEquals("0.000002 BTC", buyWithBaseFee.fills().get(0).feeText());
+        assertEquals("0,000002 BTC", buyWithBaseFee.fills().get(0).feeText());
         assertEquals("maker", buyWithBaseFee.fills().get(0).makerTakerText());
         // A fee taken in the coin does not move the cash, so the net cash is the euro part alone.
-        assertEquals("−€75.00", buyWithBaseFee.netCashText());
-        assertEquals("−€75.00", buyWithBaseFee.fills().get(0).netCashText());
-        assertEquals("0.000002 BTC", buyWithBaseFee.feeText());
-        // The period's fees keep each currency apart: €0.15 from the partial fill, the bitcoin fee
+        assertEquals("−€75,00", buyWithBaseFee.netCashText());
+        assertEquals("−€75,00", buyWithBaseFee.fills().get(0).netCashText());
+        assertEquals("0,000002 BTC", buyWithBaseFee.feeText());
+        // The period's fees keep each currency apart: €0,15 from the partial fill, the bitcoin fee
         // as bitcoin.
-        assertEquals("€0.15 + 0.000002 BTC", view.totals().feesText());
+        assertEquals("€0,15 + 0,000002 BTC", view.totals().feesText());
     }
 
     @Test
@@ -403,8 +403,8 @@ class LedgerServiceTest {
 
         LedgerView view = service.view(new LedgerRequest());
 
-        assertEquals("0.000002 BTC", view.rows().get(0).feeText());
-        assertEquals("0.000002 BTC", view.totals().feesText());
+        assertEquals("0,000002 BTC", view.rows().get(0).feeText());
+        assertEquals("0,000002 BTC", view.totals().feesText());
     }
 
     @Test
@@ -425,7 +425,7 @@ class LedgerServiceTest {
         assertEquals("BTC-EUR", view.filters().market());
         assertTrue(view.filters().marketOptions().stream()
                 .noneMatch(option -> option.value().contains("&")));
-        assertEquals("€75,600.00", view.price().buyText());
+        assertEquals("€75.600,00", view.price().buyText());
     }
 
     @Test
@@ -455,9 +455,9 @@ class LedgerServiceTest {
 
         LedgerView view = service.view(new LedgerRequest());
 
-        // The account holds 0.0005 BTC today: after the BTC buy 0.001, after paying with BTC 0.0005.
-        assertEquals("0.0005", view.rows().get(0).balanceAfterText());
-        assertEquals("0.001", view.rows().get(1).balanceAfterText());
+        // The account holds 0,0005 BTC today: after the BTC buy 0,001, after paying with BTC 0,0005.
+        assertEquals("0,0005", view.rows().get(0).balanceAfterText());
+        assertEquals("0,001", view.rows().get(1).balanceAfterText());
     }
 
     @Test
@@ -499,8 +499,8 @@ class LedgerServiceTest {
         LedgerView view = service.view(new LedgerRequest());
 
         // No buy to derive a cost from: the sell shows only what its fee cost.
-        assertEquals("−€0.15", view.rows().get(0).pnlText());
-        assertEquals("0.0015 BTC", view.totals().balanceText());
+        assertEquals("−€0,15", view.rows().get(0).pnlText());
+        assertEquals("0,0015 BTC", view.totals().balanceText());
     }
 
     @Test

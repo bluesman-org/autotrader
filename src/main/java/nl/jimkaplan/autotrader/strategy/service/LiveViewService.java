@@ -145,7 +145,8 @@ public class LiveViewService {
         return String.format(Locale.ENGLISH,
                 "MACD %d/%d/%d · SAR %s/%s · entry: %s · exit: %s · €%.0f per buy · warm-up %d bars",
                 strategy.getMacdFastPeriod(), strategy.getMacdSlowPeriod(), strategy.getMacdSignalPeriod(),
-                String.valueOf(strategy.getSarAcceleration()), String.valueOf(strategy.getSarMaximum()),
+                ViewText.trimmedDecimal(strategy.getSarAcceleration(), 8),
+                ViewText.trimmedDecimal(strategy.getSarMaximum(), 8),
                 conditions(strategy.getEntryConditions()), conditions(strategy.getExitConditions()),
                 strategy.getAmountPerBuy(), strategy.getWarmUpCandles());
     }
@@ -191,7 +192,7 @@ public class LiveViewService {
         Instant filled = Instant.ofEpochMilli(position.getEntryTime() + intervalMillis(strategy));
         String asset = strategy.getMarket().split("-")[0];
         return new LiveCardView.PositionView(
-                String.format(Locale.ENGLISH, "LONG %.8f %s", position.getQuantity(), asset),
+                String.format(Locale.ENGLISH, "LONG %s %s", ViewText.decimal(position.getQuantity(), 8), asset),
                 display.minute(filled) + " · " + euro(position.getEntryPrice()),
                 buyText, sellText, valueText, ifClosedText, ifClosedClass,
                 position.getEntryFee() == null ? DASH : euro(position.getEntryFee()));
@@ -267,7 +268,7 @@ public class LiveViewService {
         return new LiveCardView.OrderView(
                 order.getCreatedTime() == null ? DASH : display.clockText(order.getCreatedTime()),
                 order.getSide(),
-                order.getQuantity() == null ? DASH : String.format(Locale.ENGLISH, "%.8f", order.getQuantity()),
+                order.getQuantity() == null ? DASH : ViewText.decimal(order.getQuantity(), 8),
                 order.getPrice() == null ? DASH : euro(order.getPrice()), badge, badgeClass,
                 result == null ? DASH : signed(result),
                 result == null ? "" : (result >= 0 ? "pos" : "neg"),

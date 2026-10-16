@@ -86,22 +86,22 @@ class LiveViewServiceTest {
         assertTrue(card.running());
         assertTrue(card.connected());
         assertFalse(card.parameters().isEmpty());
-        assertTrue(card.parameters().startsWith("MACD 12/26/9 · SAR 0.02/0.2 · entry: MACD bullish crossover"));
+        assertTrue(card.parameters().startsWith("MACD 12/26/9 · SAR 0,02/0,2 · entry: MACD bullish crossover"));
         assertTrue(card.statusLine().contains("Running since 13 Oct 14:35 ("));
         assertTrue(card.statusLine().contains("Last evaluated 14 Oct 05:48:00 ("));
         assertTrue(card.statusLine().endsWith("Last error: —"));
 
         LiveCardView.PositionView position = card.position();
-        assertEquals("LONG 0.00134403 BTC", position.quantityText());
-        assertEquals("14 Oct 05:45 · €74,403.00", position.entryText());
-        assertEquals("€74,578.00", position.buyText());
-        assertEquals("€74,562.00", position.sellText());
-        assertEquals("€100.21", position.valueNowText());
-        assertEquals("−€0.19", position.ifClosedNowText());
+        assertEquals("LONG 0,00134403 BTC", position.quantityText());
+        assertEquals("14 Oct 05:45 · €74.403,00", position.entryText());
+        assertEquals("€74.578,00", position.buyText());
+        assertEquals("€74.562,00", position.sellText());
+        assertEquals("€100,21", position.valueNowText());
+        assertEquals("−€0,19", position.ifClosedNowText());
         assertEquals("neg", position.ifClosedNowClass());
-        assertEquals("€0.20", position.entryFeeText());
+        assertEquals("€0,20", position.entryFeeText());
 
-        assertEquals("Realised since start: 1 round trips · +€0.12 · 1 wins / 0 losses · avg win +€0.12",
+        assertEquals("Realised since start: 1 round trips · +€0,12 · 1 wins / 0 losses · avg win +€0,12",
                 card.statsLine());
 
         List<LiveCardView.OrderView> orders = card.orders();
@@ -112,7 +112,7 @@ class LiveViewServiceTest {
         assertEquals("DRY RUN", orders.get(0).statusBadge());
         assertEquals("—", orders.get(0).resultText());
         assertEquals("2 Jan 03:05", orders.get(1).timeText());
-        assertEquals("+€0.12", orders.get(1).resultText());
+        assertEquals("+€0,12", orders.get(1).resultText());
         assertEquals("pos", orders.get(1).resultClass());
         assertFalse(orders.get(1).openedPosition());
         assertEquals("Skipped — candle unavailable", orders.get(2).statusBadge());
@@ -169,8 +169,8 @@ class LiveViewServiceTest {
 
         LiveCardView card = service.cards().get(0);
 
-        assertEquals("Realised since start: 2 round trips · +€0.01 · 1 wins / 1 losses · avg win +€0.12 "
-                + "· avg loss −€0.11", card.statsLine());
+        assertEquals("Realised since start: 2 round trips · +€0,01 · 1 wins / 1 losses · avg win +€0,12 "
+                + "· avg loss −€0,11", card.statsLine());
     }
 
     @Test

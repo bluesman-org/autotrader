@@ -31,7 +31,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.util.UriUtils;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -872,7 +871,7 @@ public class LedgerService {
     }
 
     private static String amount8(double value) {
-        return BigDecimal.valueOf(value).setScale(8, RoundingMode.HALF_UP).toPlainString();
+        return ViewText.decimal(value, 8);
     }
 
     private static String amountText(BigDecimal amountQuote, String market) {
@@ -881,9 +880,7 @@ public class LedgerService {
     }
 
     private static String plain(double value) {
-        BigDecimal decimal = BigDecimal.valueOf(value).setScale(8, RoundingMode.HALF_UP)
-                .stripTrailingZeros();
-        return decimal.signum() == 0 ? "0" : decimal.toPlainString();
+        return ViewText.trimmedDecimal(value, 8);
     }
 
     private static String euro(double value) {
@@ -891,7 +888,7 @@ public class LedgerService {
     }
 
     private static String euro4(double value) {
-        return "€" + String.format(Locale.US, "%,.4f", Math.abs(value));
+        return ViewText.euro(value, 4);
     }
 
     private static String signed(double value) {
