@@ -61,6 +61,8 @@ class LiveUiControllerRenderTest {
                 .andExpect(content().string(containsString("DRY RUN")))
                 .andExpect(content().string(containsString("ui/live/cards")))
                 .andExpect(content().string(containsString("If closed now (after fees)")))
+                // The parameter line reads in the page's number style, like the fixture expects.
+                .andExpect(content().string(containsString("SAR 0,02/0,2")))
                 .andExpect(content().string(containsString("−€0,19")))
                 .andExpect(content().string(containsString("Realised since start: 36 round trips · −€14,25")))
                 .andExpect(content().string(containsString("opened position")))

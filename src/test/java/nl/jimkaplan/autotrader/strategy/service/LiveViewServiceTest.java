@@ -86,7 +86,7 @@ class LiveViewServiceTest {
         assertTrue(card.running());
         assertTrue(card.connected());
         assertFalse(card.parameters().isEmpty());
-        assertTrue(card.parameters().startsWith("MACD 12/26/9 · SAR 0.02/0.2 · entry: MACD bullish crossover"));
+        assertTrue(card.parameters().startsWith("MACD 12/26/9 · SAR 0,02/0,2 · entry: MACD bullish crossover"));
         assertTrue(card.statusLine().contains("Running since 13 Oct 14:35 ("));
         assertTrue(card.statusLine().contains("Last evaluated 14 Oct 05:48:00 ("));
         assertTrue(card.statusLine().endsWith("Last error: —"));

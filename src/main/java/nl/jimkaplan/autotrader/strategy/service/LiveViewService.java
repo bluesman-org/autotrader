@@ -145,7 +145,8 @@ public class LiveViewService {
         return String.format(Locale.ENGLISH,
                 "MACD %d/%d/%d · SAR %s/%s · entry: %s · exit: %s · €%.0f per buy · warm-up %d bars",
                 strategy.getMacdFastPeriod(), strategy.getMacdSlowPeriod(), strategy.getMacdSignalPeriod(),
-                String.valueOf(strategy.getSarAcceleration()), String.valueOf(strategy.getSarMaximum()),
+                ViewText.trimmedDecimal(strategy.getSarAcceleration(), 8),
+                ViewText.trimmedDecimal(strategy.getSarMaximum(), 8),
                 conditions(strategy.getEntryConditions()), conditions(strategy.getExitConditions()),
                 strategy.getAmountPerBuy(), strategy.getWarmUpCandles());
     }
