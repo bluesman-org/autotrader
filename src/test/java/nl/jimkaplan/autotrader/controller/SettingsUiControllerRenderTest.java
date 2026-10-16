@@ -42,11 +42,6 @@ class SettingsUiControllerRenderTest {
     void pageShowsTheConfiguredKeyMasked() throws Exception {
         when(credentialsService.view()).thenReturn(new BitvavoCredentialsResponse(true, "…1234", 7L,
                 Instant.parse("2026-10-16T08:00:00Z")));
-        when(credentialsService.get()).thenReturn(java.util.Optional.of(
-                nl.jimkaplan.autotrader.model.document.BitvavoCredentials.builder()
-                        .operatorId(7L)
-                        .updatedTime(Instant.parse("2026-10-16T08:00:00Z"))
-                        .build()));
 
         mockMvc.perform(get("/ui/settings"))
                 .andExpect(status().isOk())
@@ -63,7 +58,6 @@ class SettingsUiControllerRenderTest {
     @Test
     void pageSaysWhenNoKeyIsConfigured() throws Exception {
         when(credentialsService.view()).thenReturn(new BitvavoCredentialsResponse(false, null, null, null));
-        when(credentialsService.get()).thenReturn(java.util.Optional.empty());
 
         mockMvc.perform(get("/ui/settings"))
                 .andExpect(status().isOk())

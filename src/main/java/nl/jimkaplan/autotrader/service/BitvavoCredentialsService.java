@@ -73,21 +73,24 @@ public class BitvavoCredentialsService {
      *         empty when none is configured
      */
     public Optional<String> hint() {
-        return get().map(credentials -> credentials.getApiKey() == null
-                || credentials.getApiKey().length() <= 4
-                ? "…"
-                : "…" + credentials.getApiKey().substring(credentials.getApiKey().length() - 4));
+        return get().map(BitvavoCredentialsService::hintOf);
     }
 
     /**
      * @return The masked view both the API and the settings page read: whether a key is configured,
      *         a hint that identifies it, the operator id and when it was stored — never the key and
-     *         never the secret
+     *         never the secret. It derives everything from the one entity it read.
      */
     public BitvavoCredentialsResponse view() {
         return get().map(credentials -> new BitvavoCredentialsResponse(true,
-                        hint().orElse(null), credentials.getOperatorId(), credentials.getUpdatedTime()))
+                        hintOf(credentials), credentials.getOperatorId(), credentials.getUpdatedTime()))
                 .orElseGet(() -> new BitvavoCredentialsResponse(false, null, null, null));
+    }
+
+    private static String hintOf(BitvavoCredentials credentials) {
+        return credentials.getApiKey() == null || credentials.getApiKey().length() <= 4
+                ? "…"
+                : "…" + credentials.getApiKey().substring(credentials.getApiKey().length() - 4);
     }
 
     private BitvavoCredentials decrypt(BitvavoCredentials stored) {

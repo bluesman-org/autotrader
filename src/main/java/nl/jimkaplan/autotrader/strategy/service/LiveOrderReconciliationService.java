@@ -114,9 +114,10 @@ public class LiveOrderReconciliationService {
         }
         BitvavoCredentials credentials = credentialsService.get().orElse(null);
         if (credentials == null) {
-            log.warn("Cannot reconcile live strategy {}: no Bitvavo API key is configured",
-                    strategy.getId());
-            return;
+            // A real strategy cannot trade without the account key, so it is held back like any
+            // other reconciliation failure instead of starting blind.
+            throw new IllegalStateException(
+                    "no Bitvavo API key is configured: store it on the settings page");
         }
 
         OrderResponse[] history = bitvavoApiClient.get(

@@ -1,10 +1,13 @@
 package nl.jimkaplan.autotrader.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.model.ErrorResponse;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -52,7 +55,8 @@ public class BitvavoCredentialsController {
             description = "Stores the key encrypted; it is used by the live engine and the ledger.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "The key was stored"),
-            @ApiResponse(responseCode = "400", description = "The key or the secret was missing")
+            @ApiResponse(responseCode = "400", description = "The key or the secret was missing",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PutMapping
     public BitvavoCredentialsResponse replace(@RequestBody BitvavoCredentialsRequest request) {

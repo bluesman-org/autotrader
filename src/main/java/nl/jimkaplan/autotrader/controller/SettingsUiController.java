@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.time.Instant;
+
 /**
  * The settings page: the system-wide Bitvavo API key the engine trades with and the ledger reads
  * the account with. The key is shown as a hint only — it is write-only — and replacing it stores it
@@ -69,9 +71,7 @@ public class SettingsUiController {
     }
 
     private String updatedText() {
-        return credentialsService.get()
-                .map(credentials -> credentials.getUpdatedTime() == null ? null
-                        : display.minute(credentials.getUpdatedTime()) + " (" + display.label() + ")")
-                .orElse(null);
+        Instant updated = credentialsService.view().updatedTime();
+        return updated == null ? null : display.minute(updated) + " (" + display.label() + ")";
     }
 }

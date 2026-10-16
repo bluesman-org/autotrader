@@ -8,6 +8,8 @@ import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.service.LiveStrategyService;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
@@ -23,9 +25,14 @@ import java.util.Optional;
  * <p>The source is the configuration the engine used to name — the newest live strategy's bot —
  * and otherwise the first active configuration that carries a key. A failure here is logged and
  * leaves the page to say the key is missing rather than stopping the application.</p>
+ *
+ * <p>It runs before every other runner ({@link Ordered#HIGHEST_PRECEDENCE}), so the copy lands
+ * before {@code LiveStrategyStarter} reconciles: a strategy whose account cannot be read is held
+ * back, not started blind.</p>
  */
 @Slf4j
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class BitvavoCredentialsInitializer implements ApplicationRunner {
 
     private final BitvavoCredentialsService credentialsService;

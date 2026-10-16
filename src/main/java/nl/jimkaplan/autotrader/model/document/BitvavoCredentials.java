@@ -3,6 +3,7 @@ package nl.jimkaplan.autotrader.model.document;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.ToString;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -21,6 +22,7 @@ import java.time.Instant;
  * saves it under {@link #ID}, so replacing the key replaces the record.</p>
  */
 @Data
+@ToString(exclude = {"apiKey", "apiSecret"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

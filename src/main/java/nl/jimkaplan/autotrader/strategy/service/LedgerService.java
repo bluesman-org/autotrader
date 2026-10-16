@@ -137,8 +137,8 @@ public class LedgerService {
         if (account.isEmpty()) {
             return new LedgerView(
                     "No Bitvavo API key is configured, so the account cannot be read. Store the "
-                            + "account's key on the Settings page (/ui/settings) — the ledger uses the "
-                            + "same key the engine trades with.",
+                            + "account's key on the Settings page (/autotrader/ui/settings) — the "
+                            + "ledger uses the same key the engine trades with.",
                     price, filters, null, List.of(), pager(request, 0, 1, 1), raw, List.of(),
                     pager(request, 0, 1, 1));
         }

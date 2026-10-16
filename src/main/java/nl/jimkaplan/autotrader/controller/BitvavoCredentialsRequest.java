@@ -1,12 +1,14 @@
 package nl.jimkaplan.autotrader.controller;
 
 import lombok.Data;
+import lombok.ToString;
 
 /**
  * The request that stores or replaces the system-wide Bitvavo API key. The secret is write-only:
  * nothing ever returns it.
  */
 @Data
+@ToString(exclude = {"apiKey", "apiSecret"})
 public class BitvavoCredentialsRequest {
 
     /**

@@ -85,11 +85,13 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
-    void strategiesWithoutAnApiKeyAreSkipped() {
+    void strategiesWithoutAnApiKeyAreHeldBack() {
         when(liveStrategyService.all()).thenReturn(List.of(strategy(false, MARKET)));
         when(credentialsService.get()).thenReturn(Optional.empty());
 
-        assertTrue(service.reconcileAll().isEmpty());
+        // A real strategy cannot trade without the account key, so reconciliation fails and the
+        // starter leaves it stopped.
+        assertEquals(Set.of(STRATEGY_ID), service.reconcileAll());
 
         verifyNoInteractions(bitvavoApiClient, liveOrderRepository, livePositionRepository);
     }
