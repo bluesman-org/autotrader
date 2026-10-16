@@ -10,6 +10,42 @@
 </head>
 <body>
 <script>
+    // The custom range's fields, declared once: the Time select follows typing in them, and choosing
+    // a preset clears them.
+    var CUSTOM_RANGE_FIELDS = ['fromDate', 'fromTime', 'toDate', 'toTime'];
+
+    // Editing a date or time field means the custom range — but only while the form actually carries
+    // a date, because the server honours the custom fields only then. Without the gate, editing a
+    // time alone would leave the select claiming "Custom range" while Apply resolved a preset.
+    document.addEventListener('input', function (event) {
+        var field = event.target;
+        if (!field || !field.name || CUSTOM_RANGE_FIELDS.indexOf(field.name) === -1) {
+            return;
+        }
+        var form = field.form;
+        var period = form && form.querySelector('select[name="period"]');
+        var fromDate = form && form.querySelector('input[name="fromDate"]');
+        var toDate = form && form.querySelector('input[name="toDate"]');
+        var hasDate = (fromDate && String(fromDate.value).trim() !== '')
+            || (toDate && String(toDate.value).trim() !== '');
+        if (!period) {
+            return;
+        }
+        if (hasDate) {
+            period.value = '';
+            return;
+        }
+        // No date left. A non-empty select is the user's own choice (Apply sends it, and the server
+        // honours any known preset), so it is left alone; only a blank select reads stale, and then
+        // it shows what Apply will resolve — the preset in the address bar, otherwise the default.
+        if (String(period.value).trim() !== '') {
+            return;
+        }
+        var fromUrl = new URLSearchParams(window.location.search).get('period') || '';
+        var fallback = period.getAttribute('data-default-period') || '';
+        period.value = fromUrl && period.querySelector('option[value="' + fromUrl + '"]') ? fromUrl : fallback;
+    });
+
     // A chosen preset replaces a custom range the form still carries: the date fields leave both the
     // request and the form, so the page shows the range it applies. Shared by both tabs' handlers.
     function dropLingeringDates(form, params) {
@@ -17,7 +53,7 @@
         if (!period || String(period.value).trim() === '') {
             return;
         }
-        ['fromDate', 'fromTime', 'toDate', 'toTime'].forEach(function (name) {
+        CUSTOM_RANGE_FIELDS.forEach(function (name) {
             params.delete(name);
             var field = form.querySelector('[name="' + name + '"]');
             if (field) {
@@ -143,7 +179,7 @@
                     </select>
                 </div>
                 <div class="f"><label>Time</label>
-                    <select name="period">
+                    <select name="period" th:attr="data-default-period=${history.filters.defaultPeriod}">
                         <option value="" th:selected="${#strings.isEmpty(history.filters.period)}">Custom range</option>
                         <option th:each="option : ${history.filters.timeOptions}" th:value="${option.value}"
                                 th:text="${option.label}"

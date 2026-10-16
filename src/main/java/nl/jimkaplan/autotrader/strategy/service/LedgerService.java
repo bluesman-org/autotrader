@@ -440,7 +440,7 @@ public class LedgerService {
                 HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
                 custom ? request.getToDate() : null,
                 HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
-                marketOptions(market), HistoryPeriods.OPTIONS);
+                HistoryPeriods.DEFAULT_PRESET, marketOptions(market), HistoryPeriods.OPTIONS);
     }
 
     private TotalsView totals(List<OrderResponse> orders, Basis basis, double currentBid,

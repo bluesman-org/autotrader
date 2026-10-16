@@ -100,7 +100,7 @@ class HistoryUiControllerRenderTest {
                 new TradeHistoryView.HeaderView("Entry", "left", "?sort=entry&dir=desc", true, "▼"),
                 new TradeHistoryView.HeaderView("Result", "", "?sort=result&dir=asc", false, ""));
         TradeHistoryView.FiltersView filters = new TradeHistoryView.FiltersView("", "", "", "7d",
-                "", "", "", "",
+                "", "", "", "", "7d",
                 List.of(new TradeHistoryView.Option("6ace5dbf7b4e0870883058cb", "6ace5dbf")),
                 List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
         TradeHistoryView.PagerView pager = new TradeHistoryView.PagerView(1, 1, 41, 1, 5, 10, null, "?page=2",
@@ -114,7 +114,7 @@ class HistoryUiControllerRenderTest {
 
     private static TradeHistoryView emptyView() {
         TradeHistoryView.FiltersView filters = new TradeHistoryView.FiltersView("", "", "", "7d",
-                "", "", "", "", List.of(), List.of());
+                "", "", "", "", "7d", List.of(), List.of());
         TradeHistoryView.PagerView pager = new TradeHistoryView.PagerView(0, 0, 0, 1, 1, 10, null, null,
                 List.of());
         TradeHistoryView.TotalsView totals = new TradeHistoryView.TotalsView(0, "+€0,00", "pos", "—",
@@ -171,7 +171,7 @@ class HistoryUiControllerRenderTest {
                 "trigger €73.162,00 · limit €75.364,00", "0.0015", "€0,08",
                 "+€37,92", "pos", 1, "+€0,60", "pos", List.of(fill), "");
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "BTC-EUR", "", "", "orders",
-                "7d", "", "", "", "",
+                "7d", "", "", "", "", "7d",
                 List.of(new TradeHistoryView.Option("BTC-EUR", "BTC-EUR")),
                 List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
         LedgerView.TotalsView totals = new LedgerView.TotalsView("Last 7 days", 1, "€0,23", "+€0,60",
