@@ -4,6 +4,7 @@ import nl.jimkaplan.autotrader.strategy.service.LedgerService;
 import nl.jimkaplan.autotrader.strategy.service.TradeHistoryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * application.yml placeholders expect, which a test run does not have; the display zone is pinned
  * so the rendered times are deterministic.
  */
+@AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(controllers = HistoryUiController.class, properties = {
         "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-test",
         "bitvavo.api.url=http://localhost:9999",

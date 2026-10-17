@@ -7,6 +7,8 @@ info:
 servers:
   - url: "http://localhost:8081/autotrader"
     description: "Generated server url"
+security:
+  - basicAuth: []
 tags:
   - name: "Live strategies"
     description: "API for running strategies live on closed candles"
@@ -20,7 +22,52 @@ tags:
     description: "API for managing trading bot configurations"
   - name: "Transaction History"
     description: "API for viewing Bitvavo transaction history"
+  - name: "Mail settings"
+    description: "The SMTP server the recovery mails go out through"
+  - name: "Password recovery"
+    description: "Ask for a password-recovery mail"
 paths:
+  /api/mail-settings:
+    get:
+      tags:
+        - "Mail settings"
+      summary: "Read the SMTP settings (no password)"
+      description: "Returns the host, port, sign-in name, from-address and STARTTLS\
+        \ flag; the password is never returned."
+      operationId: "current"
+      responses:
+        "200":
+          description: "OK"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MailSettingsResponse"
+    put:
+      tags:
+        - "Mail settings"
+      summary: "Store or replace the SMTP settings"
+      description: "Stores the password encrypted. A blank password keeps the stored\
+        \ one, so the host can be corrected without re-typing it."
+      operationId: "store"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MailSettingsRequest"
+        required: true
+      responses:
+        "200":
+          description: "The settings were stored"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MailSettingsResponse"
+        "400":
+          description: "The host, from-address or first password was missing"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/bitvavo-credentials:
     get:
       tags:
@@ -110,6 +157,28 @@ paths:
             text/plain:
               schema:
                 type: "string"
+      security: []
+  /api/password-recovery:
+    post:
+      tags:
+        - "Password recovery"
+      summary: "Ask for a password-recovery mail"
+      description: "Always answers the same way, whether or not the address belongs\
+        \ to the account; when it does, a single-use link is mailed to it."
+      operationId: "request"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailRequest"
+        required: true
+      responses:
+        "200":
+          description: "OK"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
   /api/live-strategies:
     get:
       tags:
@@ -551,16 +620,22 @@ paths:
           description: "No run with that ID"
 components:
   schemas:
-    BitvavoCredentialsRequest:
+    MailSettingsRequest:
       type: "object"
       properties:
-        apiKey:
+        host:
           type: "string"
-        apiSecret:
-          type: "string"
-        operatorId:
+        port:
           type: "integer"
-          format: "int64"
+          format: "int32"
+        username:
+          type: "string"
+        password:
+          type: "string"
+        fromAddress:
+          type: "string"
+        startTls:
+          type: "boolean"
     ErrorResponse:
       type: "object"
       properties:
@@ -576,6 +651,35 @@ components:
           format: "date-time"
         path:
           type: "string"
+    MailSettingsResponse:
+      type: "object"
+      properties:
+        configured:
+          type: "boolean"
+        host:
+          type: "string"
+        port:
+          type: "integer"
+          format: "int32"
+        username:
+          type: "string"
+        fromAddress:
+          type: "string"
+        startTls:
+          type: "boolean"
+        updatedTime:
+          type: "string"
+          format: "date-time"
+    BitvavoCredentialsRequest:
+      type: "object"
+      properties:
+        apiKey:
+          type: "string"
+        apiSecret:
+          type: "string"
+        operatorId:
+          type: "integer"
+          format: "int64"
     BitvavoCredentialsResponse:
       type: "object"
       properties:
@@ -603,6 +707,16 @@ components:
           type: "string"
         dryRun:
           type: "boolean"
+    EmailRequest:
+      type: "object"
+      properties:
+        email:
+          type: "string"
+    MessageResponse:
+      type: "object"
+      properties:
+        message:
+          type: "string"
     LiveStrategyRequest:
       type: "object"
       properties:
@@ -1136,3 +1250,9 @@ components:
           type: "string"
           enum:
             - "INSUFFICIENT_BALANCE"
+  securitySchemes:
+    basicAuth:
+      type: "http"
+      description: "The installation's account: HTTP Basic, the same credentials the\
+        \ sign-in page takes."
+      scheme: "basic"

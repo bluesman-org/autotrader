@@ -20,7 +20,10 @@ after the custom-range flow was fixed twice over (PRs #42, #43); the filters rea
 and the narrow-viewport pass wrapped the nav too (PR #45), the ledger's timed refresh keeps the
 table's scroll position and its open panels (PR #46), and the ledger reads as results only — a buy
 shows no P&L, the summary's Unrealised is the open position and shows only when the range ends today,
-with a Today button that ends the range at now (PR #47).
+with a Today button that ends the range at now (PR #47). The app now has an account: form sign-in
+for the pages and HTTP Basic for the API, a first-account signup, password recovery by mail through
+SMTP settings stored on the settings page, and an HTTPS deployment on `https://at.bluris.nl` behind
+Caddy (PR #48).
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
 next: the small live-run trial of the engine.
 
@@ -243,6 +246,11 @@ next: the small live-run trial of the engine.
     the current price, shown only when the range ends today (a line says why when it does not); a
     Today button beside the end date sets the range's end to now, so the figure is one click away
     (PR #47)
+27. ✅ Sign-in and password recovery: one account (`app_users`), form login for the pages and HTTP
+    Basic for the API, a first-account signup that closes afterwards, an SMTP server stored on the
+    settings page (and through `/api/mail-settings`) for a single-use, hashed, expiring recovery
+    mail, an authenticated password change, and the HTTPS deployment for `https://at.bluris.nl`
+    behind Caddy (`docs/security.md`) (PR #48)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

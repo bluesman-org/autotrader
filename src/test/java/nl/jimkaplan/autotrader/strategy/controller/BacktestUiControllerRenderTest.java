@@ -13,6 +13,7 @@ import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunMetrics;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * The property overrides stand in for the environment variables the application.yml placeholders
  * expect, which a test run does not have.
  */
+@AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(controllers = BacktestUiController.class, properties = {
         "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-test",
         "bitvavo.api.url=http://localhost:9999",

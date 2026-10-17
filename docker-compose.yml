@@ -15,6 +15,10 @@ services:
       - BITVAVO_API_URL=${BITVAVO_API_URL}
       - ENCRYPTION_MASTER_KEY=${ENCRYPTION_MASTER_KEY}
       - SPRING_PROFILES_ACTIVE=prod
+      # Served behind Caddy on https://at.bluris.nl: secure session cookie and the address the
+      # recovery mails link to.
+      - SESSION_COOKIE_SECURE=true
+      - AUTOTRADER_PUBLIC_URL=https://at.bluris.nl/autotrader
     volumes:
       - ./logs/autotrader:/app/logs
     restart: unless-stopped

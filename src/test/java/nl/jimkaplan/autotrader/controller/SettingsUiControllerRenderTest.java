@@ -1,15 +1,21 @@
 package nl.jimkaplan.autotrader.controller;
 
+import nl.jimkaplan.autotrader.service.AppUserService;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
+import nl.jimkaplan.autotrader.service.MailSettingsService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -24,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * The settings page renders the masked key state and posts a replacement; the secret never travels
  * back into the page.
  */
+@AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(controllers = SettingsUiController.class, properties = {
         "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-test",
         "bitvavo.api.url=http://localhost:9999",
@@ -37,6 +44,17 @@ class SettingsUiControllerRenderTest {
 
     @MockitoBean
     private BitvavoCredentialsService credentialsService;
+    @MockitoBean
+    private MailSettingsService mailSettingsService;
+    @MockitoBean
+    private AppUserService users;
+
+    @BeforeEach
+    void setUp() {
+        when(mailSettingsService.view()).thenReturn(
+                new MailSettingsResponse(false, null, null, null, null, true, null));
+        when(users.find(any())).thenReturn(Optional.empty());
+    }
 
     @Test
     void pageShowsTheConfiguredKeyMasked() throws Exception {
@@ -74,6 +92,37 @@ class SettingsUiControllerRenderTest {
                 .andExpect(redirectedUrl("/ui/settings"));
 
         verify(credentialsService).save("new-key", "new-secret", 7L);
+    }
+
+    @Test
+    void theMailCardShowsWhatIsConfigured() throws Exception {
+        when(credentialsService.view()).thenReturn(new BitvavoCredentialsResponse(false, null, null, null));
+        when(mailSettingsService.view()).thenReturn(new MailSettingsResponse(true, "smtp.example.com",
+                587, "mailer", "autotrader@example.com", true, Instant.parse("2026-10-16T09:00:00Z")));
+
+        mockMvc.perform(get("/ui/settings"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("smtp.example.com:587")))
+                .andExpect(content().string(containsString("from autotrader@example.com")))
+                .andExpect(content().string(containsString("STARTTLS")))
+                // The stored password never travels back into the page.
+                .andExpect(content().string(not(containsString("smtp-password"))));
+    }
+
+    @Test
+    void postStoresTheMailSettings() throws Exception {
+        mockMvc.perform(post("/ui/settings/mail")
+                        .param("host", "smtp.example.com")
+                        .param("port", "587")
+                        .param("username", "mailer")
+                        .param("password", "smtp-password")
+                        .param("fromAddress", "autotrader@example.com")
+                        .param("startTls", "true"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+
+        verify(mailSettingsService).save("smtp.example.com", 587, "mailer", "smtp-password",
+                "autotrader@example.com", true);
     }
 
     @Test

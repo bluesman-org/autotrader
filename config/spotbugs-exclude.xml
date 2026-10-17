@@ -11,7 +11,9 @@
          arrays would allocate per bar in the hot path. The two service-shaped classes hold
          framework collaborators (RestTemplate, the candle stream), which Spring manages. The
          records that carry a stored run (RunSummaryView, BacktestEntryTrades) do so for display,
-         and the run is already published through the API as-is. -->
+         and the run is already published through the API as-is. The auth and settings controllers
+         hold Spring-managed service collaborators for the same reason the two service-shaped
+         classes do. -->
     <Match>
         <Or>
             <Class name="nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades"/>
@@ -26,6 +28,9 @@
             <Class name="nl.jimkaplan.autotrader.strategy.rule.CandleSeries"/>
             <Class name="nl.jimkaplan.autotrader.strategy.rule.IndicatorSeries"/>
             <Class name="nl.jimkaplan.autotrader.strategy.rule.StrategySignals"/>
+            <Class name="nl.jimkaplan.autotrader.controller.AuthController"/>
+            <Class name="nl.jimkaplan.autotrader.controller.HomeController"/>
+            <Class name="nl.jimkaplan.autotrader.controller.SettingsUiController"/>
             <Class name="nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient"/>
             <Class name="nl.jimkaplan.autotrader.strategy.live.BitvavoCandleStream"/>
         </Or>
