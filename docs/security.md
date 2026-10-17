@@ -78,9 +78,18 @@ at.bluris.nl {
 }
 ```
 
-The app keeps its own context path, so every URL is `https://at.bluris.nl/autotrader/…`. The
-TradingView webhook becomes `https://at.bluris.nl/autotrader/webhook/tradingview` — update the
-alerts when the address changes.
+The app keeps its own context path, so every URL is `https://at.bluris.nl/autotrader/…` (the bare
+host redirects there). The TradingView webhook becomes
+`https://at.bluris.nl/autotrader/webhook/tradingview` — update the alerts when the address changes.
+
+The **development stack** is served through the same site on this box: its compose file carries
+`SESSION_COOKIE_SECURE=true` and `AUTOTRADER_PUBLIC_URL=https://at.bluris.nl/autotrader`, so the
+pages sign in over https and recovery mails link to the public address. `http://localhost:8081` still
+takes the API's Basic auth; a session cookie is only sent over https, so use the https address for
+the pages. The container is on a bridge network, so the app sees Caddy's docker-gateway address
+rather than the loopback and (correctly) distrusts `X-Forwarded-*`: the login redirect names `http`
+and Caddy's port-80 redirect makes the next hop https. The production compose runs with host
+networking, where the forwarded headers are trusted and the redirect is https from the start.
 
 ### Checklist for the production host
 

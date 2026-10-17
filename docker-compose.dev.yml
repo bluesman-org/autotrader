@@ -31,6 +31,11 @@ services:
       MONGODB_SSL_ENABLED: "false"
       ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?set ENCRYPTION_MASTER_KEY in .env}
       BITVAVO_API_URL: ${BITVAVO_API_URL:-https://api.bitvavo.com/v2}
+      # Served on https://at.bluris.nl behind Caddy: the session cookie is secure and the recovery
+      # mails link to the public address. Plain http://localhost:8081 keeps the API (Basic), not a
+      # session; use the https address for the pages.
+      SESSION_COOKIE_SECURE: "true"
+      AUTOTRADER_PUBLIC_URL: https://at.bluris.nl/autotrader
     ports:
       - "8081:8081"
     volumes:
