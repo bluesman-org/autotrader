@@ -65,22 +65,39 @@ corrected without re-typing it. No SMTP environment variables are required.
 
 ## Served over HTTPS
 
-Caddy on the host terminates TLS for `at.bluris.nl` and proxies to the app on its host port; Spring
-runs behind it with `server.forward-headers-strategy=native`, Tomcat's trust list pinned to this host
+Caddy on the host terminates TLS for `at.bluris.nl` and proxies to the app; Spring runs behind it
+with `server.forward-headers-strategy=native`, Tomcat's trust list pinned to this host
 (`server.tomcat.remoteip.internal-proxies`), and a secure session cookie with `SameSite=Strict`
-(`SESSION_COOKIE_SECURE=true` in the production compose), so redirects and cookies keep the https
-scheme and no forwarded header can speak for a client. The site block:
+(`SESSION_COOKIE_SECURE=true`), so redirects and cookies keep the https scheme and no forwarded
+header can speak for a client. That works end to end with the production compose, which runs with
+host networking; the development stack is on a bridge, so the app sees the docker gateway rather
+than the loopback and correctly distrusts the forwarded scheme — the site block therefore upgrades a
+`Location: http://` on its way out and sets HSTS. The site block:
 
 ```
 at.bluris.nl {
-    encode zstd gzip
-    reverse_proxy 127.0.0.1:8081
+	encode zstd gzip
+	redir / /autotrader/ 302
+	reverse_proxy 127.0.0.1:8081 {
+		header_down Location http:// https://
+	}
+	header Strict-Transport-Security "max-age=31536000"
 }
 ```
 
-The app keeps its own context path, so every URL is `https://at.bluris.nl/autotrader/…`. The
-TradingView webhook becomes `https://at.bluris.nl/autotrader/webhook/tradingview` — update the
-alerts when the address changes.
+The app keeps its own context path, so every URL is `https://at.bluris.nl/autotrader/…` (the bare
+host redirects there). The TradingView webhook becomes
+`https://at.bluris.nl/autotrader/webhook/tradingview` — update the alerts when the address changes.
+
+The **development stack** is served through the same site on this box. The compose file is
+host-agnostic — it reads `SESSION_COOKIE_SECURE` and `AUTOTRADER_PUBLIC_URL` from the repo-root
+`.env` with plain local defaults — and this box's `.env` sets `true` and
+`https://at.bluris.nl/autotrader`, so the pages sign in over https and recovery mails link to the
+public address. Its published port is bound to `127.0.0.1:8081`, not to the network: the API takes
+HTTP Basic and the pages a session, and Caddy on the host is the only thing that should reach either.
+On this box, where `.env` sets the secure cookie, a session cookie is never sent over plain http, so
+the pages need the https address; with the local default (`false`), `http://127.0.0.1:8081` serves
+the API and the pages alike — its Basic auth over http is why that port stays on the loopback.
 
 ### Checklist for the production host
 
