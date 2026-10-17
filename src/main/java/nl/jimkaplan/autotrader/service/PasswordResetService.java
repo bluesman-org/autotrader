@@ -7,6 +7,7 @@ import nl.jimkaplan.autotrader.repository.AppUserRepository;
 import nl.jimkaplan.autotrader.repository.PasswordResetTokenRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.mongodb.core.FindAndReplaceOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -117,10 +118,9 @@ public class PasswordResetService {
                 // Mint and store the token here, on the request thread, so the cooldown sees it
                 // straight away; only the mail itself leaves on the worker, where a slow SMTP
                 // server makes no difference to how long this answer takes.
-                Optional<PasswordResetToken> previous = tokens.findById(user.getId());
                 String token = newToken();
                 String mintedHash = hash(token);
-                mint(user, mintedHash);
+                Optional<PasswordResetToken> previous = mint(user, mintedHash);
                 String body = message(user, token);
                 try {
                     mailExecutor.execute(() -> sendQuietly(user, body, previous, mintedHash));
@@ -256,17 +256,25 @@ public class PasswordResetService {
     /**
      * Store a minted link, replacing whatever was there: one live token per account.
      *
+     * <p>The document it replaces is read in the same round trip, so it is the state just before
+     * the replacement: a claim that landed a moment earlier is visible in it, and a restore cannot
+     * put a spent link back as a working one.</p>
+     *
      * @param user       The account
      * @param mintedHash The hash of the token the mail carries
+     * @return What was stored before, when anything was
      */
-    private void mint(AppUser user, String mintedHash) {
+    private Optional<PasswordResetToken> mint(AppUser user, String mintedHash) {
         Instant now = clock.instant();
-        tokens.save(PasswordResetToken.builder()
+        PasswordResetToken minted = PasswordResetToken.builder()
                 .id(user.getId())
                 .tokenHash(mintedHash)
                 .createdTime(now)
                 .expiresTime(now.plus(lifetime))
-                .build());
+                .build();
+        return Optional.ofNullable(mongoTemplate.findAndReplace(
+                Query.query(Criteria.where("_id").is(user.getId())), minted,
+                FindAndReplaceOptions.options().upsert()));
     }
 
     private String message(AppUser user, String token) {

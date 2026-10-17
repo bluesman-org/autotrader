@@ -10,6 +10,7 @@ import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.mongodb.core.FindAndReplaceOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -63,9 +64,13 @@ class PasswordResetServiceTest {
     void wireTheTokenStore() {
         service = new PasswordResetService(users, tokens, appUsers, mail, mongoTemplate,
                 Runnable::run, "https://at.bluris.nl/autotrader", 30, clock);
-        when(tokens.save(any())).thenAnswer(invocation -> {
-            stored = invocation.getArgument(0);
-            return stored;
+        // The mint replaces the document and hands back what was there, in one round trip.
+        when(mongoTemplate.findAndReplace(any(Query.class), any(PasswordResetToken.class),
+                any(FindAndReplaceOptions.class))).thenAnswer(invocation -> {
+            PasswordResetToken minted = invocation.getArgument(1);
+            PasswordResetToken previous = stored;
+            stored = minted;
+            return previous;
         });
         when(tokens.findById(any())).thenAnswer(invocation ->
                 Optional.ofNullable(stored).filter(token -> token.getId().equals(invocation.getArgument(0))));
@@ -84,7 +89,9 @@ class PasswordResetServiceTest {
                         // minted, unspent one.
                         if (stored == null || !stored.getTokenHash()
                                 .equals(query.getQueryObject().getString("token_hash"))
-                                || stored.getUsedTime() != null) {
+                                || (query.getQueryObject().containsKey("used_time")
+                                        && query.getQueryObject().get("used_time") == null
+                                        && stored.getUsedTime() != null)) {
                             return UpdateResult.acknowledged(0, 0L, null);
                         }
                         Document changes = update.getUpdateObject().get("$set", Document.class);
@@ -274,6 +281,27 @@ class PasswordResetServiceTest {
 
         assertNotNull(stored.getUsedTime());
         assertFalse(service.valid(first));
+    }
+
+    @Test
+    void aClaimOnTheMintedTokenStopsTheRestore() {
+        AppUser user = account();
+        when(users.findByEmail("jim@example.com")).thenReturn(Optional.of(user));
+        when(users.findById("u1")).thenReturn(Optional.of(user));
+        service.request("jim@example.com");
+
+        // The reader spent the newly minted link while the send was failing: the guard sees the
+        // spent state and leaves the document alone.
+        PasswordResetService refusing = new PasswordResetService(users, tokens, appUsers, mail,
+                mongoTemplate, command -> {
+                    stored.setUsedTime(NOW);
+                    throw new RejectedExecutionException("queue full");
+                }, "https://at.bluris.nl/autotrader", 30,
+                Clock.fixed(NOW.plus(Duration.ofMinutes(3)), ZoneOffset.UTC));
+
+        refusing.request("jim@example.com");
+
+        assertNotNull(stored.getUsedTime());
     }
 
     @Test
