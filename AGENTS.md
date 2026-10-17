@@ -124,7 +124,10 @@ It reads `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD` and `ENCRYPTION_MASTER_KEY`
 repo-root `.env`; nothing loads it for a `spring-boot:run` run, so the loop shares the key and
 the database only while it exports that same value (as in the example above). With the same key
 on both sides, bots and exchange credentials stay readable through either path. The UI is served
-on `http://<host>:8081/autotrader/ui/backtests`. `./mvnw spring-boot:run` remains the faster
+on `http://127.0.0.1:8081/autotrader/ui/backtests` — the published port is bound to the loopback,
+since the API takes HTTP Basic and the pages a session (see `docs/security.md`). On the box that
+serves `https://at.bluris.nl`, `.env` sets `SESSION_COOKIE_SECURE=true` and
+`AUTOTRADER_PUBLIC_URL=https://at.bluris.nl/autotrader`, and the pages sign in over https there. `./mvnw spring-boot:run` remains the faster
 edit/run loop (devtools restarts the app on recompiles); the container is the stable one.
 
 The `Dockerfile` is platform-agnostic: the target platform is chosen at build time — native for
