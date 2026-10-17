@@ -154,10 +154,10 @@ public class PasswordResetService {
      * Put the token that was stored before this request back (or clear the account's token when
      * there was none), because the replacement never reached anybody — and only while the stored
      * token is still the one this request minted: another request may have replaced it meanwhile,
-     * and undoing that would take away a link that is already on its way. {@code used_time} is left
-     * guard asks for {@code used_time: null} — the state this request's mint left — so a claim that
-     * landed in this window keeps its mark and stays spent, while the earlier document otherwise
-     * comes back exactly as it was, its own spent mark included.
+     * and undoing that would take away a link that is already on its way. The guard asks for
+     * {@code used_time: null} — the state this request's mint left — so a claim that landed in this
+     * window keeps its mark and stays spent, while the earlier document otherwise comes back exactly
+     * as it was, its own spent mark included.
      *
      * <p>Two limits are accepted rather than engineered away. A send that fails after the server
      * accepted the message — a missing final {@code 250}, a read timeout — has been delivered, and
