@@ -95,8 +95,9 @@ host-agnostic — it reads `SESSION_COOKIE_SECURE` and `AUTOTRADER_PUBLIC_URL` f
 `https://at.bluris.nl/autotrader`, so the pages sign in over https and recovery mails link to the
 public address. Its published port is bound to `127.0.0.1:8081`, not to the network: the API takes
 HTTP Basic and the pages a session, and Caddy on the host is the only thing that should reach either.
-A session cookie is only sent over https, so use the https address for the pages; plain `http` keeps
-the API.
+On this box, where `.env` sets the secure cookie, a session cookie is never sent over plain http, so
+the pages need the https address; with the local default (`false`), `http://127.0.0.1:8081` serves
+the API and the pages alike — its Basic auth over http is why that port stays on the loopback.
 
 ### Checklist for the production host
 
