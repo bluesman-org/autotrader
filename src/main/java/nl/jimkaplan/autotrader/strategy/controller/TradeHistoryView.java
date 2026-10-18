@@ -77,6 +77,7 @@ public record TradeHistoryView(List<TradeRowView> rows, List<HeaderView> headers
      * The filter bar's state and options.
      *
      * @param strategy        The selected strategy, or empty for all
+     * @param market          The selected market, or empty for all
      * @param type            The selected type ({@code dry}/{@code real}), or empty for all
      * @param result          The selected result ({@code wins}/{@code losses}), or empty for all
      * @param period          The selected time preset, empty when the custom range is in use
@@ -88,16 +89,18 @@ public record TradeHistoryView(List<TradeRowView> rows, List<HeaderView> headers
      *                        custom range no longer carries a date
      * @param strategyOptions The strategies present in the period: full IDs as values, short IDs as
      *                        labels
+     * @param marketOptions   The markets present in the period
      * @param timeOptions     The time presets
      */
-    public record FiltersView(String strategy, String type, String result, String period,
+    public record FiltersView(String strategy, String market, String type, String result, String period,
                               String fromDate, String fromTime, String toDate, String toTime,
                               String defaultPeriod, List<Option> strategyOptions,
-                              List<Option> timeOptions) {
+                              List<Option> marketOptions, List<Option> timeOptions) {
 
         /** Copy the option lists so the model cannot be mutated from outside. */
         public FiltersView {
             strategyOptions = List.copyOf(strategyOptions);
+            marketOptions = List.copyOf(marketOptions);
             timeOptions = List.copyOf(timeOptions);
         }
     }

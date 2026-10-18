@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.strategy.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestResult;
 import nl.jimkaplan.autotrader.strategy.backtest.RankingMetric;
@@ -10,7 +11,6 @@ import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
-import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -25,6 +25,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -64,14 +65,17 @@ public class BacktestUiController {
      */
     @GetMapping
     public String form(Model model) {
-        if (!model.containsAttribute("form")) {
-            BacktestRunForm form = BacktestRunForm.defaults();
+        BacktestRunForm form;
+        if (model.containsAttribute("form")) {
+            form = (BacktestRunForm) model.getAttribute("form");
+        } else {
+            form = BacktestRunForm.defaults();
             marketService.selectable().stream().findFirst().ifPresent(form::setMarket);
             model.addAttribute("form", form);
         }
         // The fee-cover hint's blank-field fallbacks: the engine's own defaults, rendered into the page
         model.addAttribute("defaults", BacktestRunForm.defaults());
-        populate(model);
+        populate(model, form);
         return "backtests/form";
     }
 
@@ -179,13 +183,26 @@ public class BacktestUiController {
                 .map(skipped -> SkippedSignalView.of(skipped, TIMESTAMP)).toList();
     }
 
-    private void populate(Model model) {
+    private void populate(Model model, BacktestRunForm form) {
         model.addAttribute("intervals", CandleInterval.values());
         model.addAttribute("rankingMetrics", RankingMetric.values());
         model.addAttribute("conditions", RuleCondition.values());
         model.addAttribute("operators", LogicalOperator.values());
-        model.addAttribute("markets", marketService.selectable());
+        model.addAttribute("markets", marketChoices(form));
         model.addAttribute("runs", recentViews());
+    }
+
+    /**
+     * The market select's options. A flashed form's market is kept even when it is no longer in the
+     * catalogue, so a rejected submission comes back with the pair the reader picked.
+     */
+    private List<String> marketChoices(BacktestRunForm form) {
+        List<String> markets = new ArrayList<>(marketService.selectable());
+        String selected = form == null ? null : form.getMarket();
+        if (selected != null && !selected.isBlank() && !markets.contains(selected)) {
+            markets.add(selected);
+        }
+        return markets;
     }
 
     private List<RunSummaryView> recentViews() {

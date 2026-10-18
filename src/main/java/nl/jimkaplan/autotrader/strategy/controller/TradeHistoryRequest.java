@@ -7,6 +7,7 @@ package nl.jimkaplan.autotrader.strategy.controller;
 public class TradeHistoryRequest {
 
     private String strategy;
+    private String market;
     private String type;
     private String result;
     private String period;
@@ -25,6 +26,14 @@ public class TradeHistoryRequest {
 
     public void setStrategy(String strategy) {
         this.strategy = strategy;
+    }
+
+    public String getMarket() {
+        return market;
+    }
+
+    public void setMarket(String market) {
+        this.market = market;
     }
 
     public String getType() {

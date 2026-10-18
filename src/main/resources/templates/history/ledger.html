@@ -99,6 +99,8 @@
             </div>
             <p class="muted" style="margin:8px 0 0" th:if="${not #strings.isEmpty(ledger.totals.unrealisedHint)}"
                th:text="${ledger.totals.unrealisedHint}">Unrealised needs today as the end date.</p>
+            <p class="muted" style="margin:8px 0 0" th:if="${not #strings.isEmpty(ledger.totals.note)}"
+               th:text="${ledger.totals.note}">Could not read some markets.</p>
         </div>
 
         <ul class="muted" style="margin:0 0 8px 0;padding-left:20px">
@@ -128,7 +130,7 @@
                         <th class="left">Side</th>
                         <th class="left">Type</th>
                         <th class="left">Market</th>
-                        <th th:text="|Amount (${#strings.substringBefore(ledger.filters.market, '-')})|">Amount (BTC)</th>
+                        <th th:text="${ledger.filters.amountHeader}">Amount (BTC)</th>
                         <th>Avg price</th>
                         <th class="left">Status</th>
                         <th>Balance after</th>
@@ -174,7 +176,7 @@
                                             <thead>
                                             <tr>
                                                 <th class="left">Time</th>
-                                                <th th:text="|Amount (${#strings.substringBefore(ledger.filters.market, '-')})|">Amount (BTC)</th>
+                                                <th th:text="${ledger.filters.amountHeader}">Amount (BTC)</th>
                                                 <th>Price</th>
                                                 <th>Fee</th>
                                                 <th class="left">Maker/Taker</th>

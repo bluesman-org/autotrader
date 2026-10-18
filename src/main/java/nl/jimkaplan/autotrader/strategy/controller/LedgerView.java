@@ -44,7 +44,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * The filter bar's state and options.
      *
      * @param side          The selected side, or empty for all
-     * @param market        The selected market
+     * @param market        The selected market, {@code all}, or a market symbol
+     * @param amountHeader  The amount column's title: with its currency for one market, plain for all
      * @param type          The selected order types; empty selects every type
      * @param status        The selected statuses; empty selects every status
      * @param view          The selected view ({@code orders}/{@code raw})
@@ -60,9 +61,9 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param statusOptions The statuses an order can have, as values and labels
      * @param timeOptions   The time presets
      */
-    public record FiltersView(String side, String market, List<String> type, List<String> status,
-                              String view, String period, String fromDate, String fromTime,
-                              String toDate, String toTime, String defaultPeriod,
+    public record FiltersView(String side, String market, String amountHeader, List<String> type,
+                              List<String> status, String view, String period, String fromDate,
+                              String fromTime, String toDate, String toTime, String defaultPeriod,
                               List<Option> marketOptions, List<Option> typeOptions,
                               List<Option> statusOptions, List<Option> timeOptions) {
 
@@ -87,12 +88,14 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param realisedClass    {@code pos}/{@code neg}
      * @param unrealisedText   The open position's result at the current price, or a dash
      * @param unrealisedClass  {@code pos}/{@code neg}
-     * @param balanceText      The account's current balance of the market's base currency
+     * @param balanceText      The account's current balance of the market's base currency, or the
+     *                         account's euro cash in the all-pairs view
      * @param unrealisedHint   Why the unrealised figure is a dash, when it is; empty otherwise
+     * @param note             A warning that some markets could not be read, or empty
      */
     public record TotalsView(String periodText, int orders, String feesText, String realisedText,
                              String realisedClass, String unrealisedText, String unrealisedClass,
-                             String balanceText, String unrealisedHint) {
+                             String balanceText, String unrealisedHint, String note) {
     }
 
     /**

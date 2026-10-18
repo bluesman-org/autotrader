@@ -41,7 +41,8 @@ public class LedgerRequest {
     private String side;
 
     /**
-     * The selected market (e.g. {@code BTC-EUR}); empty selects the engine's market.
+     * The selected market (e.g. {@code BTC-EUR}); {@code all} merges every catalogue pair, and
+     * empty selects the engine's market.
      */
     private String market;
 

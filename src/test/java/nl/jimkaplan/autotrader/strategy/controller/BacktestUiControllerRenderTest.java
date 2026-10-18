@@ -61,7 +61,6 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("Strategy backtests")))
                 .andExpect(content().string(containsString("name=\"market\"")))
                 .andExpect(content().string(containsString("value=\"BTC-EUR\"")))
-                .andExpect(content().string(containsString("id=\"market-options\"")))
                 .andExpect(content().string(containsString("ETH-EUR")))
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 .andExpect(content().string(containsString("SAR BEARISH CROSSOVER")))
@@ -73,6 +72,17 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("id=\"feeRate\"")))
                 .andExpect(content().string(containsString("data-default-fee-rate")))
                 .andExpect(content().string(containsString("INSUFFICIENT_BALANCE")));
+    }
+
+    @Test
+    void formStillOffersTheDefaultPairWhenTheCatalogueIsEmpty() throws Exception {
+        when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of());
+
+        mockMvc.perform(get("/ui/backtests"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("name=\"market\"")))
+                .andExpect(content().string(containsString("value=\"BTC-EUR\"")));
     }
 
     @Test

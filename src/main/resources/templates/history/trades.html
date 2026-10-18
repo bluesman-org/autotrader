@@ -13,6 +13,14 @@
                                 th:selected="${option.value == history.filters.strategy}">6ace5dbf</option>
                     </select>
                 </div>
+                <div class="f"><label>Market</label>
+                    <select name="market">
+                        <option value="">All pairs</option>
+                        <option th:each="option : ${history.filters.marketOptions}" th:value="${option.value}"
+                                th:text="${option.label}"
+                                th:selected="${option.value == history.filters.market}">BTC-EUR</option>
+                    </select>
+                </div>
                 <div class="f"><label>Type</label>
                     <select name="type">
                         <option value="">All types</option>
