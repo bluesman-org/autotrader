@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -46,7 +47,7 @@ public class MarketController {
     @Operation(summary = "List the trading pairs", operationId = "listMarkets")
     @ApiResponse(responseCode = "200", description = "Pairs returned",
             content = @Content(mediaType = "application/json",
-                    schema = @Schema(implementation = Market.class)))
+                    array = @ArraySchema(schema = @Schema(implementation = Market.class))))
     @GetMapping
     public ResponseEntity<List<Market>> all() {
         return ResponseEntity.ok(marketService.all());

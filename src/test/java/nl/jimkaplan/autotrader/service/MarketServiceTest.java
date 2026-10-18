@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -33,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -135,6 +137,18 @@ class MarketServiceTest {
 
         assertTrue(error.getMessage().contains("not trading"));
         verify(markets, never()).save(any());
+    }
+
+    @Test
+    void addTurnsAConcurrentDuplicateIntoAClientError() {
+        when(client.getPublic("/markets?market=ETH-EUR", GetMarketResponse.class))
+                .thenReturn(info("ETH-EUR", "trading"));
+        when(markets.save(any(Market.class))).thenThrow(new DuplicateKeyException("duplicate"));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.add("ETH-EUR"));
+
+        assertTrue(error.getMessage().contains("already in the trading pairs"));
     }
 
     // ---- enabling and ordering ----------------------------------------------------------------
@@ -256,6 +270,80 @@ class MarketServiceTest {
         ArgumentCaptor<Market> saved = ArgumentCaptor.forClass(Market.class);
         verify(markets).save(saved.capture());
         assertEquals(null, saved.getValue().getStatus());
+    }
+
+    @Test
+    void discoverReadsEveryPageAndAggregatesThePairAcrossThem() {
+        when(credentials.get()).thenReturn(Optional.of(credentials()));
+        when(client.getPublic(eq("/markets"), eq(GetMarketResponse[].class)))
+                .thenReturn(new GetMarketResponse[]{info("ETH-EUR", "trading"),
+                        info("BTC-EUR", "trading")});
+        when(client.get(argThat(url -> url != null && url.contains("type=buy") && url.contains("page=1&")),
+                eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenReturn(history(List.of(buy("eth", "EUR", "2024-01-01")), 2));
+        when(client.get(argThat(url -> url != null && url.contains("type=buy") && url.contains("page=2&")),
+                eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenReturn(history(List.of(
+                        buy("ETH", "EUR", "2026-10-01"),
+                        buy("BTC", "EUR", "2026-10-01")), 2));
+        when(client.get(contains("type=sell"), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString()))
+                .thenReturn(history(List.of(), 1));
+        when(markets.findByMarket(anyString())).thenReturn(Optional.empty());
+        when(markets.save(any(Market.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MarketService.Discovery discovery = service.discover();
+
+        assertEquals(new MarketService.Discovery(2, 2, 0, 0), discovery);
+        verify(client).get(argThat(url -> url != null && url.contains("type=buy") && url.contains("page=2&")),
+                eq(GetAccountHistoryResponse.class), anyString(), anyString());
+        ArgumentCaptor<Market> saved = ArgumentCaptor.forClass(Market.class);
+        verify(markets, times(2)).save(saved.capture());
+        Market eth = saved.getAllValues().stream()
+                .filter(market -> "ETH-EUR".equals(market.getMarket())).findFirst().orElseThrow();
+        assertEquals(2, eth.getTradeCount());
+        assertEquals(Instant.parse("2024-01-01T10:00:00Z"), eth.getFirstTradedAt());
+        assertEquals(Instant.parse("2026-10-01T10:00:00Z"), eth.getLastTradedAt());
+    }
+
+    @Test
+    void discoverStopsAtTheHistoryPageCap() {
+        when(credentials.get()).thenReturn(Optional.of(credentials()));
+        when(client.getPublic(eq("/markets"), eq(GetMarketResponse[].class)))
+                .thenReturn(new GetMarketResponse[]{info("ETH-EUR", "trading")});
+        when(client.get(argThat(url -> url != null && url.contains("type=buy")),
+                eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenReturn(history(List.of(buy("ETH", "EUR", "2026-09-01")), 100));
+        when(client.get(contains("type=sell"), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString()))
+                .thenReturn(history(List.of(), 1));
+        when(markets.findByMarket("ETH-EUR")).thenReturn(Optional.empty());
+        when(markets.save(any(Market.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MarketService.Discovery discovery = service.discover();
+
+        assertEquals(new MarketService.Discovery(1, 1, 0, 0), discovery);
+        verify(client, times(MarketService.MAX_HISTORY_PAGES)).get(
+                contains("type=buy"), eq(GetAccountHistoryResponse.class), anyString(), anyString());
+    }
+
+    @Test
+    void discoverKeepsGoingWhenAnotherWriterWinsAPair() {
+        when(credentials.get()).thenReturn(Optional.of(credentials()));
+        when(client.getPublic(eq("/markets"), eq(GetMarketResponse[].class)))
+                .thenReturn(new GetMarketResponse[]{info("ETH-EUR", "trading")});
+        when(client.get(contains("type=buy"), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString()))
+                .thenReturn(history(List.of(buy("ETH", "EUR", "2026-09-01")), 1));
+        when(client.get(contains("type=sell"), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString()))
+                .thenReturn(history(List.of(), 1));
+        when(markets.findByMarket("ETH-EUR")).thenReturn(Optional.empty());
+        when(markets.save(any(Market.class))).thenThrow(new DuplicateKeyException("duplicate"));
+
+        MarketService.Discovery discovery = service.discover();
+
+        assertEquals(new MarketService.Discovery(1, 1, 0, 0), discovery);
     }
 
     @Test

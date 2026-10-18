@@ -12,6 +12,7 @@ import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.repository.MarketRepository;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
@@ -151,16 +152,24 @@ public class MarketService {
             throw new IllegalArgumentException(market + " is not trading on Bitvavo ("
                     + info.getStatus() + ")");
         }
-        Market stored = marketRepository.save(Market.builder()
-                .market(market)
-                .base(info.getBase() == null ? baseOf(market) : info.getBase())
-                .quote(EUR)
-                .enabled(true)
-                .source(Market.SOURCE_MANUAL)
-                .status(info.getStatus())
-                .tradeCount(0)
-                .addedTime(clock.instant())
-                .build());
+        Market stored;
+        try {
+            stored = marketRepository.save(Market.builder()
+                    .market(market)
+                    .base(info.getBase() == null ? baseOf(market) : info.getBase())
+                    .quote(EUR)
+                    .enabled(true)
+                    .source(Market.SOURCE_MANUAL)
+                    .status(info.getStatus())
+                    .tradeCount(0)
+                    .addedTime(clock.instant())
+                    .build());
+        } catch (DuplicateKeyException e) {
+            // The exists check above is check-then-act: a concurrent add, or a discovery, can win
+            // the race after it. The unique index is the real guard, so report it as the client
+            // error the endpoint documents rather than a 500.
+            throw new IllegalArgumentException(market + " is already in the trading pairs", e);
+        }
         log.info("Added trading pair {}", market);
         return stored;
     }
@@ -213,7 +222,13 @@ public class MarketService {
                     skipped++;
                     continue;
                 }
-                String market = base + "-" + quote.toUpperCase(Locale.ENGLISH);
+                String market;
+                try {
+                    market = normalize(base + "-" + quote);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Skipping a history row with an unsupported pair {}-{}", base, quote);
+                    continue;
+                }
                 traded.computeIfAbsent(market, Traded::new).add(transaction.getExecutedAt());
             }
         }
@@ -242,7 +257,14 @@ public class MarketService {
             stored.setFirstTradedAt(entry.first);
             stored.setLastTradedAt(entry.last);
             stored.setTradeCount(entry.count);
-            marketRepository.save(stored);
+            try {
+                marketRepository.save(stored);
+            } catch (DuplicateKeyException e) {
+                // A concurrent add won the same pair between the read and this write; the next
+                // discovery refreshes it, so one lost race must not abort the whole refresh.
+                log.warn("Another writer added {} during discovery; it will be refreshed next time",
+                        entry.market);
+            }
         }
         log.info("Discovered {} traded markets ({} added, {} refreshed, {} non-EUR skipped)",
                 traded.size(), added, updated, skipped);

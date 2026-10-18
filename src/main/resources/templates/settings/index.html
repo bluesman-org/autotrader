@@ -18,6 +18,9 @@
         encrypted where they can be (AES-256-GCM) and never shown back.
         Times are local time (<span th:text="${zoneLabel}">CEST</span>).</p>
 
+    <div class="banner" th:if="${message}" th:text="${message}">stored</div>
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+
     <div class="card" style="padding:18px 22px">
         <h2 style="margin-top:0">Bitvavo key</h2>
         <p th:if="${credentials.configured}">
@@ -27,8 +30,6 @@
             <span th:if="${updatedText != null}" th:text="|· stored ${updatedText}|">· stored 16 Oct 2026 08:31 (CEST)</span>
         </p>
         <p class="muted" th:unless="${credentials.configured}">No key is configured yet.</p>
-        <div class="banner" th:if="${message}" th:text="${message}">stored</div>
-        <div class="banner error" th:if="${error}" th:text="${error}">error</div>
 
         <p class="muted">The key is used as-is and never shown again — replacing it overwrites the
             stored one. Use a key that may trade, because the engine places real orders with it.</p>
@@ -62,8 +63,6 @@
             filled from what the account itself traded on Bitvavo; add a pair by hand for an asset
             that arrived another way, such as a deposit. A disabled pair stays here with its
             history, and a live strategy that trades it keeps it visible anyway.</p>
-        <div class="banner" th:if="${message}" th:text="${message}">added</div>
-        <div class="banner error" th:if="${error}" th:text="${error}">error</div>
         <p class="muted" th:if="${#lists.isEmpty(markets)}">No pairs yet — refresh from Bitvavo, or
             add one below.</p>
         <div class="table-wrap" style="box-shadow:none;background:transparent;padding:0"
