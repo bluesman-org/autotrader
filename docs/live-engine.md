@@ -190,7 +190,7 @@ the exception, because it authenticates itself with its own webhook key (see `do
 | `GET /ui/history?tab=ledger` | The account history page's Bitvavo-ledger tab: the account's orders with their fills, average-cost P&L, the raw transactions and the current prices |
 | `GET /api/bitvavo-credentials` | The system-wide Bitvavo API key, masked: whether one is configured, a hint that identifies it and the operator id |
 | `PUT /api/bitvavo-credentials` | Store or replace that key (the secret is write-only) |
-| `GET /ui/settings` | The settings page: the key's state and a form to replace it |
+| `GET /ui/settings` | The settings page: the key's state, the trading pairs, the mail settings and the password |
 
 ## The Bitvavo key
 
@@ -200,6 +200,31 @@ deliberately not tied to a bot configuration: the bots belong to the legacy Trad
 keeps its own per-bot keys. An installation that only has the key inside a bot configuration copies
 it once into the system-wide record on startup — Bitvavo shows a secret only when it is created, so
 re-entering it would mean creating a new key.
+
+## Trading pairs
+
+The strategy forms and the account ledger do not offer Bitvavo's whole listing. A pair enters the
+catalogue (`markets`) because the account traded it: startup seeds an empty catalogue from the
+account's own buy/sell history, and **Refresh from Bitvavo** on the settings page repeats that read
+after new trades. A pair can also be added by hand for an asset that arrived another way, such as a
+deposit, which has no buy behind it. Only EUR-quoted markets are stored: the engine, the backtester
+and the ledger all size and display in euro.
+
+Discovery reads `GET /account/history` with the system-wide key, from 2020 to now and filtered to
+`buy` and `sell`. The date window matters — without it the exchange returns only a recent slice of
+the history — and the read is a handful of calls rather than one per market on the exchange. A pair
+is disabled rather than deleted: a refresh would bring a traded pair back, and a running strategy
+may still name it. A discovery leaves the enabled flag alone, so a pair an operator hid stays
+hidden. Disabled pairs stay in the settings table with their history; a live strategy that trades
+one keeps it visible in the forms anyway.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/markets` | Every pair in the catalogue, enabled first |
+| `POST /api/markets` | Add a pair by hand (validated against Bitvavo's public market list) |
+| `POST /api/markets/{market}/enable` | Offer the pair again |
+| `POST /api/markets/{market}/disable` | Hide the pair without forgetting its history |
+| `POST /api/markets/discover` | Read the account history and add or refresh its pairs |
 
 ## Configuration
 

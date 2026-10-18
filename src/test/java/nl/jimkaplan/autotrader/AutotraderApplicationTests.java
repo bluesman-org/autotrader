@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader;
 
+import nl.jimkaplan.autotrader.config.MarketInitializer;
 import nl.jimkaplan.autotrader.config.MongoIndexInitializer;
 import nl.jimkaplan.autotrader.strategy.live.LiveStrategyStarter;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,9 @@ class AutotraderApplicationTests {
 
     @MockitoBean
     private nl.jimkaplan.autotrader.config.BitvavoCredentialsInitializer bitvavoCredentialsInitializer;
+
+    @MockitoBean
+    private MarketInitializer marketInitializer;
 
     @Test
     void contextLoads() {

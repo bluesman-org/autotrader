@@ -13,9 +13,13 @@
 <main class="container">
     <h1>Settings</h1>
     <p class="muted">The Bitvavo API key the live engine trades with and the account-history ledger
-        reads the account with, the SMTP server the recovery mails go out through, and the account's
-        password. Secrets are stored encrypted where they can be (AES-256-GCM) and never shown back.
+        reads the account with, the trading pairs the strategy forms and the ledger offer, the SMTP
+        server the recovery mails go out through, and the account's password. Secrets are stored
+        encrypted where they can be (AES-256-GCM) and never shown back.
         Times are local time (<span th:text="${zoneLabel}">CEST</span>).</p>
+
+    <div class="banner" th:if="${message}" th:text="${message}">stored</div>
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
 
     <div class="card" style="padding:18px 22px">
         <h2 style="margin-top:0">Bitvavo key</h2>
@@ -26,8 +30,6 @@
             <span th:if="${updatedText != null}" th:text="|· stored ${updatedText}|">· stored 16 Oct 2026 08:31 (CEST)</span>
         </p>
         <p class="muted" th:unless="${credentials.configured}">No key is configured yet.</p>
-        <div class="banner" th:if="${message}" th:text="${message}">stored</div>
-        <div class="banner error" th:if="${error}" th:text="${error}">error</div>
 
         <p class="muted">The key is used as-is and never shown again — replacing it overwrites the
             stored one. Use a key that may trade, because the engine places real orders with it.</p>
@@ -54,6 +56,76 @@
             </div>
         </form>
     </div>
+
+    <div class="card" style="padding:18px 22px">
+        <h2 style="margin-top:0">Trading pairs</h2>
+        <p class="muted">The pairs the strategy forms and the account ledger offer. The catalogue is
+            filled from what the account itself traded on Bitvavo; add a pair by hand for an asset
+            that arrived another way, such as a deposit. A disabled pair stays here with its
+            history, and a live strategy that trades it keeps it visible anyway.</p>
+        <p class="muted" th:if="${#lists.isEmpty(markets)}">No pairs yet — refresh from Bitvavo, or
+            add one below.</p>
+        <div class="table-wrap" style="box-shadow:none;background:transparent;padding:0"
+             th:unless="${#lists.isEmpty(markets)}">
+            <table>
+                <thead>
+                <tr>
+                    <th class="left">Pair</th>
+                    <th class="left">Offered</th>
+                    <th class="left">Status</th>
+                    <th>Trades</th>
+                    <th>First trade</th>
+                    <th>Last trade</th>
+                    <th class="left">Source</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="row : ${markets}">
+                    <td class="left"><b th:text="${row.market}">BTC-EUR</b></td>
+                    <td class="left">
+                        <span class="badge ok" th:if="${row.enabled}">enabled</span>
+                        <span class="badge" th:unless="${row.enabled}">disabled</span>
+                    </td>
+                    <td class="left">
+                        <span class="badge ok" th:if="${row.status == 'trading'}"
+                              th:text="${row.status}">trading</span>
+                        <span class="badge warn" th:unless="${row.status == 'trading'}"
+                              th:text="${row.status}">delisted</span>
+                    </td>
+                    <td th:text="${row.trades > 0 ? row.trades : '—'}">165</td>
+                    <td th:text="${row.firstText}">24 Sep 2021</td>
+                    <td th:text="${row.lastText}">9 Oct 2026</td>
+                    <td class="left" th:text="${row.source}">discovered</td>
+                    <td>
+                        <form th:if="${row.enabled}" method="post"
+                              th:action="@{/ui/settings/markets/{m}/disable(m=${row.market})}">
+                            <button class="secondary small" type="submit">Disable</button>
+                        </form>
+                        <form th:unless="${row.enabled}" method="post"
+                              th:action="@{/ui/settings/markets/{m}/enable(m=${row.market})}">
+                            <button class="secondary small" type="submit">Enable</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="filters" style="margin-top:14px">
+            <form method="post" th:action="@{/ui/settings/markets}"
+                  style="display:flex;gap:8px;align-items:end">
+                <label style="display:flex;flex-direction:column;gap:4px">Add a pair
+                    <input type="text" name="market" placeholder="ETH-EUR" style="width:160px"
+                           required>
+                </label>
+                <button class="primary small" type="submit">Add</button>
+            </form>
+            <form method="post" th:action="@{/ui/settings/markets/discover}">
+                <button class="secondary small" type="submit">Refresh from Bitvavo</button>
+            </form>
+        </div>
+    </div>
+
     <div class="card" style="padding:18px 22px">
         <h2 style="margin-top:0">Mail (password recovery)</h2>
         <p th:if="${mail.configured}">

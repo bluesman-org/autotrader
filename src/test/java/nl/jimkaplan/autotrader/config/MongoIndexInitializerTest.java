@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.config;
 
 import nl.jimkaplan.autotrader.model.document.AppUser;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.Market;
 import nl.jimkaplan.autotrader.model.document.PasswordResetToken;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
@@ -57,6 +58,7 @@ class MongoIndexInitializerTest {
         when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(AppUser.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(Market.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(PasswordResetToken.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BacktestRun.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(LiveOrder.class)).thenReturn(indexOperations);
@@ -67,7 +69,7 @@ class MongoIndexInitializerTest {
         mongoIndexInitializer.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<Index> indexCaptor = ArgumentCaptor.forClass(Index.class);
-        verify(indexOperations, times(10)).ensureIndex(indexCaptor.capture());
+        verify(indexOperations, times(11)).ensureIndex(indexCaptor.capture());
         List<Index> indexes = indexCaptor.getAllValues();
 
         Index candleIndex = indexes.get(0);
@@ -93,31 +95,36 @@ class MongoIndexInitializerTest {
         assertEquals(1, emailIndex.getIndexKeys().get("email"));
         assertEquals(Boolean.TRUE, emailIndex.getIndexOptions().get("unique"));
 
-        Index tokenIndex = indexes.get(4);
+        Index marketIndex = indexes.get(4);
+        assertEquals(1, marketIndex.getIndexKeys().size());
+        assertEquals(1, marketIndex.getIndexKeys().get("market"));
+        assertEquals(Boolean.TRUE, marketIndex.getIndexOptions().get("unique"));
+
+        Index tokenIndex = indexes.get(5);
         assertEquals(1, tokenIndex.getIndexKeys().size());
         assertEquals(1, tokenIndex.getIndexKeys().get("token_hash"));
         assertEquals(Boolean.TRUE, tokenIndex.getIndexOptions().get("unique"));
 
-        Index backtestRunIndex = indexes.get(5);
+        Index backtestRunIndex = indexes.get(6);
         assertEquals(1, backtestRunIndex.getIndexKeys().size());
         assertEquals(-1, backtestRunIndex.getIndexKeys().get("runAt"));
         assertEquals(null, backtestRunIndex.getIndexOptions().get("unique"));
 
-        Index liveOrderIndex = indexes.get(6);
+        Index liveOrderIndex = indexes.get(7);
         assertEquals(2, liveOrderIndex.getIndexKeys().size());
         assertEquals(1, liveOrderIndex.getIndexKeys().get("strategyId"));
         assertEquals(-1, liveOrderIndex.getIndexKeys().get("createdTime"));
 
-        Index livePositionIndex = indexes.get(7);
+        Index livePositionIndex = indexes.get(8);
         assertEquals(2, livePositionIndex.getIndexKeys().size());
         assertEquals(1, livePositionIndex.getIndexKeys().get("strategyId"));
         assertEquals(1, livePositionIndex.getIndexKeys().get("status"));
 
-        Index liveOrderSignalIndex = indexes.get(8);
+        Index liveOrderSignalIndex = indexes.get(9);
         assertEquals(1, liveOrderSignalIndex.getIndexKeys().size());
         assertEquals(1, liveOrderSignalIndex.getIndexKeys().get("signalOpenTime"));
 
-        Index livePositionHistoryIndex = indexes.get(9);
+        Index livePositionHistoryIndex = indexes.get(10);
         assertEquals(2, livePositionHistoryIndex.getIndexKeys().size());
         assertEquals(1, livePositionHistoryIndex.getIndexKeys().get("status"));
         assertEquals(1, livePositionHistoryIndex.getIndexKeys().get("entryTime"));
@@ -131,6 +138,7 @@ class MongoIndexInitializerTest {
         when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(AppUser.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(Market.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(PasswordResetToken.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BacktestRun.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(LiveOrder.class)).thenReturn(indexOperations);
@@ -143,7 +151,7 @@ class MongoIndexInitializerTest {
 
         verify(indexOperations).dropIndex("botId_1");
         ArgumentCaptor<Index> indexCaptor = ArgumentCaptor.forClass(Index.class);
-        verify(indexOperations, times(10)).ensureIndex(indexCaptor.capture());
+        verify(indexOperations, times(11)).ensureIndex(indexCaptor.capture());
         assertEquals(BOT_ID_INDEX_NAME, indexCaptor.getAllValues().get(1).getIndexOptions().get("name"));
     }
 
@@ -155,6 +163,7 @@ class MongoIndexInitializerTest {
         when(mongoTemplate.indexOps(Candle.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BotConfiguration.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(AppUser.class)).thenReturn(indexOperations);
+        when(mongoTemplate.indexOps(Market.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(PasswordResetToken.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(BacktestRun.class)).thenReturn(indexOperations);
         when(mongoTemplate.indexOps(LiveOrder.class)).thenReturn(indexOperations);
@@ -164,7 +173,7 @@ class MongoIndexInitializerTest {
         mongoIndexInitializer.run(new DefaultApplicationArguments());
 
         verify(indexOperations, never()).getIndexInfo();
-        verify(indexOperations, times(10)).ensureIndex(any(Index.class));
+        verify(indexOperations, times(11)).ensureIndex(any(Index.class));
     }
 
     @Test
