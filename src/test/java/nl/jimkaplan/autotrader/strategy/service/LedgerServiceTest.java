@@ -659,19 +659,27 @@ class LedgerServiceTest {
 
     @Test
     void theDefaultMarketTakesTheNewestEurStrategy() {
-        LiveStrategy newestNonEur = org.mockito.Mockito.mock(LiveStrategy.class);
-        when(newestNonEur.getMarket()).thenReturn("BTCUSDT");
-        LiveStrategy newerEur = org.mockito.Mockito.mock(LiveStrategy.class);
-        when(newerEur.getMarket()).thenReturn("SOL-EUR");
-        when(newerEur.getCreatedTime()).thenReturn(Instant.parse("2026-06-01T00:00:00Z"));
-        LiveStrategy olderEur = org.mockito.Mockito.mock(LiveStrategy.class);
-        when(olderEur.getMarket()).thenReturn("ETH-EUR");
-        when(olderEur.getCreatedTime()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        // Real instances, not mocks: strict stubbing would flag a getter the fixed chain never
+        // reads, and a null createdTime would sort before the EUR rows instead of after them.
+        LiveStrategy newestNonEur = LiveStrategy.builder()
+                .market("BTCUSDT")
+                .createdTime(Instant.parse("2026-09-01T00:00:00Z"))
+                .build();
+        LiveStrategy newerEur = LiveStrategy.builder()
+                .market("SOL-EUR")
+                .createdTime(Instant.parse("2026-06-01T00:00:00Z"))
+                .build();
+        LiveStrategy olderEur = LiveStrategy.builder()
+                .market("ETH-EUR")
+                .createdTime(Instant.parse("2026-01-01T00:00:00Z"))
+                .build();
         when(strategies.all()).thenReturn(List.of(olderEur, newestNonEur, newerEur));
+        when(markets.selectable()).thenReturn(List.of("ETH-EUR"));
         when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
 
         LedgerView view = service.view(new LedgerRequest());
 
+        // With the filter after max() this would fall through to the catalogue's ETH-EUR.
         assertEquals("SOL-EUR", view.filters().market());
     }
 
