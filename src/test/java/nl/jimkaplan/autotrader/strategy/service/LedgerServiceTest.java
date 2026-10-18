@@ -8,7 +8,6 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
-import nl.jimkaplan.autotrader.model.document.Market;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
@@ -640,9 +639,6 @@ class LedgerServiceTest {
     void theAllPairsViewMergesTheCatalogueAndSumsTheResult() {
         when(credentials.get()).thenReturn(Optional.of(stored()));
         when(strategies.all()).thenReturn(List.of());
-        when(markets.all()).thenReturn(List.of(
-                Market.builder().market("BTC-EUR").enabled(true).build(),
-                Market.builder().market("ETH-EUR").enabled(true).build()));
         when(markets.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
         List<Transaction> buys = List.of(
                 trade("buy", "BTC", "2026-10-01T10:00:00Z", "1", "100", "0"),
@@ -691,10 +687,36 @@ class LedgerServiceTest {
     }
 
     @Test
+    void theAllPairsViewKeepsGoingWhenAMarketCannotBeRead() {
+        when(credentials.get()).thenReturn(Optional.of(stored()));
+        when(strategies.all()).thenReturn(List.of());
+        when(markets.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenReturn(new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.get(argThat(url -> url != null && url.contains("market=BTC-EUR")),
+                eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{sellOrder("BTC-EUR", "2026-10-14T10:00:00Z", "1", "110")});
+        when(client.get(argThat(url -> url != null && url.contains("market=ETH-EUR")),
+                eq(OrderResponse[].class), anyString(), anyString()))
+                .thenThrow(new RestClientException("400"));
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(new GetAccountBalanceResponse[]{balanceOf("BTC", "0"), balanceOf("EUR", "1000")});
+        when(client.getPublic(eq("/ticker/book"), eq(GetBookResponse[].class)))
+                .thenReturn(new GetBookResponse[]{bookFor("BTC-EUR", "120")});
+
+        LedgerRequest request = new LedgerRequest();
+        request.setMarket("all");
+        LedgerView view = service.view(request);
+
+        assertEquals(1, view.rows().size());
+        assertEquals("BTC-EUR", view.rows().get(0).marketText());
+        assertTrue(view.totals().note().contains("ETH-EUR"));
+    }
+
+    @Test
     void theAllPairsViewNeedsAPriceForEveryHeldPair() {
         when(credentials.get()).thenReturn(Optional.of(stored()));
         when(strategies.all()).thenReturn(List.of());
-        when(markets.all()).thenReturn(List.of(Market.builder().market("BTC-EUR").enabled(true).build()));
         when(markets.selectable()).thenReturn(List.of("BTC-EUR"));
         when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
                 .thenAnswer(invocation -> new GetAccountHistoryResponse(
@@ -783,6 +805,9 @@ class LedgerServiceTest {
                         // currency out even though its type says buy.
                         Transaction bought = buy("2026-10-10T08:00:00Z", "0.001", "74.00", "74000", "0.15");
                         Transaction paidWithBase = buy("2026-10-11T12:00:00Z", "0.01", "750.00", "75000", "0");
+                        // Quoted in bitcoin, not euro: the cost walk cannot price it, but the
+                        // bitcoin it spent still has to leave the bitcoin balance.
+                        paidWithBase.setPriceCurrency("BTC");
                         paidWithBase.setSentCurrency("BTC");
                         paidWithBase.setSentAmount(new BigDecimal("0.0005"));
                         paidWithBase.setReceivedCurrency("ETH");

@@ -176,6 +176,17 @@ class HistoryUiControllerRenderTest {
     }
 
     @Test
+    void theAllPairsLedgerRendersWithoutAPriceCard() throws Exception {
+        when(ledgerService.view(any())).thenReturn(allPairsLedgerView());
+
+        mockMvc.perform(get("/ui/history").param("tab", "ledger").param("market", "all"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("All pairs")))
+                .andExpect(content().string(containsString(">Amount</th>")))
+                .andExpect(content().string(not(containsString("Current price of"))));
+    }
+
+    @Test
     void theLedgerFragmentRendersTheContentAlone() throws Exception {
         when(ledgerService.view(any())).thenReturn(ledgerView());
 
@@ -205,10 +216,26 @@ class HistoryUiControllerRenderTest {
                 List.of(new TradeHistoryView.Option("awaitingTrigger", "Awaiting trigger")),
                 List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
         LedgerView.TotalsView totals = new LedgerView.TotalsView("Last 7 days", 1, "€0,23", "+€0,60",
-                "pos", unrealisedText, "pos", "0,0015 BTC", unrealisedHint);
+                "pos", unrealisedText, "pos", "0,0015 BTC", unrealisedHint, "");
         TradeHistoryView.PagerView pager = new TradeHistoryView.PagerView(1, 1, 1, 1, 1, 10, null, null,
                 List.of(new TradeHistoryView.SizeOption("10", "?tab=ledger&size=10", true)));
         return new LedgerView(null, new LedgerView.PriceView("BTC-EUR", "€75.600,00", "€75.500,00"),
                 filters, totals, List.of(row), pager, false, List.of(), pager);
+    }
+
+    private static LedgerView allPairsLedgerView() {
+        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 09:00", "SELL", "side-sell",
+                "market", "BTC-EUR", "0.00050000", "€76.000,00", "filled", "ok", "", "0.0015",
+                "€0,08", "+€37,92", "pos", 1, "+€0,60", "pos", List.of(), "");
+        LedgerView.FiltersView filters = new LedgerView.FiltersView("", "all", "Amount",
+                List.of(), List.of(), "orders", "7d", "", "", "", "", "7d",
+                List.of(new TradeHistoryView.Option("all", "All pairs"),
+                        new TradeHistoryView.Option("BTC-EUR", "BTC-EUR")),
+                List.of(), List.of(), List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
+        LedgerView.TotalsView totals = new LedgerView.TotalsView("Last 7 days", 1, "€0,23", "+€0,60",
+                "pos", "—", "", "€1.000,00", "Nothing is held, so there is no unrealised result.", "");
+        TradeHistoryView.PagerView pager = new TradeHistoryView.PagerView(1, 1, 1, 1, 1, 10, null, null,
+                List.of(new TradeHistoryView.SizeOption("10", "?tab=ledger&size=10", true)));
+        return new LedgerView(null, null, filters, totals, List.of(row), pager, false, List.of(), pager);
     }
 }

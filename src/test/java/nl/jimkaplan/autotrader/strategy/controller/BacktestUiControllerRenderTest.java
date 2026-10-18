@@ -75,6 +75,17 @@ class BacktestUiControllerRenderTest {
     }
 
     @Test
+    void formStillOffersTheDefaultPairWhenTheCatalogueIsEmpty() throws Exception {
+        when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of());
+
+        mockMvc.perform(get("/ui/backtests"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("name=\"market\"")))
+                .andExpect(content().string(containsString("value=\"BTC-EUR\"")));
+    }
+
+    @Test
     void runPageRendersTheRankedTable() throws Exception {
         when(backtestService.get("run-1")).thenReturn(Optional.of(run()));
 

@@ -10,7 +10,6 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
-import nl.jimkaplan.autotrader.model.document.Market;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
@@ -184,7 +183,8 @@ public class LedgerService {
                               PriceView price, FiltersView filters,
                               BitvavoCredentials credentials) {
         List<String> markets = all ? ledgerMarkets() : List.of(market);
-        List<OrderResponse> periodOrders = orders(credentials, markets, range);
+        List<String> skipped = new ArrayList<>();
+        List<OrderResponse> periodOrders = orders(credentials, markets, range, skipped);
         Map<String, List<Transaction>> fills = fillsByBase(credentials,
                 clock.instant().toEpochMilli());
         Map<String, Balance> balances = balances(credentials, fills);
@@ -214,7 +214,7 @@ public class LedgerService {
         List<RawRowView> rawRows = raw ? rawRows(rawEntries, rawPage, pageSize) : List.of();
 
         return new LedgerView(null, price, filters,
-                totals(filtered, bases, balances, books, market, all, range),
+                totals(filtered, bases, balances, books, market, all, range, skipped),
                 rows, pager(request, filtered.size(), page, pages), raw,
                 rawRows, pager(request, rawEntries.size(), rawPage, rawPages));
     }
@@ -272,12 +272,23 @@ public class LedgerService {
     // ---- reads ------------------------------------------------------------------------------
 
     private List<OrderResponse> orders(BitvavoCredentials credentials, List<String> markets,
-                                       HistoryPeriods.Range range) {
+                                       HistoryPeriods.Range range, List<String> skipped) {
         // The exchange has no all-markets order read — it requires one market per call — so the
-        // all-pairs view merges the catalogue's markets and whatever a live strategy trades.
+        // all-pairs view merges the catalogue's markets and whatever a live strategy trades. A
+        // pair the exchange refuses is left out with a note instead of taking the page down.
         List<OrderResponse> all = new ArrayList<>();
         for (String market : markets) {
-            all.addAll(ordersFor(credentials, market, range));
+            try {
+                all.addAll(ordersFor(credentials, market, range));
+            } catch (RestClientException e) {
+                if (markets.size() == 1) {
+                    // One market is the page's whole read: keep the fatal message the page shows
+                    // when the account cannot be read at all.
+                    throw e;
+                }
+                log.warn("Could not read the {} orders: {}", market, e.getMessage());
+                skipped.add(market);
+            }
         }
         return all;
     }
@@ -296,14 +307,16 @@ public class LedgerService {
     }
 
     /**
-     * The markets the all-pairs view reads: everything in the catalogue, including a pair hidden
-     * from the pickers, plus every market a live strategy trades.
+     * The markets the all-pairs view reads: the same set the pickers offer — the enabled catalogue
+     * plus every market a live strategy trades — so a hidden pair does not add a call. Bitvavo has
+     * no all-markets order read, so this is one signed call per pair; the catalogue is a handful of
+     * pairs by design, and the ledger is already a refreshed view.
      */
     private List<String> ledgerMarkets() {
         Set<String> markets = new TreeSet<>();
-        for (Market entry : marketService.all()) {
-            if (MarketFormat.isEuroQuoted(entry.getMarket())) {
-                markets.add(entry.getMarket());
+        for (String market : marketService.selectable()) {
+            if (MarketFormat.isEuroQuoted(market)) {
+                markets.add(market);
             }
         }
         for (LiveStrategy strategy : liveStrategyService.all()) {
@@ -316,20 +329,17 @@ public class LedgerService {
     }
 
     /**
-     * The account's whole EUR buy/sell history grouped by the currency on each side of the trade.
-     * A base currency can move on either side — a buy of another asset paid with bitcoin spends
-     * bitcoin — so a transaction joins both currencies' lists; the cost walk treats a currency on
-     * the sent side as a disposal. The walks and the balance trajectories share this one read.
+     * The account's whole buy/sell history grouped by the currency on each side of the trade. A
+     * base currency can move on either side — a buy of another asset paid with bitcoin spends
+     * bitcoin — so a transaction joins both currencies' lists, whatever the trade's quote. The
+     * balance walks use every movement; the euro cost walk filters to entries the history prices
+     * in euro (see {@link #bases}).
      */
     private Map<String, List<Transaction>> fillsByBase(BitvavoCredentials credentials,
                                                        long toMillis) {
         Map<String, List<Transaction>> byBase = new TreeMap<>();
         for (String type : List.of("buy", "sell")) {
             for (Transaction entry : history(credentials, type, GENESIS_MILLIS, toMillis)) {
-                String quote = entry.getPriceCurrency();
-                if (quote == null || !EUR.equalsIgnoreCase(quote)) {
-                    continue;
-                }
                 addFill(byBase, entry.getReceivedCurrency(), entry);
                 addFill(byBase, entry.getSentCurrency(), entry);
             }
@@ -353,7 +363,13 @@ public class LedgerService {
         Map<String, Basis> bases = new HashMap<>();
         for (String market : markets) {
             String base = base(market);
-            bases.put(market, Basis.walk(fills.getOrDefault(base, List.of()), EUR, base));
+            // The euro cost walk can only price entries whose history reports a euro price. A
+            // movement quoted in another currency still moves the balance, so it stays in the
+            // balance walk and is left out of the average cost instead of being valued wrongly.
+            List<Transaction> priced = fills.getOrDefault(base, List.of()).stream()
+                    .filter(entry -> EUR.equalsIgnoreCase(entry.getPriceCurrency()))
+                    .toList();
+            bases.put(market, Basis.walk(priced, EUR, base));
         }
         return bases;
     }
@@ -603,7 +619,8 @@ public class LedgerService {
 
     private TotalsView totals(List<OrderResponse> orders, Map<String, Basis> bases,
                               Map<String, Balance> balances, Map<String, GetBookResponse> books,
-                              String market, boolean all, HistoryPeriods.Range range) {
+                              String market, boolean all, HistoryPeriods.Range range,
+                              List<String> skipped) {
         String feesText = feesText(orders, market);
         double realised = orders.stream()
                 .mapToDouble(order -> result(order, basisFor(order, market, bases)))
@@ -616,11 +633,14 @@ public class LedgerService {
                 ? euro(balances.getOrDefault(EUR, new Balance(0, new TreeMap<>())).current())
                 : plain(balances.getOrDefault(base(market), new Balance(0, new TreeMap<>())).current())
                         + " " + base(market);
+        String note = skipped.isEmpty() ? ""
+                : "Could not read the orders of " + String.join(", ", skipped)
+                        + "; the totals leave them out.";
         return new TotalsView(range.label(), orders.size(), feesText,
                 signed(realised), signClass(realised),
                 Double.isNaN(unrealised) ? DASH : signed(unrealised),
                 Double.isNaN(unrealised) ? "" : signClass(unrealised),
-                balanceText, unrealisedHint(bases, books, market, all, range));
+                balanceText, unrealisedHint(bases, books, market, all, range), note);
     }
 
     /**

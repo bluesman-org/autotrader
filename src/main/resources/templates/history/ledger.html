@@ -99,6 +99,8 @@
             </div>
             <p class="muted" style="margin:8px 0 0" th:if="${not #strings.isEmpty(ledger.totals.unrealisedHint)}"
                th:text="${ledger.totals.unrealisedHint}">Unrealised needs today as the end date.</p>
+            <p class="muted" style="margin:8px 0 0" th:if="${not #strings.isEmpty(ledger.totals.note)}"
+               th:text="${ledger.totals.note}">Could not read some markets.</p>
         </div>
 
         <ul class="muted" style="margin:0 0 8px 0;padding-left:20px">

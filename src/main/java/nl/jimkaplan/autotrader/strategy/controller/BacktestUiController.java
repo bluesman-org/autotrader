@@ -65,14 +65,17 @@ public class BacktestUiController {
      */
     @GetMapping
     public String form(Model model) {
-        if (!model.containsAttribute("form")) {
-            BacktestRunForm form = BacktestRunForm.defaults();
+        BacktestRunForm form;
+        if (model.containsAttribute("form")) {
+            form = (BacktestRunForm) model.getAttribute("form");
+        } else {
+            form = BacktestRunForm.defaults();
             marketService.selectable().stream().findFirst().ifPresent(form::setMarket);
             model.addAttribute("form", form);
         }
         // The fee-cover hint's blank-field fallbacks: the engine's own defaults, rendered into the page
         model.addAttribute("defaults", BacktestRunForm.defaults());
-        populate(model);
+        populate(model, form);
         return "backtests/form";
     }
 
@@ -180,12 +183,12 @@ public class BacktestUiController {
                 .map(skipped -> SkippedSignalView.of(skipped, TIMESTAMP)).toList();
     }
 
-    private void populate(Model model) {
+    private void populate(Model model, BacktestRunForm form) {
         model.addAttribute("intervals", CandleInterval.values());
         model.addAttribute("rankingMetrics", RankingMetric.values());
         model.addAttribute("conditions", RuleCondition.values());
         model.addAttribute("operators", LogicalOperator.values());
-        model.addAttribute("markets", marketChoices((BacktestRunForm) model.getAttribute("form")));
+        model.addAttribute("markets", marketChoices(form));
         model.addAttribute("runs", recentViews());
     }
 
