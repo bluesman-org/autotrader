@@ -244,6 +244,9 @@ with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken 
 
 The history page's ledger tab reads the real Bitvavo account, not the engine's own records, with
 the system-wide Bitvavo API key — the same key the engine trades with (see "The Bitvavo key").
+The market picker offers the enabled trading pairs (see "Trading pairs") plus every market a live
+strategy trades; with no choice it opens on the newest live strategy's market, then the most
+recently traded catalogue pair, then BTC-EUR. Only EUR-quoted markets are accepted.
 Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
 their fills and `feePaid`), the P&L walk and the raw transactions from `GET /account/history`, the
 balance from `GET /balance` and the prices from the public order book. A sell shows what it realised

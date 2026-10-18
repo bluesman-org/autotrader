@@ -9,6 +9,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView;
@@ -57,13 +58,15 @@ class LedgerServiceTest {
     private BitvavoCredentialsService credentials;
     @Mock
     private LiveStrategyService strategies;
+    @Mock
+    private MarketService markets;
 
     private LedgerService service;
 
     @BeforeEach
     void setUp() {
-        service = new LedgerService(client, credentials, strategies, new DisplayZone(ZoneId.of("UTC")),
-                Clock.fixed(NOW, ZoneId.of("UTC")));
+        service = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), Clock.fixed(NOW, ZoneId.of("UTC")));
     }
 
     @Test
@@ -395,7 +398,7 @@ class LedgerServiceTest {
     void theEndOfTodayFollowsTheDisplayZone() {
         // 00:30 on the 16th in Amsterdam, still the 15th in UTC: the range ends at now, and "today"
         // is the display zone's day — the clock's own zone must not decide it.
-        service = new LedgerService(client, credentials, strategies,
+        service = new LedgerService(client, credentials, strategies, markets,
                 new DisplayZone(ZoneId.of("Europe/Amsterdam")),
                 Clock.fixed(Instant.parse("2026-10-15T22:30:00Z"), ZoneId.of("UTC")));
         accountReadable();
@@ -593,6 +596,94 @@ class LedgerServiceTest {
     }
 
     @Test
+    void aNonEurMarketFilterFallsBackToTheEngineMarket() {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerRequest request = new LedgerRequest();
+        request.setMarket("BTCUSDT");
+        LedgerView view = service.view(request);
+
+        assertEquals("BTC-EUR", view.filters().market());
+    }
+
+    @Test
+    void theMarketOptionsComeFromTheCatalogue() {
+        when(credentials.get()).thenReturn(Optional.of(stored()));
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+        when(markets.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
+
+        LedgerRequest request = new LedgerRequest();
+        request.setMarket("ETH-EUR");
+        LedgerView view = service.view(request);
+
+        assertEquals(List.of("BTC-EUR", "ETH-EUR"),
+                view.filters().marketOptions().stream().map(option -> option.value()).toList());
+    }
+
+    @Test
+    void theDefaultMarketFallsBackToTheCatalogueWhenNoStrategyRuns() {
+        when(markets.selectable()).thenReturn(List.of("ETH-EUR", "BTC-EUR"));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("ETH-EUR", view.filters().market());
+        assertEquals("ETH-EUR", view.price().market());
+    }
+
+    @Test
+    void theDefaultMarketIgnoresANonEurStrategy() {
+        LiveStrategy nonEur = org.mockito.Mockito.mock(LiveStrategy.class);
+        when(nonEur.getMarket()).thenReturn("BTCUSDT");
+        when(strategies.all()).thenReturn(List.of(nonEur));
+        when(markets.selectable()).thenReturn(List.of("ETH-EUR"));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("ETH-EUR", view.filters().market());
+    }
+
+    @Test
+    void theDefaultMarketTakesTheNewestEurStrategy() {
+        // Real instances, not mocks: strict stubbing would flag a getter the fixed chain never
+        // reads, and a null createdTime would sort before the EUR rows instead of after them.
+        LiveStrategy newestNonEur = LiveStrategy.builder()
+                .market("BTCUSDT")
+                .createdTime(Instant.parse("2026-09-01T00:00:00Z"))
+                .build();
+        LiveStrategy newerEur = LiveStrategy.builder()
+                .market("SOL-EUR")
+                .createdTime(Instant.parse("2026-06-01T00:00:00Z"))
+                .build();
+        LiveStrategy olderEur = LiveStrategy.builder()
+                .market("ETH-EUR")
+                .createdTime(Instant.parse("2026-01-01T00:00:00Z"))
+                .build();
+        when(strategies.all()).thenReturn(List.of(olderEur, newestNonEur, newerEur));
+        when(markets.selectable()).thenReturn(List.of("ETH-EUR"));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        // With the filter after max() this would fall through to the catalogue's ETH-EUR.
+        assertEquals("SOL-EUR", view.filters().market());
+    }
+
+    @Test
     void payingTheBaseCurrencyCountsItOutOfTheBalance() {
         accountReadableWithoutOrders();
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
@@ -672,7 +763,6 @@ class LedgerServiceTest {
 
     @Test
     void theMarketFollowsTheRequestOtherwiseTheEngine() {
-        when(strategies.all()).thenReturn(List.of());
         when(credentials.get()).thenReturn(Optional.of(stored()));
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
                 .thenReturn(new OrderResponse[]{});

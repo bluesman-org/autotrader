@@ -10,6 +10,7 @@ import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -53,6 +54,7 @@ public class BacktestUiController {
             DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
 
     private final BacktestService backtestService;
+    private final MarketService marketService;
 
     /**
      * The configuration form and the most recent runs.
@@ -63,7 +65,9 @@ public class BacktestUiController {
     @GetMapping
     public String form(Model model) {
         if (!model.containsAttribute("form")) {
-            model.addAttribute("form", BacktestRunForm.defaults());
+            BacktestRunForm form = BacktestRunForm.defaults();
+            marketService.selectable().stream().findFirst().ifPresent(form::setMarket);
+            model.addAttribute("form", form);
         }
         // The fee-cover hint's blank-field fallbacks: the engine's own defaults, rendered into the page
         model.addAttribute("defaults", BacktestRunForm.defaults());
@@ -180,6 +184,7 @@ public class BacktestUiController {
         model.addAttribute("rankingMetrics", RankingMetric.values());
         model.addAttribute("conditions", RuleCondition.values());
         model.addAttribute("operators", LogicalOperator.values());
+        model.addAttribute("markets", marketService.selectable());
         model.addAttribute("runs", recentViews());
     }
 

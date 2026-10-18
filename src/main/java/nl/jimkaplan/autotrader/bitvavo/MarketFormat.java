@@ -34,4 +34,24 @@ public final class MarketFormat {
         }
         return market;
     }
+
+    /**
+     * @param market Market in Bitvavo format
+     * @return Whether the market is quoted in euro
+     */
+    public static boolean isEuroQuoted(String market) {
+        return market != null && market.endsWith("-EUR");
+    }
+
+    /**
+     * @param market Market in Bitvavo format
+     * @return The market, unchanged
+     * @throws IllegalArgumentException if the market is not quoted in euro
+     */
+    public static String requireEuroQuoted(String market) {
+        if (!isEuroQuoted(market)) {
+            throw new IllegalArgumentException("only EUR-quoted markets are supported: " + market);
+        }
+        return market;
+    }
 }

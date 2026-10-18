@@ -25,7 +25,7 @@
             <legend>Data</legend>
             <div class="grid">
                 <label>Market
-                    <input type="text" th:field="*{market}" required>
+                    <input type="text" th:field="*{market}" list="market-options" required>
                 </label>
                 <label>Interval
                     <select th:field="*{interval}">
@@ -39,6 +39,11 @@
                     <input type="date" th:field="*{toDate}" required>
                 </label>
             </div>
+            <datalist id="market-options">
+                <option th:each="pair : ${markets}" th:value="${pair}"></option>
+            </datalist>
+            <p class="muted">The suggestions are the enabled trading pairs from the settings page plus
+                the markets your live strategies trade; the pair has to be EUR-quoted.</p>
         </fieldset>
 
         <fieldset>

@@ -70,7 +70,10 @@ combination is simulated over every bar — the bound keeps a sweep interactive.
 ## API
 
 `POST /api/backtests` runs a sweep and stores the outcome. Only the market, interval and range
-are required; everything else falls back to the documented defaults:
+are required; everything else falls back to the documented defaults. The market has to be
+EUR-quoted — the sizing, the balance and the fee are all in euro — and the form suggests the
+enabled trading pairs from the settings page plus the markets a live strategy trades, while the
+API accepts any EUR pair.
 
 | Field | Default |
 | --- | --- |

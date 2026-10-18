@@ -198,10 +198,12 @@ class MarketServiceTest {
         Market ada = market("ADA-EUR", false, Market.SOURCE_DISCOVERED);
         ada.setLastTradedAt(Instant.parse("2021-11-08T00:00:00Z"));
         when(markets.findAll()).thenReturn(List.of(btc, eth, ada));
-        // ADA is hidden in the catalogue but a strategy still trades it; SOL was never traded.
+        // ADA is hidden in the catalogue but a strategy still trades it; SOL was never traded, and
+        // a non-EUR strategy market is not offered.
         when(strategies.findAll()).thenReturn(List.of(
                 LiveStrategy.builder().market("ADA-EUR").build(),
-                LiveStrategy.builder().market("SOL-EUR").build()));
+                LiveStrategy.builder().market("SOL-EUR").build(),
+                LiveStrategy.builder().market("BTCUSDT").build()));
 
         assertEquals(List.of("BTC-EUR", "ETH-EUR", "ADA-EUR", "SOL-EUR"), service.selectable());
     }
