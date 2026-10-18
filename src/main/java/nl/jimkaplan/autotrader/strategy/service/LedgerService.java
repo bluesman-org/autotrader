@@ -223,10 +223,10 @@ public class LedgerService {
             }
         }
         return liveStrategyService.all().stream()
+                .filter(strategy -> MarketFormat.isEuroQuoted(strategy.getMarket()))
                 .max(Comparator.comparing(LiveStrategy::getCreatedTime,
                         Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(LiveStrategy::getMarket)
-                .filter(MarketFormat::isEuroQuoted)
                 .orElseGet(() -> marketService.selectable().stream().findFirst()
                         .orElse(DEFAULT_MARKET));
     }

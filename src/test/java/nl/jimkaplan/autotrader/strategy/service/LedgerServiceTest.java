@@ -658,6 +658,24 @@ class LedgerServiceTest {
     }
 
     @Test
+    void theDefaultMarketTakesTheNewestEurStrategy() {
+        LiveStrategy newestNonEur = org.mockito.Mockito.mock(LiveStrategy.class);
+        when(newestNonEur.getMarket()).thenReturn("BTCUSDT");
+        LiveStrategy newerEur = org.mockito.Mockito.mock(LiveStrategy.class);
+        when(newerEur.getMarket()).thenReturn("SOL-EUR");
+        when(newerEur.getCreatedTime()).thenReturn(Instant.parse("2026-06-01T00:00:00Z"));
+        LiveStrategy olderEur = org.mockito.Mockito.mock(LiveStrategy.class);
+        when(olderEur.getMarket()).thenReturn("ETH-EUR");
+        when(olderEur.getCreatedTime()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
+        when(strategies.all()).thenReturn(List.of(olderEur, newestNonEur, newerEur));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("SOL-EUR", view.filters().market());
+    }
+
+    @Test
     void payingTheBaseCurrencyCountsItOutOfTheBalance() {
         accountReadableWithoutOrders();
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
