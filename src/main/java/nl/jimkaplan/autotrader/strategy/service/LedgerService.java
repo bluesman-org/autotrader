@@ -11,6 +11,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.FillRowView;
@@ -100,6 +101,7 @@ public class LedgerService {
     private final BitvavoApiClient bitvavoApiClient;
     private final BitvavoCredentialsService credentialsService;
     private final LiveStrategyService liveStrategyService;
+    private final MarketService marketService;
     private final DisplayZone display;
     private final HistoryPeriods periods;
     private final Clock clock;
@@ -108,16 +110,19 @@ public class LedgerService {
     public LedgerService(BitvavoApiClient bitvavoApiClient,
                          BitvavoCredentialsService credentialsService,
                          LiveStrategyService liveStrategyService,
+                         MarketService marketService,
                          @Value("${autotrader.ui.time-zone:}") String timeZone) {
-        this(bitvavoApiClient, credentialsService, liveStrategyService, new DisplayZone(timeZone),
-                Clock.systemUTC());
+        this(bitvavoApiClient, credentialsService, liveStrategyService, marketService,
+                new DisplayZone(timeZone), Clock.systemUTC());
     }
 
     LedgerService(BitvavoApiClient bitvavoApiClient, BitvavoCredentialsService credentialsService,
-                  LiveStrategyService liveStrategyService, DisplayZone display, Clock clock) {
+                  LiveStrategyService liveStrategyService, MarketService marketService,
+                  DisplayZone display, Clock clock) {
         this.bitvavoApiClient = bitvavoApiClient;
         this.credentialsService = credentialsService;
         this.liveStrategyService = liveStrategyService;
+        this.marketService = marketService;
         this.display = display;
         this.periods = new HistoryPeriods(display, clock);
         this.clock = clock;
@@ -208,8 +213,12 @@ public class LedgerService {
         if (notBlank(request.getMarket())) {
             try {
                 // Markets end up in the signed API path and in every generated link, so only a
-                // well-formed one is accepted; anything else falls back to the engine's market.
-                return MarketFormat.toMarket(request.getMarket());
+                // well-formed EUR pair is accepted; anything else falls back to the engine's market.
+                String selected = MarketFormat.toMarket(request.getMarket());
+                if (!selected.endsWith("-" + EUR)) {
+                    throw new IllegalArgumentException("Only EUR-quoted markets are supported: " + selected);
+                }
+                return selected;
             } catch (IllegalArgumentException e) {
                 log.warn("Ignoring an unsupported market filter: {}", request.getMarket());
             }
@@ -219,7 +228,8 @@ public class LedgerService {
                         Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(LiveStrategy::getMarket)
                 .filter(Objects::nonNull)
-                .orElse(DEFAULT_MARKET);
+                .orElseGet(() -> marketService.selectable().stream().findFirst()
+                        .orElse(DEFAULT_MARKET));
     }
 
     /**
@@ -233,12 +243,7 @@ public class LedgerService {
     }
 
     private List<Option> marketOptions(String market) {
-        List<String> known = liveStrategyService.all().stream()
-                .map(LiveStrategy::getMarket)
-                .filter(Objects::nonNull)
-                .distinct()
-                .sorted()
-                .collect(Collectors.toCollection(ArrayList::new));
+        List<String> known = new ArrayList<>(marketService.selectable());
         if (!known.contains(market)) {
             known.add(market);
         }

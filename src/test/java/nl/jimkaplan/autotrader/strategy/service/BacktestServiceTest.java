@@ -201,6 +201,17 @@ class BacktestServiceTest {
     }
 
     @Test
+    void run_rejectsANonEurMarket() {
+        BacktestRunRequest request = minimalRequest();
+        request.setMarket("BTCUSDT");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> backtestService.run(request));
+
+        assertTrue(error.getMessage().contains("EUR-quoted"));
+    }
+
+    @Test
     void run_rejectsRangesWithoutCandles() {
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(List.of());

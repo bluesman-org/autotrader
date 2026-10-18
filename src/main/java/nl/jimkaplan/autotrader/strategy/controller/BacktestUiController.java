@@ -10,6 +10,7 @@ import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -53,6 +54,7 @@ public class BacktestUiController {
             DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
 
     private final BacktestService backtestService;
+    private final MarketService marketService;
 
     /**
      * The configuration form and the most recent runs.
@@ -180,6 +182,7 @@ public class BacktestUiController {
         model.addAttribute("rankingMetrics", RankingMetric.values());
         model.addAttribute("conditions", RuleCondition.values());
         model.addAttribute("operators", LogicalOperator.values());
+        model.addAttribute("markets", marketService.selectable());
         model.addAttribute("runs", recentViews());
     }
 

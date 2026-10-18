@@ -75,6 +75,11 @@ public class BacktestService {
         Objects.requireNonNull(request, "request must not be null");
         CandleInterval interval = CandleInterval.fromCode(requiredText("interval", request.getInterval()));
         String market = MarketFormat.toMarket(requiredText("market", request.getMarket()));
+        if (!market.endsWith("-EUR")) {
+            // The engine sizes every buy in euro and charges the euro fee the defaults name, so a
+            // market quoted in anything else would make the run's figures meaningless.
+            throw new IllegalArgumentException("Only EUR-quoted markets are supported: " + market);
+        }
         long from = required("fromDate", request.getFromDate());
         long to = required("toDate", request.getToDate());
         if (from >= to) {

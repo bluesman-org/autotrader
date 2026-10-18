@@ -9,6 +9,7 @@ import nl.jimkaplan.autotrader.strategy.backtest.SkipReason;
 import nl.jimkaplan.autotrader.strategy.backtest.SkippedSignal;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,8 @@ class BacktestUiControllerTest {
 
     @Mock
     private BacktestService backtestService;
+    @Mock
+    private MarketService marketService;
 
     @InjectMocks
     private BacktestUiController backtestUiController;
@@ -45,6 +48,7 @@ class BacktestUiControllerTest {
     @Test
     void form_providesTheDefaultsAndOptions() {
         when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
         Model model = new ExtendedModelMap();
 
         String view = backtestUiController.form(model);
@@ -56,6 +60,7 @@ class BacktestUiControllerTest {
         assertNotNull(model.getAttribute("rankingMetrics"));
         assertNotNull(model.getAttribute("conditions"));
         assertNotNull(model.getAttribute("operators"));
+        assertEquals(List.of("BTC-EUR", "ETH-EUR"), model.getAttribute("markets"));
         assertNotNull(model.getAttribute("runs"));
     }
 
