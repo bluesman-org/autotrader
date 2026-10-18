@@ -61,7 +61,6 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("Strategy backtests")))
                 .andExpect(content().string(containsString("name=\"market\"")))
                 .andExpect(content().string(containsString("value=\"BTC-EUR\"")))
-                .andExpect(content().string(containsString("id=\"market-options\"")))
                 .andExpect(content().string(containsString("ETH-EUR")))
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 .andExpect(content().string(containsString("SAR BEARISH CROSSOVER")))

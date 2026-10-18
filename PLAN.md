@@ -174,7 +174,7 @@ next: the small live-run trial of the engine.
     labelled. An **account history page** (`/ui/history`) with two clearly separated tabs: the
     engine's closed round trips — columns # (row number in the current view), Entry and Exit (each
     with date and time), Strategy (a stable colour per strategy), Type (dry/real), Price, Qty,
-    Result; details expand inside the row; filters for strategy, type, result (wins/losses/all, 0
+    Result; details expand inside the row; filters for strategy, market, type, result (wins/losses/all, 0
     counts as a win) and time (rolling 1h/2h/4h/8h/24h/3/7/14/30 days, calendar last week/last two
     weeks/last month/year-to-date/last year, and a custom start–end range; all by entry time); every
     column sorts on the underlying value, never the displayed text — and Bitvavo's account ledger:

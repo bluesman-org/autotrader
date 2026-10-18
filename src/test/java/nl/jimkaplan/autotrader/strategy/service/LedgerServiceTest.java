@@ -8,6 +8,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
+import nl.jimkaplan.autotrader.model.document.Market;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
@@ -32,9 +33,11 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
@@ -629,8 +632,90 @@ class LedgerServiceTest {
         request.setMarket("ETH-EUR");
         LedgerView view = service.view(request);
 
-        assertEquals(List.of("BTC-EUR", "ETH-EUR"),
+        assertEquals(List.of("all", "BTC-EUR", "ETH-EUR"),
                 view.filters().marketOptions().stream().map(option -> option.value()).toList());
+    }
+
+    @Test
+    void theAllPairsViewMergesTheCatalogueAndSumsTheResult() {
+        when(credentials.get()).thenReturn(Optional.of(stored()));
+        when(strategies.all()).thenReturn(List.of());
+        when(markets.all()).thenReturn(List.of(
+                Market.builder().market("BTC-EUR").enabled(true).build(),
+                Market.builder().market("ETH-EUR").enabled(true).build()));
+        when(markets.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
+        List<Transaction> buys = List.of(
+                trade("buy", "BTC", "2026-10-01T10:00:00Z", "1", "100", "0"),
+                trade("buy", "ETH", "2026-10-01T11:00:00Z", "2", "100", "0"));
+        List<Transaction> sells = List.of(
+                trade("sell", "BTC", "2026-10-14T10:00:00Z", "1", "110", "0"),
+                trade("sell", "ETH", "2026-10-14T11:00:00Z", "2", "90", "0"));
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String endpoint = invocation.getArgument(0);
+                    return new GetAccountHistoryResponse(
+                            endpoint.contains("type=buy") ? buys : sells, 1, 1, 200);
+                });
+        OrderResponse btcSell = sellOrder("BTC-EUR", "2026-10-14T10:00:00Z", "1", "110");
+        OrderResponse ethSell = sellOrder("ETH-EUR", "2026-10-14T11:00:00Z", "2", "90");
+        when(client.get(argThat(url -> url != null && url.contains("market=BTC-EUR")),
+                eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{btcSell});
+        when(client.get(argThat(url -> url != null && url.contains("market=ETH-EUR")),
+                eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{ethSell});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(new GetAccountBalanceResponse[]{
+                        balanceOf("BTC", "0"), balanceOf("ETH", "0"), balanceOf("EUR", "1000")});
+        when(client.getPublic(eq("/ticker/book"), eq(GetBookResponse[].class)))
+                .thenReturn(new GetBookResponse[]{bookFor("BTC-EUR", "120"), bookFor("ETH-EUR", "95")});
+
+        LedgerRequest request = new LedgerRequest();
+        request.setMarket("all");
+        LedgerView view = service.view(request);
+
+        assertNull(view.message());
+        assertNull(view.price());
+        assertEquals("all", view.filters().market());
+        assertEquals("Amount", view.filters().amountHeader());
+        assertEquals("All pairs", view.filters().marketOptions().get(0).label());
+        assertEquals(2, view.rows().size());
+        assertEquals("ETH-EUR", view.rows().get(0).marketText());
+        assertEquals("−€20,00", view.rows().get(0).pnlText());
+        assertEquals("+€10,00", view.rows().get(1).pnlText());
+        assertEquals("−€10,00", view.totals().realisedText());
+        assertEquals("€0,00", view.totals().feesText());
+        assertEquals("€1.000,00", view.totals().balanceText());
+        assertEquals("—", view.totals().unrealisedText());
+        assertTrue(view.totals().unrealisedHint().contains("Nothing is held"));
+    }
+
+    @Test
+    void theAllPairsViewNeedsAPriceForEveryHeldPair() {
+        when(credentials.get()).thenReturn(Optional.of(stored()));
+        when(strategies.all()).thenReturn(List.of());
+        when(markets.all()).thenReturn(List.of(Market.builder().market("BTC-EUR").enabled(true).build()));
+        when(markets.selectable()).thenReturn(List.of("BTC-EUR"));
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(
+                        invocation.getArgument(0).toString().contains("type=buy")
+                                ? List.of(trade("buy", "BTC", "2026-10-01T10:00:00Z", "1", "100", "0"))
+                                : List.of(),
+                        1, 1, 200));
+        when(client.get(argThat(url -> url != null && url.contains("market=BTC-EUR")),
+                eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(new GetAccountBalanceResponse[]{balanceOf("BTC", "1"), balanceOf("EUR", "1000")});
+        when(client.getPublic(eq("/ticker/book"), eq(GetBookResponse[].class)))
+                .thenReturn(new GetBookResponse[]{});
+
+        LedgerRequest request = new LedgerRequest();
+        request.setMarket("all");
+        LedgerView view = service.view(request);
+
+        assertEquals("—", view.totals().unrealisedText());
+        assertTrue(view.totals().unrealisedHint().contains("could not be read"));
     }
 
     @Test
@@ -779,8 +864,10 @@ class LedgerServiceTest {
         assertEquals(null, view.message());
         assertEquals("ETH-EUR", view.price().market());
         assertEquals("ETH-EUR", view.filters().market());
-        assertEquals(1, view.filters().marketOptions().size());
-        assertEquals("ETH-EUR", view.filters().marketOptions().get(0).value());
+        assertEquals(2, view.filters().marketOptions().size());
+        assertEquals("all", view.filters().marketOptions().get(0).value());
+        assertEquals("All pairs", view.filters().marketOptions().get(0).label());
+        assertEquals("ETH-EUR", view.filters().marketOptions().get(1).value());
         assertEquals(0, view.rows().size());
         assertEquals("UTC", service.zoneLabel());
     }
@@ -1048,6 +1135,59 @@ class LedgerServiceTest {
         balance.setAvailable(new BigDecimal(available));
         balance.setInOrder(BigDecimal.ZERO);
         return new GetAccountBalanceResponse[]{balance};
+    }
+
+    private static OrderResponse sellOrder(String market, String when, String amount, String price) {
+        OrderResponse order = baseOrder(when, "sell", "market");
+        order.setMarket(market);
+        order.setStatus("filled");
+        order.setAmount(new BigDecimal(amount));
+        order.setFilledAmount(new BigDecimal(amount));
+        order.setFilledAmountQuote(new BigDecimal(amount).multiply(new BigDecimal(price)));
+        order.setFeePaid(BigDecimal.ZERO);
+        order.setFills(List.of(fill(when, amount, price, "0")));
+        return order;
+    }
+
+    private static Transaction trade(String type, String base, String when, String amount,
+                                     String price, String fee) {
+        Transaction entry = new Transaction();
+        entry.setType(type);
+        entry.setExecutedAt(Instant.parse(when));
+        entry.setPriceCurrency("EUR");
+        entry.setPriceAmount(new BigDecimal(price));
+        BigDecimal quantity = new BigDecimal(amount);
+        BigDecimal cash = quantity.multiply(new BigDecimal(price));
+        if ("buy".equals(type)) {
+            entry.setSentCurrency("EUR");
+            entry.setSentAmount(cash);
+            entry.setReceivedCurrency(base);
+            entry.setReceivedAmount(quantity);
+        } else {
+            entry.setSentCurrency(base);
+            entry.setSentAmount(quantity);
+            entry.setReceivedCurrency("EUR");
+            entry.setReceivedAmount(cash);
+        }
+        entry.setFeesCurrency("EUR");
+        entry.setFeesAmount(new BigDecimal(fee));
+        return entry;
+    }
+
+    private static GetAccountBalanceResponse balanceOf(String symbol, String available) {
+        GetAccountBalanceResponse balance = new GetAccountBalanceResponse();
+        balance.setSymbol(symbol);
+        balance.setAvailable(new BigDecimal(available));
+        balance.setInOrder(BigDecimal.ZERO);
+        return balance;
+    }
+
+    private static GetBookResponse bookFor(String market, String bid) {
+        GetBookResponse book = new GetBookResponse();
+        book.setMarket(market);
+        book.setBid(new BigDecimal(bid));
+        book.setAsk(new BigDecimal(bid));
+        return book;
     }
 
     private static GetAccountBalanceResponse[] withAnotherSymbol() {

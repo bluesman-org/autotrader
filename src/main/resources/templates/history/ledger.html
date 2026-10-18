@@ -128,7 +128,7 @@
                         <th class="left">Side</th>
                         <th class="left">Type</th>
                         <th class="left">Market</th>
-                        <th th:text="|Amount (${#strings.substringBefore(ledger.filters.market, '-')})|">Amount (BTC)</th>
+                        <th th:text="${ledger.filters.amountHeader}">Amount (BTC)</th>
                         <th>Avg price</th>
                         <th class="left">Status</th>
                         <th>Balance after</th>
@@ -174,7 +174,7 @@
                                             <thead>
                                             <tr>
                                                 <th class="left">Time</th>
-                                                <th th:text="|Amount (${#strings.substringBefore(ledger.filters.market, '-')})|">Amount (BTC)</th>
+                                                <th th:text="${ledger.filters.amountHeader}">Amount (BTC)</th>
                                                 <th>Price</th>
                                                 <th>Fee</th>
                                                 <th class="left">Maker/Taker</th>

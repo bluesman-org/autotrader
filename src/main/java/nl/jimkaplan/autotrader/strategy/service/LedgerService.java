@@ -10,6 +10,7 @@ import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.OrderResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
+import nl.jimkaplan.autotrader.model.document.Market;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
@@ -38,13 +39,17 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -71,6 +76,7 @@ public class LedgerService {
     private static final String RANGE_HINT =
             "Unrealised needs today as the end date — end the range with today to see it.";
     private static final String DEFAULT_MARKET = "BTC-EUR";
+    private static final String ALL = "all";
     private static final String EUR = "EUR";
     private static final String DEFAULT_VIEW = "orders";
     private static final String RAW_VIEW = "raw";
@@ -144,9 +150,14 @@ public class LedgerService {
         HistoryPeriods.Range range = periods.resolve(request.getPeriod(), request.getFromDate(),
                 request.getFromTime(), request.getToDate(), request.getToTime());
         String market = market(request);
+        boolean all = ALL.equals(market);
         boolean raw = RAW_VIEW.equalsIgnoreCase(request.getView());
-        GetBookResponse book = book(market);
-        PriceView price = price(market, book);
+        // "All pairs" has no single current price or book, so the price block is hidden and the
+        // totals value every held pair from the exchange's whole book list instead.
+        GetBookResponse book = all ? null : book(market);
+        Map<String, GetBookResponse> books = all ? books()
+                : book == null ? Map.of() : Map.of(market, book);
+        PriceView price = all ? null : price(market, book);
         FiltersView filters = filters(request, market, raw);
         Optional<BitvavoCredentials> account = credentialsService.get();
         if (account.isEmpty()) {
@@ -159,7 +170,7 @@ public class LedgerService {
         }
         BitvavoCredentials credentials = account.get();
         try {
-            return ledger(request, range, market, raw, book, price, filters, credentials);
+            return ledger(request, range, market, all, raw, books, price, filters, credentials);
         } catch (RestClientException e) {
             log.warn("Could not read the Bitvavo ledger for {}: {}", market, e.getMessage());
             return new LedgerView("Could not read the Bitvavo account: " + e.getMessage(), price,
@@ -169,13 +180,15 @@ public class LedgerService {
     }
 
     private LedgerView ledger(LedgerRequest request, HistoryPeriods.Range range, String market,
-                              boolean raw, GetBookResponse book, PriceView price, FiltersView filters,
+                              boolean all, boolean raw, Map<String, GetBookResponse> books,
+                              PriceView price, FiltersView filters,
                               BitvavoCredentials credentials) {
-        List<OrderResponse> periodOrders = orders(credentials, market, range);
-        List<Transaction> marketFills = marketFills(credentials, market, clock.instant().toEpochMilli());
-        Balance balance = balance(credentials, market, marketFills);
-        double currentBid = book == null || book.getBid() == null ? Double.NaN : book.getBid().doubleValue();
-        Basis basis = Basis.walk(marketFills, quote(market), base(market));
+        List<String> markets = all ? ledgerMarkets() : List.of(market);
+        List<OrderResponse> periodOrders = orders(credentials, markets, range);
+        Map<String, List<Transaction>> fills = fillsByBase(credentials,
+                clock.instant().toEpochMilli());
+        Map<String, Balance> balances = balances(credentials, fills);
+        Map<String, Basis> bases = bases(fills, markets);
 
         List<OrderResponse> filtered = periodOrders.stream()
                 .filter(order -> matchesSide(order, request.getSide()))
@@ -191,7 +204,7 @@ public class LedgerService {
         int toIndex = Math.min(fromIndex + pageSize, filtered.size());
         List<OrderRowView> rows = new ArrayList<>();
         for (int i = fromIndex; i < toIndex; i++) {
-            rows.add(row(filtered.get(i), i + 1, basis, balance, market));
+            rows.add(row(filtered.get(i), i + 1, bases, balances, market));
         }
 
         List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
@@ -201,7 +214,7 @@ public class LedgerService {
         List<RawRowView> rawRows = raw ? rawRows(rawEntries, rawPage, pageSize) : List.of();
 
         return new LedgerView(null, price, filters,
-                totals(filtered, basis, currentBid, balance.current(), market, range),
+                totals(filtered, bases, balances, books, market, all, range),
                 rows, pager(request, filtered.size(), page, pages), raw,
                 rawRows, pager(request, rawEntries.size(), rawPage, rawPages));
     }
@@ -210,6 +223,9 @@ public class LedgerService {
 
     private String market(LedgerRequest request) {
         if (notBlank(request.getMarket())) {
+            if (ALL.equalsIgnoreCase(request.getMarket().trim())) {
+                return ALL;
+            }
             try {
                 // Markets end up in the signed API path and in every generated link, so only a
                 // well-formed EUR pair is accepted; anything else falls back to the engine's market.
@@ -242,17 +258,32 @@ public class LedgerService {
     }
 
     private List<Option> marketOptions(String market) {
-        List<String> known = new ArrayList<>(marketService.selectable());
+        List<String> known = new ArrayList<>();
+        known.add(ALL);
+        known.addAll(marketService.selectable());
         if (!known.contains(market)) {
             known.add(market);
         }
-        return known.stream().map(value -> new Option(value, value)).toList();
+        return known.stream()
+                .map(value -> new Option(value, ALL.equals(value) ? "All pairs" : value))
+                .toList();
     }
 
     // ---- reads ------------------------------------------------------------------------------
 
-    private List<OrderResponse> orders(BitvavoCredentials credentials, String market,
+    private List<OrderResponse> orders(BitvavoCredentials credentials, List<String> markets,
                                        HistoryPeriods.Range range) {
+        // The exchange has no all-markets order read — it requires one market per call — so the
+        // all-pairs view merges the catalogue's markets and whatever a live strategy trades.
+        List<OrderResponse> all = new ArrayList<>();
+        for (String market : markets) {
+            all.addAll(ordersFor(credentials, market, range));
+        }
+        return all;
+    }
+
+    private List<OrderResponse> ordersFor(BitvavoCredentials credentials, String market,
+                                          HistoryPeriods.Range range) {
         String endpoint = UriComponentsBuilder.fromPath("/orders")
                 .queryParam("market", market)
                 .queryParam("start", range.fromMillis())
@@ -265,23 +296,84 @@ public class LedgerService {
     }
 
     /**
-     * Every buy and sell of the market, oldest first. The cost walk must see what happened before
-     * the period — a sell's inventory was bought earlier — so this reads from the account's start,
-     * not from the period's.
+     * The markets the all-pairs view reads: everything in the catalogue, including a pair hidden
+     * from the pickers, plus every market a live strategy trades.
      */
-    private List<Transaction> marketFills(BitvavoCredentials credentials, String market, long toMillis) {
-        String base = base(market);
-        List<Transaction> fills = new ArrayList<>();
-        for (String type : List.of("buy", "sell")) {
-            for (Transaction entry : history(credentials, type, GENESIS_MILLIS, toMillis)) {
-                if (base.equals(entry.getReceivedCurrency()) || base.equals(entry.getSentCurrency())) {
-                    fills.add(entry);
-                }
+    private List<String> ledgerMarkets() {
+        Set<String> markets = new TreeSet<>();
+        for (Market entry : marketService.all()) {
+            if (MarketFormat.isEuroQuoted(entry.getMarket())) {
+                markets.add(entry.getMarket());
             }
         }
-        fills.sort(Comparator.comparing(Transaction::getExecutedAt,
-                Comparator.nullsLast(Comparator.naturalOrder())));
-        return fills;
+        for (LiveStrategy strategy : liveStrategyService.all()) {
+            if (MarketFormat.isEuroQuoted(strategy.getMarket())) {
+                markets.add(strategy.getMarket());
+            }
+        }
+        markets.add(DEFAULT_MARKET);
+        return new ArrayList<>(markets);
+    }
+
+    /**
+     * The account's whole EUR buy/sell history grouped by the currency on each side of the trade.
+     * A base currency can move on either side — a buy of another asset paid with bitcoin spends
+     * bitcoin — so a transaction joins both currencies' lists; the cost walk treats a currency on
+     * the sent side as a disposal. The walks and the balance trajectories share this one read.
+     */
+    private Map<String, List<Transaction>> fillsByBase(BitvavoCredentials credentials,
+                                                       long toMillis) {
+        Map<String, List<Transaction>> byBase = new TreeMap<>();
+        for (String type : List.of("buy", "sell")) {
+            for (Transaction entry : history(credentials, type, GENESIS_MILLIS, toMillis)) {
+                String quote = entry.getPriceCurrency();
+                if (quote == null || !EUR.equalsIgnoreCase(quote)) {
+                    continue;
+                }
+                addFill(byBase, entry.getReceivedCurrency(), entry);
+                addFill(byBase, entry.getSentCurrency(), entry);
+            }
+        }
+        for (List<Transaction> fills : byBase.values()) {
+            fills.sort(Comparator.comparing(Transaction::getExecutedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder())));
+        }
+        return byBase;
+    }
+
+    private static void addFill(Map<String, List<Transaction>> byBase, String currency,
+                                Transaction entry) {
+        if (currency != null) {
+            byBase.computeIfAbsent(currency, key -> new ArrayList<>()).add(entry);
+        }
+    }
+
+    private static Map<String, Basis> bases(Map<String, List<Transaction>> fills,
+                                            List<String> markets) {
+        Map<String, Basis> bases = new HashMap<>();
+        for (String market : markets) {
+            String base = base(market);
+            bases.put(market, Basis.walk(fills.getOrDefault(base, List.of()), EUR, base));
+        }
+        return bases;
+    }
+
+    private static Basis basisFor(OrderResponse order, String selectedMarket,
+                                  Map<String, Basis> bases) {
+        String market = marketOf(order, selectedMarket);
+        return bases.getOrDefault(market, Basis.walk(List.of(), EUR, base(market)));
+    }
+
+    /**
+     * @param order          The order
+     * @param selectedMarket The market the page selected, or {@code all}
+     * @return The order's own market, with the selected market as the fallback for an order that
+     *         carries none (and a real symbol even in the all-pairs view)
+     */
+    private static String marketOf(OrderResponse order, String selectedMarket) {
+        String market = order.getMarket() == null || ALL.equals(order.getMarket())
+                ? selectedMarket : order.getMarket();
+        return ALL.equals(market) ? DEFAULT_MARKET : market;
     }
 
     private List<Transaction> history(BitvavoCredentials credentials, String type, long fromMillis,
@@ -317,35 +409,39 @@ public class LedgerService {
     }
 
     /**
-     * The account's current balance of the market's base currency, plus a way to ask what it was
-     * after a given order: the walk counts fills backwards from today's balance, so "Balance after"
-     * counts only filled orders.
+     * The account's balance of every currency, with a way to ask what a base was after a given
+     * fill: the walk counts fills backwards from today's balance, so "Balance after" counts only
+     * filled orders. One read serves every pair in the all-pairs view.
      */
-    private Balance balance(BitvavoCredentials credentials, String market,
-                            List<Transaction> marketFills) {
-        String endpoint = UriComponentsBuilder.fromPath("/balance")
-                .queryParam("symbol", base(market))
-                .build().encode().toUriString();
-        GetAccountBalanceResponse[] balances = bitvavoApiClient.get(endpoint,
+    private Map<String, Balance> balances(BitvavoCredentials credentials,
+                                          Map<String, List<Transaction>> fills) {
+        GetAccountBalanceResponse[] response = bitvavoApiClient.get("/balance",
                 GetAccountBalanceResponse[].class, credentials.getApiKey(), credentials.getApiSecret());
-        String base = base(market);
-        double current = 0;
-        if (balances != null) {
-            for (GetAccountBalanceResponse entry : balances) {
-                if (base.equals(entry.getSymbol())) {
-                    current = number(entry.getAvailable()) + number(entry.getInOrder());
+        Map<String, Double> current = new HashMap<>();
+        if (response != null) {
+            for (GetAccountBalanceResponse entry : response) {
+                current.merge(entry.getSymbol(),
+                        number(entry.getAvailable()) + number(entry.getInOrder()), Double::sum);
+            }
+        }
+        Set<String> bases = new HashSet<>(current.keySet());
+        bases.addAll(fills.keySet());
+        Map<String, Balance> balances = new HashMap<>();
+        for (String base : bases) {
+            List<Transaction> entries = fills.getOrDefault(base, List.of());
+            double amount = current.getOrDefault(base, 0.0);
+            NavigableMap<Long, Double> afterByFill = new TreeMap<>();
+            double running = amount
+                    - entries.stream().mapToDouble(fill -> baseDelta(fill, base)).sum();
+            for (Transaction fill : entries) {
+                running += baseDelta(fill, base);
+                if (fill.getExecutedAt() != null) {
+                    afterByFill.put(fill.getExecutedAt().toEpochMilli(), running);
                 }
             }
+            balances.put(base, new Balance(amount, afterByFill));
         }
-        NavigableMap<Long, Double> afterByFill = new TreeMap<>();
-        double running = current - marketFills.stream().mapToDouble(fill -> baseDelta(fill, base)).sum();
-        for (Transaction fill : marketFills) {
-            running += baseDelta(fill, base);
-            if (fill.getExecutedAt() != null) {
-                afterByFill.put(fill.getExecutedAt().toEpochMilli(), running);
-            }
-        }
-        return new Balance(current, afterByFill);
+        return balances;
     }
 
     private PriceView price(String market, GetBookResponse book) {
@@ -365,10 +461,39 @@ public class LedgerService {
         }
     }
 
+    /**
+     * @return Every market's book, read in one call, for the all-pairs view's current prices
+     */
+    private Map<String, GetBookResponse> books() {
+        try {
+            GetBookResponse[] response = bitvavoApiClient.getPublic("/ticker/book",
+                    GetBookResponse[].class);
+            Map<String, GetBookResponse> books = new HashMap<>();
+            if (response != null) {
+                for (GetBookResponse book : response) {
+                    if (book.getMarket() != null) {
+                        books.put(book.getMarket(), book);
+                    }
+                }
+            }
+            return books;
+        } catch (RestClientException e) {
+            log.warn("Could not read the current prices: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private static double bid(GetBookResponse book) {
+        return book == null || book.getBid() == null ? Double.NaN : book.getBid().doubleValue();
+    }
+
     // ---- the view ---------------------------------------------------------------------------
 
-    private OrderRowView row(OrderResponse order, int number, Basis basis, Balance balance,
-                             String market) {
+    private OrderRowView row(OrderResponse order, int number, Map<String, Basis> bases,
+                             Map<String, Balance> balances, String selectedMarket) {
+        String market = marketOf(order, selectedMarket);
+        Basis basis = basisFor(order, selectedMarket, bases);
+        Balance balance = balances.getOrDefault(base(market), new Balance(0, new TreeMap<>()));
         boolean buy = isBuy(order);
         double amount = number(order.getFilledAmount());
         double quoteAmount = number(order.getFilledAmountQuote());
@@ -458,7 +583,8 @@ public class LedgerService {
     private FiltersView filters(LedgerRequest request, String market, boolean raw) {
         boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
                 request.getToDate());
-        return new FiltersView(request.getSide(), market, selected(request.getType(), ORDER_TYPES),
+        return new FiltersView(request.getSide(), market, amountHeader(market),
+                selected(request.getType(), ORDER_TYPES),
                 selected(request.getStatus(), STATUS_VALUES),
                 raw ? RAW_VIEW : DEFAULT_VIEW,
                 custom ? "" : HistoryPeriods.preset(request.getPeriod()),
@@ -471,17 +597,30 @@ public class LedgerService {
                 HistoryPeriods.OPTIONS);
     }
 
-    private TotalsView totals(List<OrderResponse> orders, Basis basis, double currentBid,
-                              double balance, String market, HistoryPeriods.Range range) {
+    private static String amountHeader(String market) {
+        return ALL.equals(market) ? "Amount" : "Amount (" + base(market) + ")";
+    }
+
+    private TotalsView totals(List<OrderResponse> orders, Map<String, Basis> bases,
+                              Map<String, Balance> balances, Map<String, GetBookResponse> books,
+                              String market, boolean all, HistoryPeriods.Range range) {
         String feesText = feesText(orders, market);
-        double realised = orders.stream().mapToDouble(order -> result(order, basis)).filter(Double::isFinite)
-                .sum();
-        double unrealised = unrealised(basis, currentBid, range);
+        double realised = orders.stream()
+                .mapToDouble(order -> result(order, basisFor(order, market, bases)))
+                .filter(Double::isFinite).sum();
+        double unrealised = all
+                ? unrealisedAll(bases, books, range)
+                : unrealised(bases.getOrDefault(market, Basis.walk(List.of(), EUR, base(market))),
+                        bid(books.get(market)), range);
+        String balanceText = all
+                ? euro(balances.getOrDefault(EUR, new Balance(0, new TreeMap<>())).current())
+                : plain(balances.getOrDefault(base(market), new Balance(0, new TreeMap<>())).current())
+                        + " " + base(market);
         return new TotalsView(range.label(), orders.size(), feesText,
                 signed(realised), signClass(realised),
                 Double.isNaN(unrealised) ? DASH : signed(unrealised),
                 Double.isNaN(unrealised) ? "" : signClass(unrealised),
-                plain(balance) + " " + base(market), unrealisedHint(basis, range, currentBid));
+                balanceText, unrealisedHint(bases, books, market, all, range));
     }
 
     /**
@@ -496,6 +635,33 @@ public class LedgerService {
         return basis.quantity() * (currentBid - basis.averageCost());
     }
 
+    /**
+     * The all-pairs counterpart: every held coin at its own market's bid against what its average
+     * cost walk says it cost. One missing price makes the total a dash, because a partial sum would
+     * read as a smaller position rather than as an unavailable figure.
+     */
+    private double unrealisedAll(Map<String, Basis> bases, Map<String, GetBookResponse> books,
+                                 HistoryPeriods.Range range) {
+        if (!endsToday(range)) {
+            return Double.NaN;
+        }
+        double total = 0;
+        boolean held = false;
+        for (Map.Entry<String, Basis> entry : bases.entrySet()) {
+            Basis basis = entry.getValue();
+            if (basis.quantity() <= 0) {
+                continue;
+            }
+            double bid = bid(books.get(entry.getKey()));
+            if (!Double.isFinite(bid)) {
+                return Double.NaN;
+            }
+            held = true;
+            total += basis.quantity() * (bid - basis.averageCost());
+        }
+        return held ? total : Double.NaN;
+    }
+
     private boolean endsToday(HistoryPeriods.Range range) {
         // Both sides read in the display zone — the range's end date and what the clock calls today —
         // so a range that ends at now is "today" from 00:00 local on, as HistoryPeriods resolves it.
@@ -503,14 +669,23 @@ public class LedgerService {
         return end.equals(clock.instant().atZone(display.zone()).toLocalDate());
     }
 
-    private String unrealisedHint(Basis basis, HistoryPeriods.Range range, double currentBid) {
+    private String unrealisedHint(Map<String, Basis> bases, Map<String, GetBookResponse> books,
+                                  String market, boolean all, HistoryPeriods.Range range) {
         if (!endsToday(range)) {
             return RANGE_HINT;
         }
-        if (basis.quantity() <= 0) {
+        boolean held = all
+                ? bases.values().stream().anyMatch(basis -> basis.quantity() > 0)
+                : bases.getOrDefault(market, Basis.walk(List.of(), EUR, base(market))).quantity() > 0;
+        if (!held) {
             return "Nothing is held, so there is no unrealised result.";
         }
-        return Double.isFinite(currentBid) ? ""
+        boolean prices = all
+                ? bases.entrySet().stream()
+                        .filter(entry -> entry.getValue().quantity() > 0)
+                        .allMatch(entry -> Double.isFinite(bid(books.get(entry.getKey()))))
+                : Double.isFinite(bid(books.get(market)));
+        return prices ? ""
                 : "The current price could not be read, so there is no unrealised figure.";
     }
 
@@ -897,7 +1072,8 @@ public class LedgerService {
         double euro = 0;
         Map<String, Double> others = new LinkedHashMap<>();
         for (OrderResponse order : orders) {
-            for (Fee fee : feeParts(order, market)) {
+            String orderMarket = marketOf(order, market);
+            for (Fee fee : feeParts(order, orderMarket)) {
                 if (EUR.equals(fee.currency())) {
                     euro += fee.amount();
                 } else {

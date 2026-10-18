@@ -44,7 +44,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * The filter bar's state and options.
      *
      * @param side          The selected side, or empty for all
-     * @param market        The selected market
+     * @param market        The selected market, {@code all}, or a market symbol
+     * @param amountHeader  The amount column's title: with its currency for one market, plain for all
      * @param type          The selected order types; empty selects every type
      * @param status        The selected statuses; empty selects every status
      * @param view          The selected view ({@code orders}/{@code raw})
@@ -60,9 +61,9 @@ public record LedgerView(String message, PriceView price, FiltersView filters, T
      * @param statusOptions The statuses an order can have, as values and labels
      * @param timeOptions   The time presets
      */
-    public record FiltersView(String side, String market, List<String> type, List<String> status,
-                              String view, String period, String fromDate, String fromTime,
-                              String toDate, String toTime, String defaultPeriod,
+    public record FiltersView(String side, String market, String amountHeader, List<String> type,
+                              List<String> status, String view, String period, String fromDate,
+                              String fromTime, String toDate, String toTime, String defaultPeriod,
                               List<Option> marketOptions, List<Option> typeOptions,
                               List<Option> statusOptions, List<Option> timeOptions) {
 

@@ -98,6 +98,7 @@ public class TradeHistoryService {
                 .findByStatusAndEntryTimeRange("CLOSED", range.fromMillis(), range.toMillis());
         List<LivePosition> filtered = periodRows.stream()
                 .filter(position -> matchesStrategy(position, request.getStrategy()))
+                .filter(position -> matchesMarket(position, request.getMarket()))
                 .filter(position -> matchesType(position, request.getType()))
                 .filter(position -> matchesResult(position, request.getResult()))
                 .toList();
@@ -127,6 +128,10 @@ public class TradeHistoryService {
 
     private static boolean matchesStrategy(LivePosition position, String strategy) {
         return !notBlank(strategy) || strategy.equals(position.getStrategyId());
+    }
+
+    private static boolean matchesMarket(LivePosition position, String market) {
+        return !notBlank(market) || market.equals(position.getMarket());
     }
 
     private static boolean matchesType(LivePosition position, String type) {
@@ -257,16 +262,24 @@ public class TradeHistoryService {
                 && strategies.stream().noneMatch(option -> option.value().equals(request.getStrategy()))) {
             strategies.add(new Option(request.getStrategy(), shortId(request.getStrategy())));
         }
+        List<Option> markets = periodRows.stream().map(LivePosition::getMarket)
+                .filter(Objects::nonNull).distinct().sorted()
+                .map(market -> new Option(market, market))
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (notBlank(request.getMarket())
+                && markets.stream().noneMatch(option -> option.value().equals(request.getMarket()))) {
+            markets.add(new Option(request.getMarket(), request.getMarket()));
+        }
         boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
                 request.getToDate());
         String preset = HistoryPeriods.preset(request.getPeriod());
-        return new FiltersView(request.getStrategy(), request.getType(), request.getResult(),
-                custom ? "" : preset,
+        return new FiltersView(request.getStrategy(), request.getMarket(), request.getType(),
+                request.getResult(), custom ? "" : preset,
                 custom ? request.getFromDate() : null,
                 HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
                 custom ? request.getToDate() : null,
                 HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
-                HistoryPeriods.DEFAULT_PRESET, strategies, HistoryPeriods.OPTIONS);
+                HistoryPeriods.DEFAULT_PRESET, strategies, markets, HistoryPeriods.OPTIONS);
     }
 
     private PagerView pager(TradeHistoryRequest request, int fromIndex, int toIndex, int total, int page,
@@ -317,6 +330,7 @@ public class TradeHistoryService {
     private String query(TradeHistoryRequest request, String sort, String dir, Integer page, Integer size) {
         Map<String, String> params = new LinkedHashMap<>();
         add(params, "strategy", request.getStrategy());
+        add(params, "market", request.getMarket());
         add(params, "type", request.getType());
         add(params, "result", request.getResult());
         if (HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),

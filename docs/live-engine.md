@@ -186,7 +186,7 @@ brings the two back together:
 Every `/ui/**` and `/api/**` endpoint below needs a signed-in account; the TradingView webhook is
 the exception, because it authenticates itself with its own webhook key (see `docs/security.md`).
 
-| `GET /ui/history` | The account history page's engine-trades tab: the closed round trips with filters, sorting, period totals and realised P&L by day |
+| `GET /ui/history` | The account history page's engine-trades tab: the closed round trips with filters (strategy, market, type, result, time), sorting, period totals and realised P&L by day |
 | `GET /ui/history?tab=ledger` | The account history page's Bitvavo-ledger tab: the account's orders with their fills, average-cost P&L, the raw transactions and the current prices |
 | `GET /api/bitvavo-credentials` | The system-wide Bitvavo API key, masked: whether one is configured, a hint that identifies it and the operator id |
 | `PUT /api/bitvavo-credentials` | Store or replace that key (the secret is write-only) |
@@ -244,10 +244,13 @@ with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken 
 
 The history page's ledger tab reads the real Bitvavo account, not the engine's own records, with
 the system-wide Bitvavo API key — the same key the engine trades with (see "The Bitvavo key").
-The market picker offers the enabled trading pairs (see "Trading pairs") plus every market a live
-strategy trades; with no choice it opens on the newest live strategy's market, then the most
-recently traded catalogue pair, then BTC-EUR. Only EUR-quoted markets are accepted.
-Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
+The market picker offers **All pairs** plus the enabled trading pairs (see "Trading pairs") plus
+every market a live strategy trades; with no choice it opens on the newest live strategy's market,
+then the most recently traded catalogue pair, then BTC-EUR. Only EUR-quoted markets are accepted.
+The all-pairs view merges `GET /orders` for each catalogue market — the exchange requires a market
+on that read — and sums the rows' realised results, fees and balance-after columns across them; its
+summary's Unrealised values every held pair at its own bid, and its Balance is the account's euro
+cash. Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
 their fills and `feePaid`), the P&L walk and the raw transactions from `GET /account/history`, the
 balance from `GET /balance` and the prices from the public order book. A sell shows what it realised
 at the average cost of the coins it sold — the walk covers the market's whole buy/sell history, so a

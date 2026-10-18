@@ -107,6 +107,26 @@ class TradeHistoryServiceTest {
     }
 
     @Test
+    void view_filtersByMarketAndOffersThePeriodsPairs() {
+        LivePosition btc = position(STRATEGY, NOW.minusSeconds(2 * 3600).toEpochMilli(), 0.12, true);
+        LivePosition eth = position(STRATEGY, NOW.minusSeconds(3 * 3600).toEpochMilli(), -0.11, true);
+        eth.setMarket("ETH-EUR");
+        stubPeriod(List.of(btc, eth));
+
+        TradeHistoryRequest request = new TradeHistoryRequest();
+        request.setMarket("ETH-EUR");
+        TradeHistoryView view = service.view(request);
+
+        assertEquals(1, view.rows().size());
+        assertEquals("−€0,11", view.rows().get(0).resultText());
+        assertEquals("ETH-EUR", view.filters().market());
+        assertEquals(2, view.filters().marketOptions().size());
+        assertEquals("BTC-EUR", view.filters().marketOptions().get(0).value());
+        assertEquals("ETH-EUR", view.filters().marketOptions().get(1).value());
+        assertTrue(view.headers().get(0).query().contains("market=ETH-EUR"));
+    }
+
+    @Test
     void view_sortsByResultAndMarksTheHeader() {
         stubPeriod(List.of(
                 position(STRATEGY, NOW.minusSeconds(2 * 3600).toEpochMilli(), 0.12, true),
