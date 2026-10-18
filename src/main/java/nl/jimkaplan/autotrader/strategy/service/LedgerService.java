@@ -43,7 +43,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -215,10 +214,10 @@ public class LedgerService {
                 // Markets end up in the signed API path and in every generated link, so only a
                 // well-formed EUR pair is accepted; anything else falls back to the engine's market.
                 String selected = MarketFormat.toMarket(request.getMarket());
-                if (!selected.endsWith("-" + EUR)) {
-                    throw new IllegalArgumentException("Only EUR-quoted markets are supported: " + selected);
+                if (MarketFormat.isEuroQuoted(selected)) {
+                    return selected;
                 }
-                return selected;
+                log.warn("Ignoring an unsupported market filter: {}", request.getMarket());
             } catch (IllegalArgumentException e) {
                 log.warn("Ignoring an unsupported market filter: {}", request.getMarket());
             }
@@ -227,7 +226,7 @@ public class LedgerService {
                 .max(Comparator.comparing(LiveStrategy::getCreatedTime,
                         Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(LiveStrategy::getMarket)
-                .filter(Objects::nonNull)
+                .filter(MarketFormat::isEuroQuoted)
                 .orElseGet(() -> marketService.selectable().stream().findFirst()
                         .orElse(DEFAULT_MARKET));
     }

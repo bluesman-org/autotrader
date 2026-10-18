@@ -121,7 +121,7 @@ public class MarketService {
             }
         }
         for (LiveStrategy strategy : liveStrategyRepository.findAll()) {
-            if (strategy.getMarket() != null) {
+            if (MarketFormat.isEuroQuoted(strategy.getMarket())) {
                 lastTraded.putIfAbsent(strategy.getMarket(), null);
             }
         }
@@ -356,11 +356,8 @@ public class MarketService {
         if (input == null || input.isBlank()) {
             throw new IllegalArgumentException("The trading pair is required");
         }
-        String market = MarketFormat.toMarket(input.trim().toUpperCase(Locale.ENGLISH));
-        if (!market.endsWith("-" + EUR)) {
-            throw new IllegalArgumentException("Only EUR-quoted markets are supported: " + market);
-        }
-        return market;
+        return MarketFormat.requireEuroQuoted(
+                MarketFormat.toMarket(input.trim().toUpperCase(Locale.ENGLISH)));
     }
 
     private static String baseOf(String market) {

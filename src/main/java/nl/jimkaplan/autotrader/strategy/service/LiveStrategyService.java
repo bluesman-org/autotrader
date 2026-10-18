@@ -60,9 +60,7 @@ public class LiveStrategyService {
     public LiveStrategy create(LiveStrategyRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         String market = MarketFormat.toMarket(required("market", request.getMarket()));
-        if (!market.endsWith("-EUR")) {
-            throw new IllegalArgumentException("only EUR-quoted markets are supported: " + market);
-        }
+        MarketFormat.requireEuroQuoted(market);
         CandleInterval interval = CandleInterval.fromCode(required("interval", request.getInterval()));
         double amountPerBuy = request.getAmountPerBuy() == null
                 ? BacktestDefaults.AMOUNT_PER_BUY

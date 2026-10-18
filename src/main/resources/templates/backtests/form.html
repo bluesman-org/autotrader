@@ -42,8 +42,8 @@
             <datalist id="market-options">
                 <option th:each="pair : ${markets}" th:value="${pair}"></option>
             </datalist>
-            <p class="muted">The market suggestions are the trading pairs on the settings page; the
-                pair has to be EUR-quoted.</p>
+            <p class="muted">The suggestions are the enabled trading pairs from the settings page plus
+                the markets your live strategies trade; the pair has to be EUR-quoted.</p>
         </fieldset>
 
         <fieldset>

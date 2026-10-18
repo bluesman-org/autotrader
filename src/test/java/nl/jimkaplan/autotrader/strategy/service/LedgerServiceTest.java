@@ -645,6 +645,19 @@ class LedgerServiceTest {
     }
 
     @Test
+    void theDefaultMarketIgnoresANonEurStrategy() {
+        LiveStrategy nonEur = org.mockito.Mockito.mock(LiveStrategy.class);
+        when(nonEur.getMarket()).thenReturn("BTCUSDT");
+        when(strategies.all()).thenReturn(List.of(nonEur));
+        when(markets.selectable()).thenReturn(List.of("ETH-EUR"));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("ETH-EUR", view.filters().market());
+    }
+
+    @Test
     void payingTheBaseCurrencyCountsItOutOfTheBalance() {
         accountReadableWithoutOrders();
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))

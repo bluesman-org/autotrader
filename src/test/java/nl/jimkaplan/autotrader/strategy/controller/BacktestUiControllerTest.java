@@ -48,7 +48,7 @@ class BacktestUiControllerTest {
     @Test
     void form_providesTheDefaultsAndOptions() {
         when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
-        when(marketService.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
+        when(marketService.selectable()).thenReturn(List.of("ETH-EUR", "BTC-EUR"));
         Model model = new ExtendedModelMap();
 
         String view = backtestUiController.form(model);
@@ -60,7 +60,9 @@ class BacktestUiControllerTest {
         assertNotNull(model.getAttribute("rankingMetrics"));
         assertNotNull(model.getAttribute("conditions"));
         assertNotNull(model.getAttribute("operators"));
-        assertEquals(List.of("BTC-EUR", "ETH-EUR"), model.getAttribute("markets"));
+        assertEquals(List.of("ETH-EUR", "BTC-EUR"), model.getAttribute("markets"));
+        assertEquals("ETH-EUR",
+                ((BacktestRunForm) model.getAttribute("form")).getMarket());
         assertNotNull(model.getAttribute("runs"));
     }
 
@@ -75,6 +77,7 @@ class BacktestUiControllerTest {
         backtestUiController.form(model);
 
         assertSame(flashed, model.getAttribute("form"));
+        assertEquals("ETH-EUR", flashed.getMarket());
     }
 
     @Test

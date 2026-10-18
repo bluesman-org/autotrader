@@ -3,7 +3,9 @@ package nl.jimkaplan.autotrader.bitvavo;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketFormatTest {
 
@@ -34,5 +36,16 @@ class MarketFormatTest {
         assertThrows(IllegalArgumentException.class, () -> MarketFormat.toMarket("btc-eur"));
         assertThrows(IllegalArgumentException.class, () -> MarketFormat.toMarket("BTC EUR"));
         assertThrows(IllegalArgumentException.class, () -> MarketFormat.toMarket("BTC-EUR#"));
+    }
+
+    @Test
+    void theEuroQuoteHelpersFollowTheSymbol() {
+        assertTrue(MarketFormat.isEuroQuoted("BTC-EUR"));
+        assertFalse(MarketFormat.isEuroQuoted("BTCUSDT"));
+        assertFalse(MarketFormat.isEuroQuoted(null));
+
+        assertEquals("BTC-EUR", MarketFormat.requireEuroQuoted("BTC-EUR"));
+        assertThrows(IllegalArgumentException.class,
+                () -> MarketFormat.requireEuroQuoted("BTCUSDT"));
     }
 }
