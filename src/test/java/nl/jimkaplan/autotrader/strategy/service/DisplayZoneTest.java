@@ -24,6 +24,7 @@ class DisplayZoneTest {
         assertEquals("Europe/Amsterdam", display.id());
         assertTrue(display.label().matches("CES?T"));
         assertEquals("14 Oct 22:31", display.minute(when));
+        assertEquals("14 Oct 2026", display.date(when));
         assertEquals("14 Oct 22:31:04", display.second(when));
         assertEquals("22:31", display.clock(when));
         assertEquals("22:31:04", display.clockSecond(when));

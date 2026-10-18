@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.model.document.AppUser;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.Market;
 import nl.jimkaplan.autotrader.model.document.PasswordResetToken;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
@@ -60,6 +61,9 @@ public class MongoIndexInitializer implements ApplicationRunner {
         ensureBotIdIndex();
         ensureIndex(AppUser.class, new Index().on("username", Sort.Direction.ASC).unique());
         ensureIndex(AppUser.class, new Index().on("email", Sort.Direction.ASC).unique());
+        // One document per market symbol: the catalogue is read by symbol everywhere and a
+        // duplicate would offer the same pair twice.
+        ensureIndex(Market.class, new Index().on("market", Sort.Direction.ASC).unique());
         ensureIndex(PasswordResetToken.class,
                 new Index().on("token_hash", Sort.Direction.ASC).unique());
         ensureIndex(BacktestRun.class, new Index()

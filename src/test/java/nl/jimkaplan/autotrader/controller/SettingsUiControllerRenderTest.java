@@ -1,8 +1,10 @@
 package nl.jimkaplan.autotrader.controller;
 
+import nl.jimkaplan.autotrader.model.document.Market;
 import nl.jimkaplan.autotrader.service.AppUserService;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MailSettingsService;
+import nl.jimkaplan.autotrader.service.MarketService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,8 +12,10 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsString;
@@ -47,6 +51,8 @@ class SettingsUiControllerRenderTest {
     @MockitoBean
     private MailSettingsService mailSettingsService;
     @MockitoBean
+    private MarketService marketService;
+    @MockitoBean
     private AppUserService users;
 
     @BeforeEach
@@ -54,6 +60,7 @@ class SettingsUiControllerRenderTest {
         when(mailSettingsService.view()).thenReturn(
                 new MailSettingsResponse(false, null, null, null, null, true, null));
         when(users.find(any())).thenReturn(Optional.empty());
+        when(marketService.all()).thenReturn(List.of());
     }
 
     @Test
@@ -133,5 +140,110 @@ class SettingsUiControllerRenderTest {
         mockMvc.perform(post("/ui/settings").param("apiKey", "only-key"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/ui/settings"));
+    }
+
+    @Test
+    void theTradingPairsCardShowsTheCatalogue() throws Exception {
+        when(credentialsService.view()).thenReturn(new BitvavoCredentialsResponse(false, null, null, null));
+        when(marketService.all()).thenReturn(List.of(market("ETH-EUR")));
+
+        mockMvc.perform(get("/ui/settings"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Trading pairs")))
+                .andExpect(content().string(containsString("ETH-EUR")))
+                .andExpect(content().string(containsString("enabled")))
+                .andExpect(content().string(containsString("trading")))
+                .andExpect(content().string(containsString("discovered")))
+                .andExpect(content().string(containsString("24 Sep 2021")))
+                .andExpect(content().string(containsString("9 Oct 2026")));
+    }
+
+    @Test
+    void postAddsATradingPair() throws Exception {
+        when(marketService.add("ETH-EUR")).thenReturn(market("ETH-EUR"));
+
+        mockMvc.perform(post("/ui/settings/markets").param("market", "ETH-EUR"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+
+        verify(marketService).add("ETH-EUR");
+    }
+
+    @Test
+    void postReportsAnUnknownPair() throws Exception {
+        when(marketService.add("NOPE-EUR"))
+                .thenThrow(new IllegalArgumentException("Unknown market: NOPE-EUR"));
+
+        mockMvc.perform(post("/ui/settings/markets").param("market", "NOPE-EUR"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+    }
+
+    @Test
+    void postReportsWhenBitvavoCannotBeReachedForAPair() throws Exception {
+        when(marketService.add("ETH-EUR")).thenThrow(new ResourceAccessException("down"));
+
+        mockMvc.perform(post("/ui/settings/markets").param("market", "ETH-EUR"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+    }
+
+    @Test
+    void postTogglesATradingPair() throws Exception {
+        Market disabled = market("ETH-EUR");
+        disabled.setEnabled(false);
+        when(marketService.setEnabled("ETH-EUR", false)).thenReturn(disabled);
+
+        mockMvc.perform(post("/ui/settings/markets/ETH-EUR/disable"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+
+        verify(marketService).setEnabled("ETH-EUR", false);
+    }
+
+    @Test
+    void postEnablesATradingPair() throws Exception {
+        when(marketService.setEnabled("ETH-EUR", true)).thenReturn(market("ETH-EUR"));
+
+        mockMvc.perform(post("/ui/settings/markets/ETH-EUR/enable"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+
+        verify(marketService).setEnabled("ETH-EUR", true);
+    }
+
+    @Test
+    void postRefreshesTheTradingPairs() throws Exception {
+        when(marketService.discover()).thenReturn(new MarketService.Discovery(11, 11, 0, 0));
+
+        mockMvc.perform(post("/ui/settings/markets/discover"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+
+        verify(marketService).discover();
+    }
+
+    @Test
+    void postReportsWhenBitvavoCannotBeReadForTheRefresh() throws Exception {
+        when(marketService.discover()).thenThrow(new ResourceAccessException("down"));
+
+        mockMvc.perform(post("/ui/settings/markets/discover"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"));
+    }
+
+    private static Market market(String symbol) {
+        return Market.builder()
+                .market(symbol)
+                .base("ETH")
+                .quote("EUR")
+                .enabled(true)
+                .source(Market.SOURCE_DISCOVERED)
+                .status("trading")
+                .tradeCount(23)
+                .firstTradedAt(Instant.parse("2021-09-24T08:00:00Z"))
+                .lastTradedAt(Instant.parse("2026-10-09T09:00:00Z"))
+                .addedTime(Instant.parse("2026-10-18T10:00:00Z"))
+                .build();
     }
 }

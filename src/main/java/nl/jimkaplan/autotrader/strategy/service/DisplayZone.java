@@ -20,6 +20,7 @@ public final class DisplayZone {
     private final DateTimeFormatter clockFormat;
     private final DateTimeFormatter clockSecondFormat;
     private final DateTimeFormatter dayFormat;
+    private final DateTimeFormatter dateFormat;
 
     public DisplayZone(String timeZone) {
         this(timeZone == null || timeZone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(timeZone));
@@ -32,6 +33,7 @@ public final class DisplayZone {
         this.clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH).withZone(zone);
         this.clockSecondFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ENGLISH).withZone(zone);
         this.dayFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH).withZone(zone);
+        this.dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH).withZone(zone);
     }
 
     /**
@@ -62,6 +64,14 @@ public final class DisplayZone {
      */
     public String minute(Instant when) {
         return minuteFormat.format(when);
+    }
+
+    /**
+     * @param when The moment
+     * @return The date with its year, e.g. {@code 24 Sep 2021} — trade facts read across years
+     */
+    public String date(Instant when) {
+        return dateFormat.format(when);
     }
 
     /**

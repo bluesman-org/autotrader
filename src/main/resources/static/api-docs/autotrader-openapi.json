@@ -48,6 +48,10 @@
     {
       "name": "Password recovery",
       "description": "Ask for a password-recovery mail"
+    },
+    {
+      "name": "Markets",
+      "description": "The trading-pair catalogue the forms and the ledger read"
     }
   ],
   "paths": {
@@ -278,6 +282,155 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/markets": {
+      "get": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "List the trading pairs",
+        "operationId": "listMarkets",
+        "responses": {
+          "200": {
+            "description": "Pairs returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Market"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Add a trading pair",
+        "description": "Validates the pair against Bitvavo's public market list first: it must exist, be EUR-quoted and be trading.",
+        "operationId": "addMarket",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Pair added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Market"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid, unknown or duplicate pair"
+          }
+        }
+      }
+    },
+    "/api/markets/{market}/enable": {
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Enable a trading pair",
+        "operationId": "enableMarket",
+        "parameters": [
+          {
+            "name": "market",
+            "in": "path",
+            "description": "Market in Bitvavo format",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pair enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Market"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such pair"
+          }
+        }
+      }
+    },
+    "/api/markets/{market}/disable": {
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Disable a trading pair",
+        "operationId": "disableMarket",
+        "parameters": [
+          {
+            "name": "market",
+            "in": "path",
+            "description": "Market in Bitvavo format",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pair disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Market"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such pair"
+          }
+        }
+      }
+    },
+    "/api/markets/discover": {
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Discover the account's traded pairs",
+        "description": "Reads the account history with the system-wide key and adds or refreshes every EUR pair the account traded. Disabled pairs stay disabled; nothing is deleted.",
+        "operationId": "discoverMarkets",
+        "responses": {
+          "200": {
+            "description": "Discovery completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No Bitvavo API key is configured"
           }
         }
       }
@@ -1068,6 +1221,87 @@
         "properties": {
           "message": {
             "type": "string"
+          }
+        }
+      },
+      "MarketRequest": {
+        "type": "object",
+        "properties": {
+          "market": {
+            "type": "string",
+            "description": "Market in Bitvavo format",
+            "example": "ETH-EUR"
+          }
+        }
+      },
+      "Market": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "market": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "firstTradedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastTradedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tradeCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "addedTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Discovery": {
+        "type": "object",
+        "properties": {
+          "markets": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "added": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

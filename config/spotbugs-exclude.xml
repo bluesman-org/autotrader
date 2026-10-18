@@ -47,16 +47,19 @@
             <Class name="nl.jimkaplan.autotrader.bitvavo.controller.TransactionHistoryController"/>
             <Class name="nl.jimkaplan.autotrader.bitvavo.service.TransactionHistoryService"/>
             <Class name="nl.jimkaplan.autotrader.controller.BotConfigurationController"/>
+            <Class name="nl.jimkaplan.autotrader.service.MarketService"/>
             <Class name="nl.jimkaplan.autotrader.strategy.service.LiveStrategyService"/>
         </Or>
         <Bug pattern="CRLF_INJECTION_LOGS"/>
     </Match>
 
-    <!-- These APIs return the stored backtest-run and live-strategy documents by design, which is
-         the contract the UI consumes. Neither holds credentials: a live strategy references a bot
-         by id, and bot configuration credentials are transient, never serialized. -->
+    <!-- These APIs return the stored backtest-run, live-strategy and trading-pair documents by
+         design, which is the contract the UI consumes. None holds credentials: a live strategy
+         references a bot by id, bot configuration credentials are transient, never serialized, and
+         a market document carries only the pair's facts. -->
     <Match>
         <Or>
+            <Class name="nl.jimkaplan.autotrader.controller.MarketController"/>
             <Class name="nl.jimkaplan.autotrader.strategy.controller.BacktestController"/>
             <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveStrategyController"/>
         </Or>

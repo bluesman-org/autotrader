@@ -251,6 +251,11 @@ next: the small live-run trial of the engine.
     settings page (and through `/api/mail-settings`) for a single-use, hashed, expiring recovery
     mail, an authenticated password change, and the HTTPS deployment for `https://at.bluris.nl`
     behind Caddy (`docs/security.md`) (PR #48)
+28. ⬜ Trading-pair catalogue: the pairs the account traded on Bitvavo are discovered from
+    `/account/history` (a handful of calls, not one per market), stored in `markets` and managed on
+    `/ui/settings` and through `/api/markets`; enabled pairs feed the strategy forms and the
+    ledger's market picker, and a live strategy's pair stays visible even when disabled. A pair is
+    disabled, never deleted, and a discovery never re-enables one.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
