@@ -217,6 +217,22 @@ class TradingServiceTest {
     }
 
     @Test
+    void validateAndProcessAlert_withLocalDateTimeWithoutOffset_throwsException() {
+        // Arrange: a local date-time names no instant and must not be accepted
+        TradingViewAlertRequest request = new TradingViewAlertRequest();
+        request.setBotId(TEST_BOT_ID);
+        request.setTicker(TEST_TICKER);
+        request.setAction("buy");
+        request.setTimestamp("2023-01-01T12:00:00");
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
+        assertEquals("Invalid timestamp format. Expected an ISO-8601 timestamp with an offset, "
+                + "e.g. 2026-10-04T12:00:00Z", exception.getMessage());
+    }
+
+    @Test
     void validateAndProcessAlert_withValidSellSignal_processesSuccessfully() {
         // Arrange
         when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);

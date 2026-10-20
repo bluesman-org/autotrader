@@ -11,6 +11,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -62,10 +63,16 @@ public class BitvavoCredentialsInitializer implements ApplicationRunner {
     }
 
     private Optional<BotConfiguration> sourceBot() {
-        return botConfigurationService.getAllBotConfigurations().stream()
+        List<BotConfiguration> candidates = botConfigurationService.getAllBotConfigurations().stream()
                 .filter(BitvavoCredentialsInitializer::hasKey)
-                .min(Comparator.comparing(BotConfiguration::getBotId,
-                        Comparator.nullsFirst(Comparator.naturalOrder())));
+                .sorted(Comparator.comparing(BotConfiguration::getBotId,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .toList();
+        if (candidates.size() > 1) {
+            log.warn("{} bot configurations carry a key; copying the lowest botId ({}) into the "
+                    + "system-wide credentials", candidates.size(), candidates.get(0).getBotId());
+        }
+        return candidates.stream().findFirst();
     }
 
     private static boolean hasKey(BotConfiguration bot) {

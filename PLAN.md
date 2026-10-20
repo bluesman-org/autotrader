@@ -242,8 +242,10 @@ next: the small live-run trial of the engine.
     a bot configuration, so nothing has to be re-entered (PR #38)
 25. ✅ Drop the live strategy's `botId`: the engine reads the system-wide key now, so the field was
     historical only. It is removed from the model, the create request and the docs; no stored
-    strategy carried it, and the startup key copy now reads the first active bot configuration with
-    a key (PR #57)
+    strategy carried it (the running database answered 0 to
+    `db.live_strategies.countDocuments({bot_id: {$exists: true}})`, and the 2026-10-20 code review
+    recorded that check), and the startup key copy now reads the first active bot configuration
+    with a key, logging the choice and warning when several qualify (PR #57)
 26. ✅ The ledger reads as results only: a sell shows what it realised at average cost, a buy shows
     none — the sell that closes it carries it — and the summary's Unrealised is the open position at
     the current price, shown only when the range ends today (a line says why when it does not); a
@@ -270,7 +272,7 @@ next: the small live-run trial of the engine.
     `canceled*` response would open or close the position at the estimated size, and the boot
     reconciliation (which revisits only `PENDING`/`FAILED` rows) would never correct it. Treat a
     non-`filled` status as `PENDING` for reconciliation, or poll it to a final state (flagged in
-    the 2026-10-20 review)
+    the 2026-10-20 review; the live trial is gated on this item)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
