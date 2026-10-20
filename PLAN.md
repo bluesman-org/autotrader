@@ -5,7 +5,7 @@ indicators. TradingView is kept as a legacy fallback (Phase 6 records that decis
 file with every PR**: check off completed steps, add new follow-ups, and keep the status line
 current.
 
-**Status (2026-10-16):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
+**Status (2026-10-20):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
 default, replay gate); the live series is anchored to a fixed start (PR #27) and the anchored
 design is verified live — restarts kept the same anchor and the engine's trades matched a
@@ -23,7 +23,9 @@ shows no P&L, the summary's Unrealised is the open position and shows only when 
 with a Today button that ends the range at now (PR #47). The app now has an account: form sign-in
 for the pages and HTTP Basic for the API, a first-account signup, password recovery by mail through
 SMTP settings stored on the settings page, and an HTTPS deployment on `https://at.bluris.nl` behind
-Caddy (PR #48).
+Caddy (PR #48). The trading-pair catalogue and the ledger reporting pass landed after that
+(PRs #50–#56), and the TradingView offset timestamps and the unused live-strategy `botId` went with
+PR #57.
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
 next: the small live-run trial of the engine.
 
@@ -210,11 +212,11 @@ next: the small live-run trial of the engine.
     Carry the indicator state forward (both recursions stream) or find another way to bound
     `decide` while keeping the anchor semantics; the seed line logs the series length (flagged in
     the PR #27 review)
-19. ⬜ Make the TradingView webhook's timestamp contract honest: validation accepts a `Z`-less
-    offset (`DateTimeFormatter.ISO_OFFSET_DATE_TIME`), but `saveAlert` then parses with
-    `Instant.parse`, so `2026-10-04T12:00:00+02:00` fails later as a 500 instead of the promised
-    400. Either normalise with `OffsetDateTime.parse` or reject non-`Z` values up front (flagged in
-    the PR #29 review)
+19. ✅ Make the TradingView webhook's timestamp contract honest: validation accepted a `Z`-less
+    offset (`DateTimeFormatter.ISO_OFFSET_DATE_TIME`), but `saveAlert` then parsed with
+    `Instant.parse`, so `2026-10-04T12:00:00+02:00` failed later as a 500 instead of the promised
+    400. Validation now returns the parsed instant and the alert stores it, so both forms are
+    accepted and normalised (PR #57)
 20. ⬜ Strategy management UI: create, edit and delete live strategies from the UI — the REST API
     still needs update and delete endpoints (create exists; today the UI has none, so strategies can
     only be created via the API). Scoped out of item 10 on 2026-10-14; the endpoints and the form
@@ -238,9 +240,10 @@ next: the small live-run trial of the engine.
     system-wide credential, stored encrypted and managed on `/ui/settings` (or through
     `/api/bitvavo-credentials`); a startup copy takes the key an installation already stored inside
     a bot configuration, so nothing has to be re-entered (PR #38)
-25. ⬜ Drop the live strategy's `botId`: the engine reads the system-wide key now, so the field is
-    historical only — remove it from the model, the create request and the docs once no stored
-    document needs it
+25. ✅ Drop the live strategy's `botId`: the engine reads the system-wide key now, so the field was
+    historical only. It is removed from the model, the create request and the docs; no stored
+    strategy carried it, and the startup key copy now reads the first active bot configuration with
+    a key (PR #57)
 26. ✅ The ledger reads as results only: a sell shows what it realised at average cost, a buy shows
     none — the sell that closes it carries it — and the summary's Unrealised is the open position at
     the current price, shown only when the range ends today (a line says why when it does not); a
@@ -262,6 +265,12 @@ next: the small live-run trial of the engine.
     staking income and external transfers are visible, with the transfer address when Bitvavo
     reports one. The raw Type filter also picks up undocumented types the API returns, and the page
     notes that the orders are the spot account's and margin is not exposed by the Exchange API.
+30. ⬜ Accept only filled order responses in the live engine: `applyFill` marks every accepted
+    `POST /order` response `FILLED` without reading its `status`, so a `partiallyFilled` or
+    `canceled*` response would open or close the position at the estimated size, and the boot
+    reconciliation (which revisits only `PENDING`/`FAILED` rows) would never correct it. Treat a
+    non-`filled` status as `PENDING` for reconciliation, or poll it to a final state (flagged in
+    the 2026-10-20 review)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
