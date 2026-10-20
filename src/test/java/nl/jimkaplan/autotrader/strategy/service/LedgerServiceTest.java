@@ -251,6 +251,15 @@ class LedgerServiceTest {
         assertEquals("EUR", total.currency());
         assertEquals("€100,00", total.amountText());
         assertEquals(1, total.transactions());
+
+        // A bookmark with the old, capitalised spelling still filters the documented type.
+        LedgerRequest byDeposit = new LedgerRequest();
+        byDeposit.setView("raw");
+        byDeposit.setType(List.of("Deposit"));
+        LedgerView depositView = service.view(byDeposit);
+        assertEquals(List.of("deposit"), depositView.filters().type());
+        assertEquals(1, depositView.rawRows().size());
+        assertEquals("Deposit", depositView.rawRows().get(0).typeText());
     }
 
     @Test

@@ -308,7 +308,12 @@ public class LedgerService {
      *         exactly what the request means
      */
     private static List<String> selected(List<String> values, List<String> known) {
-        return values == null ? List.of() : known.stream().filter(values::contains).toList();
+        // Case-insensitive, like the raw filter and the exchange's own comparisons: the submitted
+        // spelling is normalised to the option's, so a bookmark of "Deposit" still selects deposit.
+        return values == null ? List.of() : known.stream()
+                .filter(value -> values.stream()
+                        .anyMatch(submitted -> submitted.equalsIgnoreCase(value)))
+                .toList();
     }
 
     private List<Option> marketOptions(String market) {
