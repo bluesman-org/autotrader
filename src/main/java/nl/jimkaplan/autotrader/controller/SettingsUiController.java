@@ -273,6 +273,6 @@ public class SettingsUiController {
 
     private String updatedText(BitvavoCredentialsResponse view) {
         return view.updatedTime() == null ? null
-                : display.minute(view.updatedTime()) + " (" + display.label() + ")";
+                : display.minuteYear(view.updatedTime()) + " (" + display.label() + ")";
     }
 }

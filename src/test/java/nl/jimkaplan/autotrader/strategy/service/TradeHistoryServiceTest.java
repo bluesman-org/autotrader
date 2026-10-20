@@ -62,8 +62,8 @@ class TradeHistoryServiceTest {
 
         assertEquals(2, view.rows().size());
         assertEquals(1, view.rows().get(0).number());
-        assertTrue(view.rows().get(0).entryText().startsWith("15 Oct 10:00"));
-        assertEquals("15 Oct 09:00", view.rows().get(1).entryText());
+        assertTrue(view.rows().get(0).entryText().startsWith("15 Oct 2026 10:00"));
+        assertEquals("15 Oct 2026 09:00", view.rows().get(1).entryText());
         assertEquals("DRY RUN", view.rows().get(0).typeLabel());
         assertEquals("REAL", view.rows().get(1).typeLabel());
         assertEquals("+€0,12", view.rows().get(0).resultText());
@@ -257,7 +257,7 @@ class TradeHistoryServiceTest {
         request.setToDate("2026-10-08");
         TradeHistoryView view = service.view(request);
 
-        assertEquals("7 Oct 00:00 → 8 Oct 23:59", view.totals().periodText());
+        assertEquals("7 Oct 2026 00:00 → 8 Oct 2026 23:59", view.totals().periodText());
     }
 
     @Test
@@ -321,11 +321,11 @@ class TradeHistoryServiceTest {
         TradeHistoryView view = service.view(new TradeHistoryRequest());
 
         assertEquals(2, view.daily().size());
-        assertEquals("13 Oct", view.daily().get(0).dayText());
+        assertEquals("13 Oct 2026", view.daily().get(0).dayText());
         assertEquals(1, view.daily().get(0).roundTrips());
         assertEquals("−€0,11", view.daily().get(0).realisedText());
         assertEquals("−€0,11", view.daily().get(0).cumulativeText());
-        assertEquals("14 Oct", view.daily().get(1).dayText());
+        assertEquals("14 Oct 2026", view.daily().get(1).dayText());
         assertEquals("+€0,01", view.daily().get(1).cumulativeText());
         assertEquals("pos", view.daily().get(1).cumulativeClass());
     }
@@ -436,7 +436,7 @@ class TradeHistoryServiceTest {
         // A single date side no longer falls back to the preset: the open side takes its default.
         TradeHistoryRequest toOnly = new TradeHistoryRequest();
         toOnly.setToDate("2026-10-08");
-        assertEquals("the start → 8 Oct 23:59", service.view(toOnly).totals().periodText());
+        assertEquals("the start → 8 Oct 2026 23:59", service.view(toOnly).totals().periodText());
 
         // A time that is present but unreadable follows the date rule: the preset stands in.
         TradeHistoryRequest badTime = new TradeHistoryRequest();
@@ -459,7 +459,7 @@ class TradeHistoryServiceTest {
         fine.setFromTime("09:30");
         fine.setToDate("2026-10-08");
         fine.setToTime("14:00");
-        assertEquals("7 Oct 09:30 → 8 Oct 14:00", service.view(fine).totals().periodText());
+        assertEquals("7 Oct 2026 09:30 → 8 Oct 2026 14:00", service.view(fine).totals().periodText());
     }
 
     @Test

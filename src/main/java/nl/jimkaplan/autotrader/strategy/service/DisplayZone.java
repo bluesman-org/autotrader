@@ -16,6 +16,7 @@ public final class DisplayZone {
 
     private final ZoneId zone;
     private final DateTimeFormatter minuteFormat;
+    private final DateTimeFormatter minuteYearFormat;
     private final DateTimeFormatter secondFormat;
     private final DateTimeFormatter clockFormat;
     private final DateTimeFormatter clockSecondFormat;
@@ -29,6 +30,7 @@ public final class DisplayZone {
     public DisplayZone(ZoneId zone) {
         this.zone = zone;
         this.minuteFormat = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH).withZone(zone);
+        this.minuteYearFormat = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", Locale.ENGLISH).withZone(zone);
         this.secondFormat = DateTimeFormatter.ofPattern("d MMM HH:mm:ss", Locale.ENGLISH).withZone(zone);
         this.clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH).withZone(zone);
         this.clockSecondFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ENGLISH).withZone(zone);
@@ -56,6 +58,15 @@ public final class DisplayZone {
      */
     public String id() {
         return zone.getId();
+    }
+
+    /**
+     * @param when The moment
+     * @return The date with its year and the minute, e.g. {@code 14 Oct 2026 22:31} — history
+     *         records can span years, so they always show which one
+     */
+    public String minuteYear(Instant when) {
+        return minuteYearFormat.format(when);
     }
 
     /**
@@ -104,6 +115,14 @@ public final class DisplayZone {
      */
     public String day(LocalDate day) {
         return dayFormat.format(day);
+    }
+
+    /**
+     * @param day The day
+     * @return The day with its year, e.g. {@code 14 Oct 2026} — a daily table can span years
+     */
+    public String dayYear(LocalDate day) {
+        return dateFormat.format(day);
     }
 
     /**

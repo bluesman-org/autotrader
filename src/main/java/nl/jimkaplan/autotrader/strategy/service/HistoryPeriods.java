@@ -159,8 +159,8 @@ final class HistoryPeriods {
                 if (fromMillis <= toMillis) {
                     LocalDateTime labelTo = end.atTime(toClock == null ? LocalTime.of(23, 59) : toClock);
                     String label = (start == null ? "the start"
-                            : display.minute(start.atZone(display.zone()).toInstant()))
-                            + " → " + display.minute(labelTo.atZone(display.zone()).toInstant());
+                            : display.minuteYear(start.atZone(display.zone()).toInstant()))
+                            + " → " + display.minuteYear(labelTo.atZone(display.zone()).toInstant());
                     return new Range(fromMillis, toMillis, label);
                 }
             }
