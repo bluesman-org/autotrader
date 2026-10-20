@@ -132,8 +132,9 @@ serves `https://at.bluris.nl`, `.env` sets `SESSION_COOKIE_SECURE=true` and
 the container is the stable one.
 
 The `Dockerfile` is platform-agnostic: the target platform is chosen at build time — native for
-local builds, and `-Ddocker.platforms=linux/arm64` (buildx) in the deploy workflow for the arm64
-deployment host.
+the local build, and `-Ddocker.platforms=linux/arm64` (buildx) for the Docker workflow's portable
+arm64 build. This box is the production host: the container from `docker-compose.dev.yml` is what
+`https://at.bluris.nl` serves.
 
 Historical candles are cached in this database. They are excluded from
 `scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo; the nightly dumps

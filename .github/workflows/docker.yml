@@ -33,8 +33,8 @@ jobs:
           java-version: '21'
           cache: 'maven'
       - name: Set up QEMU
-        # The deployment host is arm64, so the image is built for arm64 like the deploy workflow
-        # does; the Dockerfile's apk step then runs under emulation.
+        # The image is built for arm64 under emulation as a portability check; the Dockerfile's apk
+        # step then runs on another architecture.
         uses: docker/setup-qemu-action@v4
       - name: Build the jar the image copies
         run: ./mvnw -B package -DskipTests -Ddocker.skip=true
@@ -48,6 +48,5 @@ jobs:
           MONGO_APP_PASSWORD: ci-app
           ENCRYPTION_MASTER_KEY: ci-key
         run: |
-          docker compose -f docker-compose.yml config -q
           docker compose -f docker-compose.dev.yml config -q
           docker compose -f docker-compose.local.yml config -q
