@@ -459,7 +459,7 @@
           "Live strategies"
         ],
         "summary": "Create a live strategy",
-        "description": "Creates a strategy from the same rules, parameters and sizing a backtest uses. Dry-run defaults to true; live orders need an active bot configuration's credentials and operator ID.",
+        "description": "Creates a strategy from the same rules, parameters and sizing a backtest uses. Dry-run defaults to true; live orders need the system-wide Bitvavo API key, including its operator ID, stored on the settings page.",
         "operationId": "create",
         "requestBody": {
           "content": {
@@ -1311,11 +1311,6 @@
       "LiveStrategyRequest": {
         "type": "object",
         "properties": {
-          "botId": {
-            "type": "string",
-            "description": "Bot configuration whose credentials and operator ID are used when dry-run is off; required then",
-            "example": "abc123"
-          },
           "market": {
             "type": "string",
             "description": "Market in Bitvavo format",
@@ -1450,9 +1445,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "botId": {
-            "type": "string"
           },
           "market": {
             "type": "string"
