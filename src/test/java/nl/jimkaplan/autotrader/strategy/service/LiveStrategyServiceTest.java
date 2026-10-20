@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.strategy.service;
 
 import nl.jimkaplan.autotrader.model.document.BitvavoCredentials;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
+import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
@@ -12,6 +13,7 @@ import nl.jimkaplan.autotrader.strategy.controller.SarParametersRequest;
 import nl.jimkaplan.autotrader.strategy.live.BitvavoCandleStream;
 import nl.jimkaplan.autotrader.strategy.live.CandleStreamFactory;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
+import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
@@ -50,6 +52,9 @@ class LiveStrategyServiceTest {
 
     @Mock
     private LiveOrderRepository liveOrderRepository;
+
+    @Mock
+    private LivePositionRepository livePositionRepository;
 
     @Mock
     private CandleHistoryService candleHistoryService;
@@ -324,6 +329,20 @@ class LiveStrategyServiceTest {
     }
 
     @Test
+    void update_keepsTheStoredNameWhenTheRequestOmitsIt() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        LiveStrategyRequest request = request();
+        request.setName(null);
+
+        LiveStrategy updated = liveStrategyService.update("strategy-1", request);
+
+        assertEquals("Strategy strategy-1", updated.getName());
+    }
+
+    @Test
     void update_rejectsAChangedDryRunFlag() {
         LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
@@ -376,6 +395,24 @@ class LiveStrategyServiceTest {
         assertTrue(strategy.isArchived());
         verify(liveStrategyRepository).save(strategy);
         verify(liveStrategyRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_refusesToArchiveAnOpenPosition() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        strategy.setLastStartedTime(Instant.now());
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.of(LivePosition.builder()
+                        .strategyId("strategy-1").market("BTC-EUR").status("OPEN").build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.delete("strategy-1"));
+
+        assertEquals("close the open position before archiving", error.getMessage());
+        assertFalse(strategy.isArchived());
+        verify(liveStrategyRepository, never()).delete(any());
+        verify(liveStrategyRepository, never()).save(any());
     }
 
     @Test

@@ -90,6 +90,7 @@ public class LiveUiController {
                           @RequestParam(defaultValue = "false") boolean real,
                           Model model) {
         LiveStrategyForm form = LiveStrategyForm.defaults();
+        boolean prefilled = false;
         if (copy != null && !copy.isBlank()) {
             LiveStrategy source = require(copy);
             form = LiveStrategyForm.fromStrategy(source);
@@ -97,16 +98,16 @@ public class LiveUiController {
                     ? source.getMarket() + " " + source.getInterval() : source.getName();
             form.setName(real ? name + "-REAL" : name + " copy");
             form.setDryRun(!real);
+            prefilled = true;
         } else if (run != null && !run.isBlank()) {
             form = fromBacktest(run, entry);
+            prefilled = true;
         }
-        List<String> markets = marketChoices(form);
-        if (form.getMarket() == null || (!markets.contains(form.getMarket()) && !markets.isEmpty())) {
-            if (!markets.isEmpty()) {
-                form.setMarket(markets.get(0));
-            }
+        List<String> catalogue = marketService.selectable();
+        if (needsCatalogueMarket(form, catalogue, prefilled)) {
+            form.setMarket(catalogue.get(0));
         }
-        return renderForm(model, form, null, false, false, null);
+        return renderForm(model, form, null, false, false, null, catalogue);
     }
 
     /**
@@ -133,7 +134,7 @@ public class LiveUiController {
     @GetMapping("/{id}/edit")
     public String editForm(@PathVariable String id, Model model) {
         LiveStrategy strategy = require(id);
-        boolean started = started(strategy);
+        boolean started = strategy.hasStarted();
         boolean running = liveStrategyService.isRunning(id);
         return renderForm(model, LiveStrategyForm.fromStrategy(strategy), id, started, true,
                 running ? "Stop the strategy before editing it." : null);
@@ -154,7 +155,7 @@ public class LiveUiController {
             log.info("UI updated live strategy {}", id);
             return "redirect:/ui/live";
         } catch (IllegalArgumentException e) {
-            return renderForm(model, form, id, started(strategy), true, e.getMessage());
+            return renderForm(model, form, id, strategy.hasStarted(), true, e.getMessage());
         }
     }
 
@@ -227,6 +228,12 @@ public class LiveUiController {
 
     private String renderForm(Model model, LiveStrategyForm form, String strategyId, boolean started,
                               boolean editing, String error) {
+        return renderForm(model, form, strategyId, started, editing, error,
+                marketService.selectable());
+    }
+
+    private String renderForm(Model model, LiveStrategyForm form, String strategyId, boolean started,
+                              boolean editing, String error, List<String> catalogue) {
         model.addAttribute("form", form);
         model.addAttribute("editing", editing);
         model.addAttribute("strategyId", strategyId);
@@ -236,21 +243,28 @@ public class LiveUiController {
         model.addAttribute("intervals", CandleInterval.values());
         model.addAttribute("operators", LogicalOperator.values());
         model.addAttribute("conditions", RuleCondition.values());
-        model.addAttribute("markets", marketChoices(form));
+        model.addAttribute("markets", marketChoices(catalogue, form.getMarket()));
         return "live/form";
     }
 
-    private List<String> marketChoices(LiveStrategyForm form) {
-        List<String> markets = new ArrayList<>(marketService.selectable());
-        String selected = form == null ? null : form.getMarket();
+    /**
+     * A default form whose hard-coded pair is not in the catalogue starts on the catalogue's first
+     * pair. A prefill from a strategy or a backtest keeps its pair even when the catalogue no
+     * longer offers it, until the operator picks another.
+     */
+    private static boolean needsCatalogueMarket(LiveStrategyForm form, List<String> catalogue,
+                                                boolean prefilled) {
+        return !catalogue.isEmpty()
+                && (form.getMarket() == null || form.getMarket().isBlank()
+                || (!prefilled && !catalogue.contains(form.getMarket())));
+    }
+
+    private static List<String> marketChoices(List<String> catalogue, String selected) {
+        List<String> markets = new ArrayList<>(catalogue);
         if (selected != null && !selected.isBlank() && !markets.contains(selected)) {
             markets.add(selected);
         }
         return markets;
-    }
-
-    private static boolean started(LiveStrategy strategy) {
-        return strategy.getLastStartedTime() != null || strategy.getSeriesStartTime() > 0;
     }
 
     private LiveStrategy require(String id) {

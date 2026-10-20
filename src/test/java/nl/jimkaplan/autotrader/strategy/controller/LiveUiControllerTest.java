@@ -126,6 +126,28 @@ class LiveUiControllerTest {
     }
 
     @Test
+    void newFormDefaultsToTheFirstCataloguePairWhenTheDefaultIsMissing() {
+        when(marketService.selectable()).thenReturn(List.of("ETH-EUR"));
+
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        assertEquals("live/form", controller.newForm(null, null, null, false, model));
+        assertEquals("ETH-EUR", form(model).getMarket());
+    }
+
+    @Test
+    void newFormKeepsAPrefilledMarketThatIsNotInTheCatalogue() {
+        when(liveStrategyService.get("sol")).thenReturn(Optional.of(strategy("SOL", "SOL-EUR", null, 0)));
+        when(marketService.selectable()).thenReturn(List.of("BTC-EUR"));
+
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        assertEquals("live/form", controller.newForm(null, null, "sol", false, model));
+        assertEquals("SOL-EUR", form(model).getMarket());
+        assertTrue(((List<?>) model.getAttribute("markets")).contains("SOL-EUR"));
+    }
+
+    @Test
     void newFormReplacesABlankCopiedMarketWithTheFirstCataloguePair() {
         when(liveStrategyService.get("blank")).thenReturn(Optional.of(strategy("X", " ", null, 0)));
         when(marketService.selectable()).thenReturn(List.of("BTC-EUR"));

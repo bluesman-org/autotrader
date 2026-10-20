@@ -213,7 +213,8 @@ and creation minute (e.g. `BTC-EUR 1h · 12 Oct 21:04`).
   anchor, so its live record is separate from the trial's.
 - **Delete or archive:** a strategy that never started is deleted. One that has run is archived:
   it leaves the live page and the forms, but its orders and positions stay, and the history tab
-  keeps showing it (labelled `(archived)` in the strategy filter).
+  keeps showing it (labelled `(archived)` in the strategy filter). An open position blocks
+  archiving — close it first — so a real position can never be hidden behind an archived strategy.
 - **From a backtest:** each ranked row on a stored run has a **Use live** link that opens the create
   form with the market, interval, parameters, rules and amount filled in. It saves dry-run unless
   the form's dry-run checkbox is cleared.

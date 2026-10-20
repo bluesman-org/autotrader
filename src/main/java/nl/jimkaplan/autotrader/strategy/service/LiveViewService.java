@@ -118,7 +118,7 @@ public class LiveViewService {
         String name = strategy.getName() == null || strategy.getName().isBlank()
                 ? strategy.getMarket() + " " + strategy.getInterval()
                 : strategy.getName();
-        boolean started = strategy.getLastStartedTime() != null || strategy.getSeriesStartTime() > 0;
+        boolean started = strategy.hasStarted();
         return new LiveCardView(strategy.getId(), name, strategy.getMarket(), strategy.getInterval(),
                 started, running, connected, strategy.isDryRun(),
                 parameters(strategy), statusLine(strategy, running, lastError, now),

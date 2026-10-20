@@ -142,12 +142,14 @@ public class LiveStrategyController {
     @Operation(summary = "Delete or archive a live strategy",
             description = "A strategy that never started is deleted. One that has run is archived " +
                           "instead: it disappears from the live page and the forms, but its orders " +
-                          "and positions stay for the account history page.")
+                          "and positions stay for the account history page. An open position must " +
+                          "be closed before archiving.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Strategy deleted or archived",
                     content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = LiveStrategyDeletion.class))),
-            @ApiResponse(responseCode = "400", description = "Strategy is running", content = @Content),
+            @ApiResponse(responseCode = "400",
+                    description = "Strategy is running or has an open position", content = @Content),
             @ApiResponse(responseCode = "404", description = "No strategy with that ID", content = @Content)
     })
     @DeleteMapping("/{id}")

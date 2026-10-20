@@ -150,4 +150,14 @@ public class LiveStrategy extends BaseDocument {
      */
     @Field("created_time")
     private Instant createdTime;
+
+    /**
+     * @return Whether the strategy has ever run. The pair and interval lock on this, Delete turns
+     *         into Archive, and the live page's edit form uses it to disable them; keeping the
+     *         definition here stops those four callers from drifting apart.
+     */
+    @JsonIgnore
+    public boolean hasStarted() {
+        return lastStartedTime != null || seriesStartTime > 0;
+    }
 }

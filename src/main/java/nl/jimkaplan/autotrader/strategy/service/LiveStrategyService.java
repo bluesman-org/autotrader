@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
+import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
@@ -44,6 +45,7 @@ public class LiveStrategyService {
 
     private final LiveStrategyRepository liveStrategyRepository;
     private final LiveOrderRepository liveOrderRepository;
+    private final LivePositionRepository livePositionRepository;
     private final CandleHistoryService candleHistoryService;
     private final LiveTradingService liveTradingService;
     private final BitvavoCredentialsService credentialsService;
@@ -126,8 +128,9 @@ public class LiveStrategyService {
         if (runners.containsKey(id)) {
             throw new IllegalArgumentException("stop the strategy before editing it");
         }
-        String name = required("name", request.getName());
-        boolean started = strategy.getLastStartedTime() != null || strategy.getSeriesStartTime() > 0;
+        String name = required("name",
+                request.getName() == null ? strategy.getName() : request.getName());
+        boolean started = strategy.hasStarted();
 
         String market = strategy.getMarket();
         if (request.getMarket() != null && !request.getMarket().isBlank()) {
@@ -201,7 +204,7 @@ public class LiveStrategyService {
      *
      * @param id The strategy ID
      * @return {@code true} when the strategy was archived, {@code false} when it was deleted
-     * @throws IllegalArgumentException if the strategy is running
+     * @throws IllegalArgumentException if the strategy is running or still holds an open position
      * @throws NoSuchElementException   if the strategy does not exist
      */
     public synchronized boolean delete(String id) {
@@ -209,11 +212,13 @@ public class LiveStrategyService {
         if (runners.containsKey(id)) {
             throw new IllegalArgumentException("stop the strategy before deleting it");
         }
-        boolean hasRun = strategy.getLastStartedTime() != null || strategy.getSeriesStartTime() > 0;
-        if (!hasRun) {
+        if (!strategy.hasStarted()) {
             liveStrategyRepository.delete(strategy);
             log.info("Deleted live strategy {} (never started)", id);
             return false;
+        }
+        if (livePositionRepository.findByStrategyIdAndStatus(id, "OPEN").isPresent()) {
+            throw new IllegalArgumentException("close the open position before archiving");
         }
         strategy.setArchived(true);
         liveStrategyRepository.save(strategy);

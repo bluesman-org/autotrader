@@ -19,8 +19,8 @@ import java.util.List;
  * have something readable to show. A document that already has a name is left untouched.
  *
  * <p>The generated name is the pair, the interval and the creation minute, e.g.
- * {@code BTC-EUR 1h · 12 Oct 21:04}. It runs after the indexes are in place and before the live
- * starter, so an enabled strategy is named before its card is read.</p>
+ * {@code BTC-EUR 1h · 12 Oct 21:04}. It runs before the live starter, so an enabled strategy is
+ * named before its card is read; it needs no index because it matches on {@code _id}.</p>
  */
 @Slf4j
 @Component
