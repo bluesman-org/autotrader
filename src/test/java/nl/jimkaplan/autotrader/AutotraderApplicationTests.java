@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader;
 
+import nl.jimkaplan.autotrader.config.LiveStrategyNameInitializer;
 import nl.jimkaplan.autotrader.config.MarketInitializer;
 import nl.jimkaplan.autotrader.config.MongoIndexInitializer;
 import nl.jimkaplan.autotrader.strategy.live.LiveStrategyStarter;
@@ -12,7 +13,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * a component with two constructors, a missing qualifier — and that is a class of failure this
  * project has hit; one context start catches it.
  *
- * <p>No database is needed: the two startup runners are replaced by mocks, nothing touches Mongo
+ * <p>No database is needed: the startup runners are replaced by mocks, nothing touches Mongo
  * before the first request, and the OpenAPI export is switched off
  * ({@code openapi.export-enabled=false}), so its runner returns without sleeping or calling the
  * API (it would otherwise, since Spring runs CommandLineRunners in this environment too). The
@@ -40,6 +41,9 @@ class AutotraderApplicationTests {
 
     @MockitoBean
     private MarketInitializer marketInitializer;
+
+    @MockitoBean
+    private LiveStrategyNameInitializer liveStrategyNameInitializer;
 
     @Test
     void contextLoads() {

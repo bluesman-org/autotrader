@@ -14,11 +14,14 @@ import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.service.LiveStrategyService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -39,13 +42,14 @@ public class LiveStrategyController {
     /**
      * Create a strategy; it is not running until started.
      *
-     * @param request The strategy; market and interval are required, dry-run defaults to true
+     * @param request The strategy; name, market and interval are required, dry-run defaults to true
      * @return The stored strategy
      */
     @Operation(summary = "Create a live strategy",
             description = "Creates a strategy from the same rules, parameters and sizing a backtest " +
-                          "uses. Dry-run defaults to true; live orders need the system-wide Bitvavo " +
-                          "API key, including its operator ID, stored on the settings page.")
+                          "uses. The name, market and interval are required. Dry-run defaults to " +
+                          "true; live orders need the system-wide Bitvavo API key, including its " +
+                          "operator ID, stored on the settings page.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Strategy created",
                     content = @Content(mediaType = "application/json",
@@ -61,16 +65,22 @@ public class LiveStrategyController {
     }
 
     /**
-     * List all live strategies.
+     * List live strategies; archived ones are hidden unless requested.
      *
+     * @param includeArchived Whether to include the archived strategies too
      * @return The strategies
      */
-    @Operation(summary = "List live strategies")
+    @Operation(summary = "List live strategies",
+            description = "Returns the strategies that have not been archived. Set " +
+                          "`includeArchived=true` to include archived strategies, whose history is " +
+                          "kept for the account history page.")
     @ApiResponse(responseCode = "200", description = "Strategies returned",
             content = @Content(mediaType = "application/json"))
     @GetMapping
-    public ResponseEntity<List<LiveStrategy>> all() {
-        return ResponseEntity.ok(liveStrategyService.all());
+    public ResponseEntity<List<LiveStrategy>> all(
+            @Parameter(description = "Include archived strategies")
+            @RequestParam(defaultValue = "false") boolean includeArchived) {
+        return ResponseEntity.ok(includeArchived ? liveStrategyService.all() : liveStrategyService.active());
     }
 
     /**
@@ -90,6 +100,62 @@ public class LiveStrategyController {
     public ResponseEntity<LiveStrategyView> get(
             @Parameter(description = "ID of the live strategy", required = true) @PathVariable String id) {
         return ResponseEntity.ok(view(id));
+    }
+
+    /**
+     * Update a stopped strategy. The pair and interval are fixed after the first start, and
+     * dry-run is chosen at creation.
+     *
+     * @param id      The strategy ID
+     * @param request The new values; null fields keep the stored value
+     * @return The stored strategy
+     */
+    @Operation(summary = "Update a live strategy",
+            description = "Updates a stopped strategy. The pair and interval can only change " +
+                          "before the first start; dry-run is fixed at creation, so a real strategy " +
+                          "is created as a separate copy.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Strategy updated",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = LiveStrategy.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request or running strategy",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "No strategy with that ID", content = @Content)
+    })
+    @PutMapping("/{id}")
+    public ResponseEntity<LiveStrategy> update(
+            @Parameter(description = "ID of the live strategy", required = true) @PathVariable String id,
+            @RequestBody LiveStrategyRequest request) {
+        LiveStrategy strategy = liveStrategyService.update(id, request);
+        log.info("Updated live strategy {} ({} {}, dry-run={})", strategy.getId(),
+                strategy.getMarket(), strategy.getInterval(), strategy.isDryRun());
+        return ResponseEntity.ok(strategy);
+    }
+
+    /**
+     * Delete a strategy that never started, or archive one that has run so its recorded orders and
+     * positions stay available to the history page.
+     *
+     * @param id The strategy ID
+     * @return Whether the strategy was archived instead of deleted
+     */
+    @Operation(summary = "Delete or archive a live strategy",
+            description = "A strategy that never started is deleted. One that has run is archived " +
+                          "instead: it disappears from the live page and the forms, but its orders " +
+                          "and positions stay for the account history page.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Strategy deleted or archived",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = LiveStrategyDeletion.class))),
+            @ApiResponse(responseCode = "400", description = "Strategy is running", content = @Content),
+            @ApiResponse(responseCode = "404", description = "No strategy with that ID", content = @Content)
+    })
+    @DeleteMapping("/{id}")
+    public ResponseEntity<LiveStrategyDeletion> delete(
+            @Parameter(description = "ID of the live strategy", required = true) @PathVariable String id) {
+        boolean archived = liveStrategyService.delete(id);
+        log.info("{} live strategy {}", archived ? "Archived" : "Deleted", id);
+        return ResponseEntity.ok(new LiveStrategyDeletion(id, archived));
     }
 
     /**

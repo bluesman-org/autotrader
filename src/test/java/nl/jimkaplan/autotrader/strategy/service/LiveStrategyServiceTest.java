@@ -21,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -71,6 +72,7 @@ class LiveStrategyServiceTest {
     @Test
     void create_appliesTheDocumentedDefaults() {
         LiveStrategyRequest request = new LiveStrategyRequest();
+        request.setName("BTC 1h");
         request.setMarket("BTCEUR");
         request.setInterval("1h");
         when(liveStrategyRepository.save(any(LiveStrategy.class)))
@@ -79,12 +81,14 @@ class LiveStrategyServiceTest {
         LiveStrategy stored = liveStrategyService.create(request);
 
         assertNotNull(stored.getCreatedTime());
+        assertEquals("BTC 1h", stored.getName());
         assertEquals("BTC-EUR", stored.getMarket());
         assertEquals("1h", stored.getInterval());
         assertEquals(100.0, stored.getAmountPerBuy(), 1e-9);
         assertEquals(BacktestDefaults.WARM_UP_CANDLES, stored.getWarmUpCandles());
         assertTrue(stored.isDryRun());
         assertFalse(stored.isEnabled());
+        assertFalse(stored.isArchived());
         assertEquals(0, stored.getLastEvaluatedOpenTime());
         assertEquals(12, stored.getMacdFastPeriod());
         assertEquals(26, stored.getMacdSlowPeriod());
@@ -101,6 +105,7 @@ class LiveStrategyServiceTest {
     @Test
     void create_whenLive_storesTheCustomConfiguration() {
         LiveStrategyRequest request = new LiveStrategyRequest();
+        request.setName("ETH 4h");
         request.setMarket("ETH-EUR");
         request.setInterval("4h");
         request.setAmountPerBuy(50.0);
@@ -117,6 +122,7 @@ class LiveStrategyServiceTest {
 
         LiveStrategy stored = liveStrategyService.create(request);
 
+        assertEquals("ETH 4h", stored.getName());
         assertEquals("ETH-EUR", stored.getMarket());
         assertEquals("4h", stored.getInterval());
         assertEquals(50.0, stored.getAmountPerBuy(), 1e-9);
@@ -135,6 +141,10 @@ class LiveStrategyServiceTest {
 
     @Test
     void create_rejectsInvalidRequests() {
+        LiveStrategyRequest noName = request();
+        noName.setName(" ");
+        assertMessage("the name is required", noName);
+
         LiveStrategyRequest noMarket = request();
         noMarket.setMarket(" ");
         assertMessage("the market is required", noMarket);
@@ -218,6 +228,9 @@ class LiveStrategyServiceTest {
         assertThrows(NoSuchElementException.class, () -> liveStrategyService.start("missing"));
         assertThrows(NoSuchElementException.class, () -> liveStrategyService.stop("missing"));
         assertThrows(NoSuchElementException.class, () -> liveStrategyService.orders("missing"));
+        assertThrows(NoSuchElementException.class,
+                () -> liveStrategyService.update("missing", request()));
+        assertThrows(NoSuchElementException.class, () -> liveStrategyService.delete("missing"));
     }
 
     @Test
@@ -245,6 +258,160 @@ class LiveStrategyServiceTest {
     }
 
     @Test
+    void update_changesTheEditableFields() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        LiveStrategyRequest request = request();
+        request.setName("Renamed");
+        request.setAmountPerBuy(250.0);
+        request.setWarmUpCandles(10);
+        request.setMacdParameters(new MacdParametersRequest(3, 5, 2));
+        request.setSarParameters(new SarParametersRequest(0.01, 0.1));
+        request.setEntryRules(new RuleSetRequest(LogicalOperator.ANY,
+                List.of(RuleCondition.PRICE_ABOVE_SAR)));
+        request.setExitRules(new RuleSetRequest(LogicalOperator.ALL,
+                List.of(RuleCondition.PRICE_BELOW_SAR)));
+
+        LiveStrategy updated = liveStrategyService.update("strategy-1", request);
+
+        assertEquals("Renamed", updated.getName());
+        assertEquals(250.0, updated.getAmountPerBuy(), 1e-9);
+        assertEquals(10, updated.getWarmUpCandles());
+        assertEquals(3, updated.getMacdFastPeriod());
+        assertEquals(5, updated.getMacdSlowPeriod());
+        assertEquals(2, updated.getMacdSignalPeriod());
+        assertEquals(0.01, updated.getSarAcceleration(), 1e-9);
+        assertEquals(0.1, updated.getSarMaximum(), 1e-9);
+        assertEquals("ANY", updated.getEntryOperator());
+        assertEquals(List.of("PRICE_ABOVE_SAR"), updated.getEntryConditions());
+        assertEquals("ALL", updated.getExitOperator());
+        assertEquals(List.of("PRICE_BELOW_SAR"), updated.getExitConditions());
+        verify(liveStrategyRepository).save(strategy);
+    }
+
+    @Test
+    void update_allowsThePairAndIntervalBeforeTheFirstStartButNotAfter() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LiveStrategyRequest before = request();
+        before.setMarket("ETH-EUR");
+        before.setInterval("4h");
+        liveStrategyService.update("strategy-1", before);
+
+        assertEquals("ETH-EUR", strategy.getMarket());
+        assertEquals("4h", strategy.getInterval());
+
+        strategy.setLastStartedTime(Instant.now());
+        LiveStrategyRequest market = request();
+        market.setMarket("SOL-EUR");
+        IllegalArgumentException marketError = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.update("strategy-1", market));
+        assertEquals("the market is fixed after the first start; duplicate the strategy to trade "
+                + "another market", marketError.getMessage());
+
+        LiveStrategyRequest interval = request();
+        interval.setMarket(null);
+        interval.setInterval("1d");
+        IllegalArgumentException intervalError = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.update("strategy-1", interval));
+        assertEquals("the interval is fixed after the first start; duplicate the strategy to use "
+                + "another interval", intervalError.getMessage());
+    }
+
+    @Test
+    void update_rejectsAChangedDryRunFlag() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        LiveStrategyRequest request = request();
+        request.setDryRun(false);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.update("strategy-1", request));
+
+        assertEquals("dry-run is chosen when the strategy is created; create a real copy instead",
+                error.getMessage());
+    }
+
+    @Test
+    void update_rejectsARunningStrategy() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        stubRunnerConstruction();
+        liveStrategyService.start("strategy-1");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.update("strategy-1", request()));
+
+        assertEquals("stop the strategy before editing it", error.getMessage());
+    }
+
+    @Test
+    void delete_removesAStrategyThatNeverStarted() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+
+        boolean archived = liveStrategyService.delete("strategy-1");
+
+        assertFalse(archived);
+        verify(liveStrategyRepository).delete(strategy);
+        verify(liveStrategyRepository, never()).save(any());
+    }
+
+    @Test
+    void delete_archivesAStrategyThatHasRun() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        strategy.setLastStartedTime(Instant.now());
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean archived = liveStrategyService.delete("strategy-1");
+
+        assertTrue(archived);
+        assertTrue(strategy.isArchived());
+        verify(liveStrategyRepository).save(strategy);
+        verify(liveStrategyRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_rejectsARunningStrategy() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        stubRunnerConstruction();
+        liveStrategyService.start("strategy-1");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.delete("strategy-1"));
+
+        assertEquals("stop the strategy before deleting it", error.getMessage());
+    }
+
+    @Test
+    void active_returnsTheNonArchivedStrategies() {
+        when(liveStrategyRepository.findActive()).thenReturn(List.of(stored("strategy-1", "BTC-EUR")));
+
+        assertEquals(1, liveStrategyService.active().size());
+    }
+
+    @Test
+    void start_rejectsAnArchivedStrategy() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        strategy.setArchived(true);
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.start("strategy-1"));
+
+        assertEquals("the strategy is archived", error.getMessage());
+        assertFalse(liveStrategyService.isRunning("strategy-1"));
+    }
+
+    @Test
     void lastError_reflectsTheRunningStream() {
         LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
@@ -262,7 +429,7 @@ class LiveStrategyServiceTest {
     void startEnabled_startsWhatIsEnabledAndSurvivesFailures() {
         LiveStrategy good = stored("strategy-1", "BTC-EUR");
         LiveStrategy bad = stored("strategy-2", "ETH-EUR");
-        when(liveStrategyRepository.findByEnabledTrue()).thenReturn(List.of(good, bad));
+        when(liveStrategyRepository.findActiveEnabled()).thenReturn(List.of(good, bad));
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(good));
         when(liveStrategyRepository.findById("strategy-2")).thenReturn(Optional.of(bad));
         when(candleHistoryService.getCandles(any(), any(), any(), any())).thenReturn(List.of());
@@ -283,7 +450,7 @@ class LiveStrategyServiceTest {
     void startEnabled_holdsBackStrategiesWhoseReconciliationFailed() {
         LiveStrategy good = stored("strategy-1", "BTC-EUR");
         LiveStrategy held = stored("strategy-2", "ETH-EUR");
-        when(liveStrategyRepository.findByEnabledTrue()).thenReturn(List.of(good, held));
+        when(liveStrategyRepository.findActiveEnabled()).thenReturn(List.of(good, held));
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(good));
         stubRunnerConstruction();
 
@@ -310,6 +477,7 @@ class LiveStrategyServiceTest {
 
     private static LiveStrategyRequest request() {
         LiveStrategyRequest request = new LiveStrategyRequest();
+        request.setName("BTC 1h");
         request.setMarket("BTC-EUR");
         request.setInterval("1h");
         return request;
@@ -317,6 +485,7 @@ class LiveStrategyServiceTest {
 
     private static LiveStrategy stored(String id, String market) {
         LiveStrategy strategy = LiveStrategy.builder()
+                .name("Strategy " + id)
                 .market(market)
                 .interval("1h")
                 .macdFastPeriod(12)

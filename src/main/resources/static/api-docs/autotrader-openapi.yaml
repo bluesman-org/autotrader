@@ -285,7 +285,18 @@ paths:
       tags:
         - "Live strategies"
       summary: "List live strategies"
+      description: "Returns the strategies that have not been archived. Set `includeArchived=true`\
+        \ to include archived strategies, whose history is kept for the account history\
+        \ page."
       operationId: "all"
+      parameters:
+        - name: "includeArchived"
+          in: "query"
+          description: "Include archived strategies"
+          required: false
+          schema:
+            type: "boolean"
+            default: false
       responses:
         "200":
           description: "Strategies returned"
@@ -296,8 +307,9 @@ paths:
         - "Live strategies"
       summary: "Create a live strategy"
       description: "Creates a strategy from the same rules, parameters and sizing\
-        \ a backtest uses. Dry-run defaults to true; live orders need the system-wide\
-        \ Bitvavo API key, including its operator ID, stored on the settings page."
+        \ a backtest uses. The name, market and interval are required. Dry-run defaults\
+        \ to true; live orders need the system-wide Bitvavo API key, including its\
+        \ operator ID, stored on the settings page."
       operationId: "create"
       requestBody:
         content:
@@ -526,6 +538,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LiveStrategyView"
+        "404":
+          description: "No strategy with that ID"
+    put:
+      tags:
+        - "Live strategies"
+      summary: "Update a live strategy"
+      description: "Updates a stopped strategy. The pair and interval can only change\
+        \ before the first start; dry-run is fixed at creation, so a real strategy\
+        \ is created as a separate copy."
+      operationId: "update"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LiveStrategyRequest"
+        required: true
+      responses:
+        "200":
+          description: "Strategy updated"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveStrategy"
+        "400":
+          description: "Invalid request or running strategy"
+        "404":
+          description: "No strategy with that ID"
+    delete:
+      tags:
+        - "Live strategies"
+      summary: "Delete or archive a live strategy"
+      description: "A strategy that never started is deleted. One that has run is\
+        \ archived instead: it disappears from the live page and the forms, but its\
+        \ orders and positions stay for the account history page."
+      operationId: "delete"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Strategy deleted or archived"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveStrategyDeletion"
+        "400":
+          description: "Strategy is running"
         "404":
           description: "No strategy with that ID"
   /api/live-strategies/{id}/orders:
@@ -878,6 +948,10 @@ components:
     LiveStrategyRequest:
       type: "object"
       properties:
+        name:
+          type: "string"
+          description: "Operator-facing strategy name; required when creating"
+          example: "BTC 2h breakout"
         market:
           type: "string"
           description: "Market in Bitvavo format"
@@ -982,6 +1056,8 @@ components:
         updatedAt:
           type: "string"
           format: "date-time"
+        name:
+          type: "string"
         market:
           type: "string"
         interval:
@@ -1022,6 +1098,8 @@ components:
         dryRun:
           type: "boolean"
         enabled:
+          type: "boolean"
+        archived:
           type: "boolean"
         lastEvaluatedOpenTime:
           type: "integer"
@@ -1401,6 +1479,13 @@ components:
           type: "string"
           enum:
             - "INSUFFICIENT_BALANCE"
+    LiveStrategyDeletion:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+        archived:
+          type: "boolean"
   securitySchemes:
     basicAuth:
       type: "http"
