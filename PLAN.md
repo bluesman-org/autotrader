@@ -256,6 +256,11 @@ next: the small live-run trial of the engine.
     `/ui/settings` and through `/api/markets`; enabled pairs feed the strategy forms and the
     ledger's market picker, and a live strategy's pair stays visible even when disabled. A pair is
     disabled, never deleted, and a discovery never re-enables one.
+29. ✅ Ledger reporting: the orders table's columns sort on their underlying values; the all-pairs
+    view sums the filtered orders per market (orders, buy/sell volume, euro fees, realised); the
+    raw view filters on the exchange's transaction types and sums them per type and currency, so
+    staking income and external transfers are visible, with the transfer address when Bitvavo
+    reports one.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

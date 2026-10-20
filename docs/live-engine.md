@@ -253,7 +253,11 @@ then the most recently traded catalogue pair, then BTC-EUR. Only EUR-quoted mark
 The all-pairs view merges `GET /orders` for each catalogue market — the exchange requires a market
 on that read — and sums the rows' realised results, fees and balance-after columns across them; its
 summary's Unrealised values every held pair at its own bid, and its Balance is the account's euro
-cash. Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
+cash. The orders table's columns sort on their underlying values (the links keep the filters and
+paging), and the all-pairs view adds a Totals by pair table. The raw view filters on the exchange's
+transaction types (`deposit`, `withdrawal`, `staking`, …) and adds a Totals by type table, so
+staking income per coin and external transfers read as totals; its rows show the transfer address
+when Bitvavo reports one. Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
 their fills and `feePaid`), the P&L walk and the raw transactions from `GET /account/history`, the
 balance from `GET /balance` and the prices from the public order book. A sell shows what it realised
 at the average cost of the coins it sold — the walk covers the market's whole buy/sell history, so a

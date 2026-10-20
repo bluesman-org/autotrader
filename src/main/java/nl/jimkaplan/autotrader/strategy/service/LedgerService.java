@@ -16,9 +16,12 @@ import nl.jimkaplan.autotrader.strategy.controller.LedgerRequest;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.FillRowView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.FiltersView;
+import nl.jimkaplan.autotrader.strategy.controller.LedgerView.HeaderView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.OrderRowView;
+import nl.jimkaplan.autotrader.strategy.controller.LedgerView.PairTotalView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.PriceView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.RawRowView;
+import nl.jimkaplan.autotrader.strategy.controller.LedgerView.RawTotalView;
 import nl.jimkaplan.autotrader.strategy.controller.LedgerView.TotalsView;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView.Option;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView.PagerView;
@@ -49,6 +52,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 
 /**
@@ -66,6 +71,11 @@ import java.util.stream.Collectors;
  * earlier. The walk ignores deposits, so a sell of coins that were deposited rather than bought
  * shows without a result. A failing read leaves the page with a message instead of data; a failing
  * price lookup degrades to dashes.</p>
+ *
+ * <p>The orders' columns sort on their underlying values, not their displayed text, and the
+ * all-pairs view sums the filtered orders per market. The raw view filters on the exchange's
+ * transaction types and sums them per type and currency, so staking income and external transfers
+ * read as totals.</p>
  */
 @Slf4j
 @Service
@@ -81,8 +91,32 @@ public class LedgerService {
     private static final String RAW_VIEW = "raw";
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final List<Integer> PAGE_SIZES = List.of(5, 10, 25, 50);
-    private static final List<String> ORDER_TYPES = List.of("market", "limit", "stopLoss",
-            "stopLossLimit", "takeProfit", "takeProfitLimit");
+    private static final String DEFAULT_SORT = "date";
+    private static final List<Option> ORDER_TYPE_OPTIONS = List.of(
+            new Option("market", "market"),
+            new Option("limit", "limit"),
+            new Option("stopLoss", "stopLoss"),
+            new Option("stopLossLimit", "stopLossLimit"),
+            new Option("takeProfit", "takeProfit"),
+            new Option("takeProfitLimit", "takeProfitLimit"));
+    // The exchange's transaction types (GET /account/history): orders, transfers, income and the
+    // administrative ones. The raw view filters on these instead of the order types.
+    private static final List<Option> RAW_TYPE_OPTIONS = List.of(
+            new Option("buy", "Buy"),
+            new Option("sell", "Sell"),
+            new Option("deposit", "Deposit"),
+            new Option("withdrawal", "Withdrawal"),
+            new Option("withdrawal_cancelled", "Withdrawal cancelled"),
+            new Option("staking", "Staking"),
+            new Option("fixed_staking", "Fixed staking"),
+            new Option("rebate", "Rebate"),
+            new Option("affiliate", "Affiliate"),
+            new Option("distribution", "Distribution"),
+            new Option("internal_transfer", "Internal transfer"),
+            new Option("loan", "Loan"),
+            new Option("external_transferred_funds", "External transferred funds"),
+            new Option("manually_assigned", "Manually assigned"),
+            new Option("manually_assigned_bitvavo", "Manually assigned (Bitvavo)"));
     private static final List<Option> STATUS_OPTIONS = List.of(
             new Option("open", "Open"),
             new Option("awaitingTrigger", "Awaiting trigger"),
@@ -164,8 +198,8 @@ public class LedgerService {
                     "No Bitvavo API key is configured, so the account cannot be read. Store the "
                             + "account's key on the Settings page (/autotrader/ui/settings) — the "
                             + "ledger uses the same key the engine trades with.",
-                    price, filters, null, List.of(), pager(request, 0, 1, 1), raw, List.of(),
-                    pager(request, 0, 1, 1));
+                    price, filters, List.of(), null, List.of(), pager(request, 0, 1, 1, null, null), raw,
+                    List.of(), pager(request, 0, 1, 1, null, null), List.of(), List.of());
         }
         BitvavoCredentials credentials = account.get();
         try {
@@ -173,8 +207,8 @@ public class LedgerService {
         } catch (RestClientException e) {
             log.warn("Could not read the Bitvavo ledger for {}: {}", market, e.getMessage());
             return new LedgerView("Could not read the Bitvavo account: " + e.getMessage(), price,
-                    filters, null, List.of(), pager(request, 0, 1, 1), raw, List.of(),
-                    pager(request, 0, 1, 1));
+                    filters, List.of(), null, List.of(), pager(request, 0, 1, 1, null, null), raw, List.of(),
+                    pager(request, 0, 1, 1, null, null), List.of(), List.of());
         }
     }
 
@@ -194,29 +228,39 @@ public class LedgerService {
                 .filter(order -> matchesSide(order, request.getSide()))
                 .filter(order -> matchesType(order, filters.type()))
                 .filter(order -> matchesStatus(order, filters.status()))
-                .sorted(Comparator.comparingLong(LedgerService::created).reversed())
                 .toList();
+        String sortKey = sortKey(request.getSort());
+        boolean ascending = "asc".equalsIgnoreCase(request.getDir());
+        List<OrderResponse> sorted = new ArrayList<>(filtered);
+        sorted.sort(orderComparator(sortKey, ascending, bases, balances, market));
 
         int pageSize = pageSize(request.getSize());
-        int pages = pages(filtered.size(), pageSize);
+        int pages = pages(sorted.size(), pageSize);
         int page = Math.min(clamp(request.getPage()), pages);
         int fromIndex = (page - 1) * pageSize;
-        int toIndex = Math.min(fromIndex + pageSize, filtered.size());
+        int toIndex = Math.min(fromIndex + pageSize, sorted.size());
         List<OrderRowView> rows = new ArrayList<>();
         for (int i = fromIndex; i < toIndex; i++) {
-            rows.add(row(filtered.get(i), i + 1, bases, balances, market));
+            rows.add(row(sorted.get(i), i + 1, bases, balances, market));
         }
 
         List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
                 : List.of();
-        int rawPages = pages(rawEntries.size(), pageSize);
+        List<Transaction> rawFiltered = raw ? filterRaw(rawEntries, filters.type()) : List.of();
+        int rawPages = pages(rawFiltered.size(), pageSize);
         int rawPage = Math.min(clamp(request.getPage()), rawPages);
-        List<RawRowView> rawRows = raw ? rawRows(rawEntries, rawPage, pageSize) : List.of();
+        List<RawRowView> rawRows = raw ? rawRows(rawFiltered, rawPage, pageSize) : List.of();
+        List<PairTotalView> pairTotals = all && !raw
+                ? pairTotals(filtered, bases, market) : List.of();
+        List<RawTotalView> rawTotals = raw ? rawTotals(rawFiltered) : List.of();
 
         return new LedgerView(null, price, filters,
+                headers(request, sortKey, ascending, filters.amountHeader(), pageSize),
                 totals(filtered, bases, balances, books, market, all, range, skipped),
-                rows, pager(request, filtered.size(), page, pages), raw,
-                rawRows, pager(request, rawEntries.size(), rawPage, rawPages));
+                rows, pager(request, sorted.size(), page, pages, sortKey,
+                        ascending ? "asc" : "desc"), raw,
+                rawRows, pager(request, rawFiltered.size(), rawPage, rawPages, null, null),
+                pairTotals, rawTotals);
     }
 
     // ---- the account ------------------------------------------------------------------------
@@ -591,7 +635,9 @@ public class LedgerService {
                     type, typeClass(type),
                     amountWithCurrency(entry.getSentAmount(), entry.getSentCurrency()),
                     amountWithCurrency(entry.getReceivedAmount(), entry.getReceivedCurrency()),
-                    amountWithCurrency(entry.getFeesAmount(), entry.getFeesCurrency())));
+                    amountWithCurrency(entry.getFeesAmount(), entry.getFeesCurrency()),
+                    entry.getAddress() == null || entry.getAddress().isBlank()
+                            ? DASH : entry.getAddress()));
         }
         return rows;
     }
@@ -599,9 +645,11 @@ public class LedgerService {
     private FiltersView filters(LedgerRequest request, String market, boolean raw) {
         boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
                 request.getToDate());
+        List<Option> typeOptions = raw ? RAW_TYPE_OPTIONS : ORDER_TYPE_OPTIONS;
+        List<Option> statusOptions = raw ? List.of() : STATUS_OPTIONS;
         return new FiltersView(request.getSide(), market, amountHeader(market),
-                selected(request.getType(), ORDER_TYPES),
-                selected(request.getStatus(), STATUS_VALUES),
+                selected(request.getType(), typeOptions.stream().map(Option::value).toList()),
+                selected(request.getStatus(), statusOptions.stream().map(Option::value).toList()),
                 raw ? RAW_VIEW : DEFAULT_VIEW,
                 custom ? "" : HistoryPeriods.preset(request.getPeriod()),
                 custom ? request.getFromDate() : null,
@@ -609,12 +657,204 @@ public class LedgerService {
                 custom ? request.getToDate() : null,
                 HistoryPeriods.shownToTime(custom ? request.getToTime() : null),
                 HistoryPeriods.DEFAULT_PRESET, marketOptions(market),
-                ORDER_TYPES.stream().map(type -> new Option(type, type)).toList(), STATUS_OPTIONS,
-                HistoryPeriods.OPTIONS);
+                typeOptions, statusOptions, HistoryPeriods.OPTIONS);
     }
 
     private static String amountHeader(String market) {
         return ALL.equals(market) ? "Amount" : "Amount (" + base(market) + ")";
+    }
+
+    // ---- sorting the order table ------------------------------------------------------------
+
+    private static String sortKey(String sort) {
+        return switch (sort == null ? "" : sort) {
+            case "side", "type", "market", "amount", "price", "status", "balance", "fee",
+                 "netCash", "fills", "pnl" -> sort;
+            default -> DEFAULT_SORT;
+        };
+    }
+
+    private List<HeaderView> headers(LedgerRequest request, String sort, boolean ascending,
+                                     String amountHeader, int size) {
+        List<HeaderView> headers = new ArrayList<>();
+        headers.add(header("Order date", "left", "date", request, sort, ascending, size));
+        headers.add(header("Side", "left", "side", request, sort, ascending, size));
+        headers.add(header("Type", "left", "type", request, sort, ascending, size));
+        headers.add(header("Market", "left", "market", request, sort, ascending, size));
+        headers.add(header(amountHeader, "", "amount", request, sort, ascending, size));
+        headers.add(header("Avg price", "", "price", request, sort, ascending, size));
+        headers.add(header("Status", "left", "status", request, sort, ascending, size));
+        headers.add(header("Balance after", "", "balance", request, sort, ascending, size));
+        headers.add(header("Total fee", "", "fee", request, sort, ascending, size));
+        headers.add(header("Net cash", "", "netCash", request, sort, ascending, size));
+        headers.add(header("Fills", "", "fills", request, sort, ascending, size));
+        headers.add(header("P&L", "", "pnl", request, sort, ascending, size));
+        return headers;
+    }
+
+    private HeaderView header(String label, String alignClass, String key, LedgerRequest request,
+                              String sort, boolean ascending, int size) {
+        boolean active = key.equals(sort);
+        String direction = active ? (ascending ? "desc" : "asc") : "asc";
+        return new HeaderView(label, alignClass, query(request, key, direction, 1, size),
+                active, active ? (ascending ? "▲" : "▼") : "");
+    }
+
+    /**
+     * The order table's comparator. A computed column (balance, fee, cash, P&amp;L) is compared on
+     * its underlying number, never its displayed text; a value that does not exist for an order
+     * (a buy's P&amp;L, an unfilled order's price) sorts last in both directions.
+     */
+    private Comparator<OrderResponse> orderComparator(String sort, boolean ascending,
+                                                      Map<String, Basis> bases,
+                                                      Map<String, Balance> balances,
+                                                      String selectedMarket) {
+        Comparator<OrderResponse> comparator = switch (sort) {
+            case "side" -> stringKey(ascending, OrderResponse::getSide);
+            case "type" -> stringKey(ascending, OrderResponse::getOrderType);
+            case "market" -> stringKey(ascending, OrderResponse::getMarket);
+            case "amount" -> numberKey(ascending, LedgerService::amountValue);
+            case "price" -> numberKey(ascending, LedgerService::averagePrice);
+            case "status" -> stringKey(ascending, OrderResponse::getStatus);
+            case "balance" -> numberKey(ascending,
+                    order -> balanceAfter(order, balances, selectedMarket));
+            case "fee" -> numberKey(ascending,
+                    order -> euroFee(order, marketOf(order, selectedMarket)));
+            case "netCash" -> numberKey(ascending,
+                    order -> netCashValue(order, selectedMarket));
+            case "fills" -> numberKey(ascending,
+                    order -> order.getFills() == null ? 0 : order.getFills().size());
+            case "pnl" -> numberKey(ascending,
+                    order -> result(order, basisFor(order, selectedMarket, bases)));
+            default -> numberKey(ascending, order -> (double) created(order));
+        };
+        return comparator.thenComparing(Comparator.comparingLong(LedgerService::created).reversed());
+    }
+
+    private static Comparator<OrderResponse> stringKey(boolean ascending,
+                                                       Function<OrderResponse, String> key) {
+        Comparator<String> order = ascending ? Comparator.naturalOrder() : Comparator.reverseOrder();
+        return Comparator.comparing(key, Comparator.nullsLast(order));
+    }
+
+    private static Comparator<OrderResponse> numberKey(boolean ascending,
+                                                       ToDoubleFunction<OrderResponse> key) {
+        Comparator<Double> order = ascending ? Comparator.naturalOrder() : Comparator.reverseOrder();
+        return Comparator.comparing(entry -> {
+            double value = key.applyAsDouble(entry);
+            return Double.isFinite(value) ? value : null;
+        }, Comparator.nullsLast(order));
+    }
+
+    private static double amountValue(OrderResponse order) {
+        return order.getAmount() != null ? number(order.getAmount())
+                : number(order.getFilledAmount());
+    }
+
+    private static double averagePrice(OrderResponse order) {
+        double amount = number(order.getFilledAmount());
+        return amount > 0 ? number(order.getFilledAmountQuote()) / amount : Double.NaN;
+    }
+
+    private static double balanceAfter(OrderResponse order, Map<String, Balance> balances,
+                                       String selectedMarket) {
+        Balance balance = balances.get(base(marketOf(order, selectedMarket)));
+        return balance == null ? Double.NaN : balance.afterValue(order);
+    }
+
+    private double netCashValue(OrderResponse order, String selectedMarket) {
+        double quote = number(order.getFilledAmountQuote());
+        double fee = cashFee(order, marketOf(order, selectedMarket));
+        return isBuy(order) ? -(quote + fee) : quote - fee;
+    }
+
+    private double euroFee(OrderResponse order, String market) {
+        double total = 0;
+        for (Fee fee : feeParts(order, market)) {
+            if (EUR.equals(fee.currency())) {
+                total += fee.amount();
+            }
+        }
+        return total;
+    }
+
+    // ---- totals by pair and by raw type ------------------------------------------------------
+
+    private List<PairTotalView> pairTotals(List<OrderResponse> orders, Map<String, Basis> bases,
+                                           String selectedMarket) {
+        Map<String, PairTotal> totals = new TreeMap<>();
+        for (OrderResponse order : orders) {
+            String market = marketOf(order, selectedMarket);
+            PairTotal total = totals.computeIfAbsent(market, PairTotal::new);
+            total.orders++;
+            double quote = number(order.getFilledAmountQuote());
+            if (isBuy(order)) {
+                total.buyVolume += quote;
+            } else {
+                total.sellVolume += quote;
+            }
+            total.fees += euroFee(order, market);
+            double result = result(order, basisFor(order, selectedMarket, bases));
+            if (Double.isFinite(result)) {
+                total.realised += result;
+            }
+        }
+        return totals.values().stream().map(PairTotal::view).toList();
+    }
+
+    private List<RawTotalView> rawTotals(List<Transaction> entries) {
+        Map<String, RawTotal> totals = new TreeMap<>();
+        for (Transaction entry : entries) {
+            String currency = assetCurrency(entry);
+            if (currency == null || entry.getType() == null) {
+                continue;
+            }
+            String key = entry.getType() + "|" + currency;
+            RawTotal total = totals.computeIfAbsent(key,
+                    ignored -> new RawTotal(entry.getType(), currency));
+            total.transactions++;
+            total.amount += assetAmount(entry, currency);
+        }
+        return totals.values().stream().map(RawTotal::view).toList();
+    }
+
+    /**
+     * @return The currency a transaction moved: the non-euro side, or euro for a euro-only transfer
+     *         (a fiat deposit); null when the entry names neither side
+     */
+    private static String assetCurrency(Transaction entry) {
+        String received = entry.getReceivedCurrency();
+        String sent = entry.getSentCurrency();
+        if (notBlank(received) && !EUR.equalsIgnoreCase(received)) {
+            return received;
+        }
+        if (notBlank(sent) && !EUR.equalsIgnoreCase(sent)) {
+            return sent;
+        }
+        return notBlank(received) ? received : sent;
+    }
+
+    private static double assetAmount(Transaction entry, String currency) {
+        return currency.equalsIgnoreCase(entry.getReceivedCurrency())
+                ? number(entry.getReceivedAmount()) : number(entry.getSentAmount());
+    }
+
+    private static String rawTypeLabel(String type) {
+        return RAW_TYPE_OPTIONS.stream()
+                .filter(option -> option.value().equalsIgnoreCase(type))
+                .map(Option::label)
+                .findFirst()
+                .orElse(type);
+    }
+
+    private static List<Transaction> filterRaw(List<Transaction> entries, List<String> types) {
+        if (types.isEmpty()) {
+            return entries;
+        }
+        return entries.stream()
+                .filter(entry -> types.stream()
+                        .anyMatch(type -> type.equalsIgnoreCase(entry.getType())))
+                .toList();
     }
 
     private TotalsView totals(List<OrderResponse> orders, Map<String, Basis> bases,
@@ -709,15 +949,16 @@ public class LedgerService {
                 : "The current price could not be read, so there is no unrealised figure.";
     }
 
-    private PagerView pager(LedgerRequest request, int total, int page, int pages) {
+    private PagerView pager(LedgerRequest request, int total, int page, int pages,
+                            String sort, String dir) {
         int size = pageSize(request.getSize());
         int fromIndex = (page - 1) * size;
         int toIndex = Math.min(fromIndex + size, total);
-        String prev = page > 1 ? query(request, page - 1, size) : null;
-        String next = page < pages ? query(request, page + 1, size) : null;
+        String prev = page > 1 ? query(request, sort, dir, page - 1, size) : null;
+        String next = page < pages ? query(request, sort, dir, page + 1, size) : null;
         List<SizeOption> sizes = PAGE_SIZES.stream()
                 .map(candidate -> new SizeOption(String.valueOf(candidate),
-                        query(request, 1, candidate), candidate == size))
+                        query(request, sort, dir, 1, candidate), candidate == size))
                 .toList();
         return new PagerView(total == 0 ? 0 : fromIndex + 1, toIndex, total, page, pages, size,
                 prev, next, sizes);
@@ -782,10 +1023,19 @@ public class LedgerService {
          * @return The balance after the order's fills, or after the fills that preceded it
          */
         String after(OrderResponse order) {
+            return plain(afterValue(order));
+        }
+
+        /**
+         * @param order The order
+         * @return The base-currency balance after the order's fills (or after the fills that
+         *         preceded it), or today's balance when nothing preceded it
+         */
+        double afterValue(OrderResponse order) {
             Map.Entry<Long, Double> entry = order.getFills() == null || order.getFills().isEmpty()
                     ? afterByFill.floorEntry(created(order))
                     : lastFillAfter(order);
-            return entry == null ? plain(current) : plain(entry.getValue());
+            return entry == null ? current : entry.getValue();
         }
 
         private Map.Entry<Long, Double> lastFillAfter(OrderResponse order) {
@@ -800,6 +1050,49 @@ public class LedgerService {
                 }
             }
             return latest;
+        }
+    }
+
+    /**
+     * The mutable accumulator behind one row of the per-pair totals.
+     */
+    private static final class PairTotal {
+
+        private final String market;
+        private int orders;
+        private double buyVolume;
+        private double sellVolume;
+        private double fees;
+        private double realised;
+
+        private PairTotal(String market) {
+            this.market = market;
+        }
+
+        private PairTotalView view() {
+            return new PairTotalView(market, orders, euro(buyVolume), euro(sellVolume), euro(fees),
+                    signed(realised), signClass(realised));
+        }
+    }
+
+    /**
+     * The mutable accumulator behind one row of the raw-type totals.
+     */
+    private static final class RawTotal {
+
+        private final String type;
+        private final String currency;
+        private int transactions;
+        private double amount;
+
+        private RawTotal(String type, String currency) {
+            this.type = type;
+            this.currency = currency;
+        }
+
+        private RawTotalView view() {
+            return new RawTotalView(rawTypeLabel(type), currency, money(amount, currency),
+                    transactions);
         }
     }
 
@@ -1206,7 +1499,7 @@ public class LedgerService {
         return value != null && !value.isBlank();
     }
 
-    private String query(LedgerRequest request, int page, int size) {
+    private String query(LedgerRequest request, String sort, String dir, int page, int size) {
         List<String> pairs = new ArrayList<>();
         pairs.add("tab=ledger");
         add(pairs, "side", request.getSide());
@@ -1214,6 +1507,8 @@ public class LedgerService {
         addAll(pairs, "type", request.getType());
         addAll(pairs, "status", request.getStatus());
         add(pairs, "view", request.getView());
+        add(pairs, "sort", sort);
+        add(pairs, "dir", dir);
         if (HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
                 request.getToDate())) {
             add(pairs, "fromDate", request.getFromDate());
