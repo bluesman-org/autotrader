@@ -229,7 +229,7 @@ class HistoryUiControllerRenderTest {
                 "+€37,92", "pos", 1, "+€0,60", "pos", List.of(fill), "");
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "BTC-EUR", "Amount (BTC)",
                 List.of("takeProfitLimit"), List.of("awaitingTrigger"), "orders",
-                "7d", "", "", "", "", "7d",
+                "date", "desc", "7d", "", "", "", "", "7d",
                 List.of(new TradeHistoryView.Option("BTC-EUR", "BTC-EUR")),
                 List.of(new TradeHistoryView.Option("takeProfitLimit", "takeProfitLimit")),
                 List.of(new TradeHistoryView.Option("awaitingTrigger", "Awaiting trigger")),
@@ -249,7 +249,7 @@ class HistoryUiControllerRenderTest {
                 "market", "BTC-EUR", "0.00050000", "€76.000,00", "filled", "ok", "", "0.0015",
                 "€0,08", "+€37,92", "pos", 1, "+€0,60", "pos", List.of(), "");
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "all", "Amount",
-                List.of(), List.of(), "orders", "7d", "", "", "", "", "7d",
+                List.of(), List.of(), "orders", "date", "desc", "7d", "", "", "", "", "7d",
                 List.of(new TradeHistoryView.Option("all", "All pairs"),
                         new TradeHistoryView.Option("BTC-EUR", "BTC-EUR")),
                 List.of(), List.of(), List.of(new TradeHistoryView.Option("7d", "Last 7 days")));
@@ -266,7 +266,7 @@ class HistoryUiControllerRenderTest {
 
     private static LedgerView rawLedgerView() {
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "all", "Amount",
-                List.of("staking"), List.of(), "raw", "7d", "", "", "", "", "7d",
+                List.of("staking"), List.of(), "raw", "date", "desc", "7d", "", "", "", "", "7d",
                 List.of(new TradeHistoryView.Option("all", "All pairs"),
                         new TradeHistoryView.Option("BTC-EUR", "BTC-EUR")),
                 List.of(new TradeHistoryView.Option("staking", "Staking"),

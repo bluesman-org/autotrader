@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -52,8 +53,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.Function;
-import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 
 /**
@@ -231,8 +230,9 @@ public class LedgerService {
                 .toList();
         String sortKey = sortKey(request.getSort());
         boolean ascending = "asc".equalsIgnoreCase(request.getDir());
-        List<OrderResponse> sorted = new ArrayList<>(filtered);
-        sorted.sort(orderComparator(sortKey, ascending, bases, balances, market));
+        Map<OrderResponse, Double> results = results(filtered, bases, market);
+        Map<OrderResponse, Double> euroFees = euroFees(filtered, market);
+        List<OrderResponse> sorted = sorted(filtered, request, balances, market, results, euroFees);
 
         int pageSize = pageSize(request.getSize());
         int pages = pages(sorted.size(), pageSize);
@@ -241,7 +241,9 @@ public class LedgerService {
         int toIndex = Math.min(fromIndex + pageSize, sorted.size());
         List<OrderRowView> rows = new ArrayList<>();
         for (int i = fromIndex; i < toIndex; i++) {
-            rows.add(row(sorted.get(i), i + 1, bases, balances, market));
+            OrderResponse order = sorted.get(i);
+            rows.add(row(order, i + 1, balances, market,
+                    results.getOrDefault(order, Double.NaN)));
         }
 
         List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
@@ -251,12 +253,12 @@ public class LedgerService {
         int rawPage = Math.min(clamp(request.getPage()), rawPages);
         List<RawRowView> rawRows = raw ? rawRows(rawFiltered, rawPage, pageSize) : List.of();
         List<PairTotalView> pairTotals = all && !raw
-                ? pairTotals(filtered, bases, market) : List.of();
+                ? pairTotals(filtered, results, euroFees, market) : List.of();
         List<RawTotalView> rawTotals = raw ? rawTotals(rawFiltered) : List.of();
 
         return new LedgerView(null, price, filters,
                 headers(request, sortKey, ascending, filters.amountHeader(), pageSize),
-                totals(filtered, bases, balances, books, market, all, range, skipped),
+                totals(filtered, bases, results, balances, books, market, all, range, skipped),
                 rows, pager(request, sorted.size(), page, pages, sortKey,
                         ascending ? "asc" : "desc"), raw,
                 rawRows, pager(request, rawFiltered.size(), rawPage, rawPages, null, null),
@@ -549,16 +551,14 @@ public class LedgerService {
 
     // ---- the view ---------------------------------------------------------------------------
 
-    private OrderRowView row(OrderResponse order, int number, Map<String, Basis> bases,
-                             Map<String, Balance> balances, String selectedMarket) {
+    private OrderRowView row(OrderResponse order, int number, Map<String, Balance> balances,
+                             String selectedMarket, double result) {
         String market = marketOf(order, selectedMarket);
-        Basis basis = basisFor(order, selectedMarket, bases);
         Balance balance = balances.getOrDefault(base(market), new Balance(0, new TreeMap<>()));
         boolean buy = isBuy(order);
         double amount = number(order.getFilledAmount());
         double quoteAmount = number(order.getFilledAmountQuote());
         double cashFee = cashFee(order, market);
-        double result = result(order, basis);
         // The average of the fills, so it is a dash until something filled; what a waiting order
         // carries is named under its status instead.
         String avgPrice = amount > 0 ? euro(quoteAmount / amount) : DASH;
@@ -650,7 +650,8 @@ public class LedgerService {
         return new FiltersView(request.getSide(), market, amountHeader(market),
                 selected(request.getType(), typeOptions.stream().map(Option::value).toList()),
                 selected(request.getStatus(), statusOptions.stream().map(Option::value).toList()),
-                raw ? RAW_VIEW : DEFAULT_VIEW,
+                raw ? RAW_VIEW : DEFAULT_VIEW, sortKey(request.getSort()),
+                "asc".equalsIgnoreCase(request.getDir()) ? "asc" : "desc",
                 custom ? "" : HistoryPeriods.preset(request.getPeriod()),
                 custom ? request.getFromDate() : null,
                 HistoryPeriods.shownFromTime(custom ? request.getFromTime() : null),
@@ -701,54 +702,97 @@ public class LedgerService {
     }
 
     /**
-     * The order table's comparator. A computed column (balance, fee, cash, P&amp;L) is compared on
-     * its underlying number, never its displayed text; a value that does not exist for an order
-     * (a buy's P&amp;L, an unfilled order's price) sorts last in both directions.
+     * The per-order realised results, computed once: the P&amp;L sort, the summary and the
+     * per-pair totals all read this instead of walking each order's fills three times.
      */
-    private Comparator<OrderResponse> orderComparator(String sort, boolean ascending,
-                                                      Map<String, Basis> bases,
-                                                      Map<String, Balance> balances,
-                                                      String selectedMarket) {
-        Comparator<OrderResponse> comparator = switch (sort) {
-            case "side" -> stringKey(ascending, OrderResponse::getSide);
-            case "type" -> stringKey(ascending, OrderResponse::getOrderType);
-            case "market" -> stringKey(ascending, OrderResponse::getMarket);
-            case "amount" -> numberKey(ascending, LedgerService::amountValue);
-            case "price" -> numberKey(ascending, LedgerService::averagePrice);
-            case "status" -> stringKey(ascending, OrderResponse::getStatus);
-            case "balance" -> numberKey(ascending,
-                    order -> balanceAfter(order, balances, selectedMarket));
-            case "fee" -> numberKey(ascending,
-                    order -> euroFee(order, marketOf(order, selectedMarket)));
-            case "netCash" -> numberKey(ascending,
-                    order -> netCashValue(order, selectedMarket));
-            case "fills" -> numberKey(ascending,
-                    order -> order.getFills() == null ? 0 : order.getFills().size());
-            case "pnl" -> numberKey(ascending,
-                    order -> result(order, basisFor(order, selectedMarket, bases)));
-            default -> numberKey(ascending, order -> (double) created(order));
-        };
-        return comparator.thenComparing(Comparator.comparingLong(LedgerService::created).reversed());
+    private Map<OrderResponse, Double> results(List<OrderResponse> orders, Map<String, Basis> bases,
+                                               String selectedMarket) {
+        Map<OrderResponse, Double> results = new IdentityHashMap<>();
+        for (OrderResponse order : orders) {
+            results.put(order, result(order, basisFor(order, selectedMarket, bases)));
+        }
+        return results;
     }
 
-    private static Comparator<OrderResponse> stringKey(boolean ascending,
-                                                       Function<OrderResponse, String> key) {
-        Comparator<String> order = ascending ? Comparator.naturalOrder() : Comparator.reverseOrder();
-        return Comparator.comparing(key, Comparator.nullsLast(order));
+    /**
+     * The euro part of each order's fee, computed once for the fee sort and the per-pair totals.
+     */
+    private Map<OrderResponse, Double> euroFees(List<OrderResponse> orders,
+                                                String selectedMarket) {
+        Map<OrderResponse, Double> fees = new IdentityHashMap<>();
+        for (OrderResponse order : orders) {
+            fees.put(order, euroFee(order, marketOf(order, selectedMarket)));
+        }
+        return fees;
     }
 
-    private static Comparator<OrderResponse> numberKey(boolean ascending,
-                                                       ToDoubleFunction<OrderResponse> key) {
+    /**
+     * Sorts the filtered orders on one key, computed once per order. A value an order does not
+     * have sorts last in both directions; equal keys keep the newest order first.
+     */
+    private List<OrderResponse> sorted(List<OrderResponse> orders, LedgerRequest request,
+                                       Map<String, Balance> balances, String selectedMarket,
+                                       Map<OrderResponse, Double> results,
+                                       Map<OrderResponse, Double> euroFees) {
+        String sort = sortKey(request.getSort());
+        boolean ascending = "asc".equalsIgnoreCase(request.getDir());
+        Comparator<OrderResponse> tie = Comparator.comparingLong(LedgerService::created).reversed();
+        if (isTextSort(sort)) {
+            Map<OrderResponse, String> keys = new IdentityHashMap<>();
+            for (OrderResponse order : orders) {
+                keys.put(order, textKey(sort, order));
+            }
+            Comparator<String> order = ascending ? Comparator.naturalOrder() : Comparator.reverseOrder();
+            Comparator<OrderResponse> comparator = Comparator.comparing(
+                    (OrderResponse entry) -> keys.get(entry), Comparator.nullsLast(order));
+            return orders.stream().sorted(comparator.thenComparing(tie)).toList();
+        }
+        Map<OrderResponse, Double> keys = new IdentityHashMap<>();
+        for (OrderResponse order : orders) {
+            keys.put(order, numberKey(sort, order, balances, selectedMarket, results, euroFees));
+        }
         Comparator<Double> order = ascending ? Comparator.naturalOrder() : Comparator.reverseOrder();
-        return Comparator.comparing(entry -> {
-            double value = key.applyAsDouble(entry);
-            return Double.isFinite(value) ? value : null;
-        }, Comparator.nullsLast(order));
+        Comparator<OrderResponse> comparator = Comparator.comparing(
+                (OrderResponse entry) -> keys.get(entry), Comparator.nullsLast(order));
+        return orders.stream().sorted(comparator.thenComparing(tie)).toList();
+    }
+
+    private static boolean isTextSort(String sort) {
+        return "side".equals(sort) || "type".equals(sort) || "market".equals(sort)
+                || "status".equals(sort);
+    }
+
+    private static String textKey(String sort, OrderResponse order) {
+        return switch (sort) {
+            case "side" -> order.getSide();
+            case "type" -> order.getOrderType();
+            case "market" -> order.getMarket();
+            default -> order.getStatus();
+        };
+    }
+
+    private Double numberKey(String sort, OrderResponse order,
+                                    Map<String, Balance> balances, String selectedMarket,
+                                    Map<OrderResponse, Double> results,
+                                    Map<OrderResponse, Double> euroFees) {
+        double value = switch (sort) {
+            case "amount" -> amountValue(order);
+            case "price" -> averagePrice(order);
+            case "balance" -> balanceAfter(order, balances, selectedMarket);
+            case "fee" -> euroFees.getOrDefault(order, 0.0);
+            case "netCash" -> netCashValue(order, selectedMarket);
+            case "fills" -> order.getFills() == null ? 0 : order.getFills().size();
+            case "pnl" -> results.getOrDefault(order, Double.NaN);
+            default -> created(order);
+        };
+        return Double.isFinite(value) ? value : null;
     }
 
     private static double amountValue(OrderResponse order) {
-        return order.getAmount() != null ? number(order.getAmount())
-                : number(order.getFilledAmount());
+        if (order.getAmount() != null) {
+            return number(order.getAmount());
+        }
+        return order.getAmountQuote() != null ? number(order.getAmountQuote()) : Double.NaN;
     }
 
     private static double averagePrice(OrderResponse order) {
@@ -763,7 +807,11 @@ public class LedgerService {
     }
 
     private double netCashValue(OrderResponse order, String selectedMarket) {
+        double amount = number(order.getFilledAmount());
         double quote = number(order.getFilledAmountQuote());
+        if (amount <= 0 && quote <= 0) {
+            return Double.NaN;
+        }
         double fee = cashFee(order, marketOf(order, selectedMarket));
         return isBuy(order) ? -(quote + fee) : quote - fee;
     }
@@ -780,7 +828,9 @@ public class LedgerService {
 
     // ---- totals by pair and by raw type ------------------------------------------------------
 
-    private List<PairTotalView> pairTotals(List<OrderResponse> orders, Map<String, Basis> bases,
+    private List<PairTotalView> pairTotals(List<OrderResponse> orders,
+                                           Map<OrderResponse, Double> results,
+                                           Map<OrderResponse, Double> euroFees,
                                            String selectedMarket) {
         Map<String, PairTotal> totals = new TreeMap<>();
         for (OrderResponse order : orders) {
@@ -793,8 +843,8 @@ public class LedgerService {
             } else {
                 total.sellVolume += quote;
             }
-            total.fees += euroFee(order, market);
-            double result = result(order, basisFor(order, selectedMarket, bases));
+            total.fees += euroFees.getOrDefault(order, 0.0);
+            double result = results.getOrDefault(order, Double.NaN);
             if (Double.isFinite(result)) {
                 total.realised += result;
             }
@@ -858,12 +908,13 @@ public class LedgerService {
     }
 
     private TotalsView totals(List<OrderResponse> orders, Map<String, Basis> bases,
+                              Map<OrderResponse, Double> results,
                               Map<String, Balance> balances, Map<String, GetBookResponse> books,
                               String market, boolean all, HistoryPeriods.Range range,
                               List<String> skipped) {
         String feesText = feesText(orders, market);
         double realised = orders.stream()
-                .mapToDouble(order -> result(order, basisFor(order, market, bases)))
+                .mapToDouble(order -> results.getOrDefault(order, Double.NaN))
                 .filter(Double::isFinite).sum();
         double unrealised = all
                 ? unrealisedAll(bases, books, range)

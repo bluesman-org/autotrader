@@ -12,6 +12,8 @@
 
     <form class="card" style="padding:16px 20px" method="get" th:action="@{/ui/history}">
         <input type="hidden" name="tab" value="ledger">
+        <input type="hidden" name="sort" th:value="${ledger.filters.sort}">
+        <input type="hidden" name="dir" th:value="${ledger.filters.dir}">
         <div class="filters">
             <div class="f"><label>Time</label>
                 <select name="period" th:attr="data-default-period=${ledger.filters.defaultPeriod}">

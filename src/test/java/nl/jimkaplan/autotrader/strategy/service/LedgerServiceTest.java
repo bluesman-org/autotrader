@@ -17,6 +17,8 @@ import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -246,19 +248,44 @@ class LedgerServiceTest {
         assertEquals("—", pnl.rows().get(2).pnlText());
     }
 
-    @Test
-    void everyOrderColumnSortsInBothDirections() {
+    @ParameterizedTest
+    @CsvSource({
+            "date, asc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "date, desc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "side, asc, 15 Oct 2026 08:00|13 Oct 2026 10:00|14 Oct 2026 09:00",
+            "side, desc, 14 Oct 2026 09:00|15 Oct 2026 08:00|13 Oct 2026 10:00",
+            "type, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "type, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "market, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "market, desc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "amount, asc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "amount, desc, 15 Oct 2026 08:00|13 Oct 2026 10:00|14 Oct 2026 09:00",
+            "price, asc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "price, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "status, asc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "status, desc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "balance, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "balance, desc, 13 Oct 2026 10:00|15 Oct 2026 08:00|14 Oct 2026 09:00",
+            "fee, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "fee, desc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "netCash, asc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "netCash, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "fills, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "fills, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "pnl, asc, 14 Oct 2026 09:00|15 Oct 2026 08:00|13 Oct 2026 10:00",
+            "pnl, desc, 14 Oct 2026 09:00|15 Oct 2026 08:00|13 Oct 2026 10:00"
+    })
+    void everyOrderColumnSortsInBothDirections(String sort, String dir, String expected) {
         accountReadable();
-        for (String sort : List.of("date", "side", "type", "market", "amount", "price",
-                "status", "balance", "fee", "netCash", "fills", "pnl")) {
-            for (String dir : List.of("asc", "desc")) {
-                LedgerRequest request = new LedgerRequest();
-                request.setSort(sort);
-                request.setDir(dir);
-                LedgerView view = service.view(request);
-                assertEquals(3, view.rows().size(), sort + " " + dir);
-            }
-        }
+
+        LedgerRequest request = new LedgerRequest();
+        request.setSort(sort);
+        request.setDir(dir);
+        LedgerView view = service.view(request);
+
+        assertEquals(List.of(expected.split("\\|")),
+                view.rows().stream().map(LedgerView.OrderRowView::dateText).toList(),
+                sort + " " + dir);
     }
 
     @Test

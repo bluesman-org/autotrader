@@ -71,6 +71,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters,
      * @param type          The selected order types; empty selects every type
      * @param status        The selected statuses; empty selects every status
      * @param view          The selected view ({@code orders}/{@code raw})
+     * @param sort          The order table's sort column, carried by the filter form
+     * @param dir           The sort direction, carried by the filter form
      * @param period        The selected time preset, empty when the custom range is in use
      * @param fromDate      The custom range's start date
      * @param fromTime      The custom range's start time
@@ -84,10 +86,11 @@ public record LedgerView(String message, PriceView price, FiltersView filters,
      * @param timeOptions   The time presets
      */
     public record FiltersView(String side, String market, String amountHeader, List<String> type,
-                              List<String> status, String view, String period, String fromDate,
-                              String fromTime, String toDate, String toTime, String defaultPeriod,
-                              List<Option> marketOptions, List<Option> typeOptions,
-                              List<Option> statusOptions, List<Option> timeOptions) {
+                              List<String> status, String view, String sort, String dir,
+                              String period, String fromDate, String fromTime, String toDate,
+                              String toTime, String defaultPeriod, List<Option> marketOptions,
+                              List<Option> typeOptions, List<Option> statusOptions,
+                              List<Option> timeOptions) {
 
         /** Copy the lists so the model cannot be mutated from outside. */
         public FiltersView {
