@@ -50,6 +50,7 @@
                 <th rowspan="2" class="left">SAR<br><span class="muted">accel/max</span></th>
                 <th rowspan="2" class="left">Entry rules</th>
                 <th rowspan="2" class="left">Exit rules</th>
+                <th rowspan="2">Live</th>
                 <th colspan="6" class="group-train">Train — earlier part (optimised on)</th>
                 <th colspan="6" class="group-validate">Validate — held out</th>
             </tr>
@@ -83,6 +84,9 @@
                 <td class="left">
                     <span class="pill" th:text="${entry.exitOperator}">ALL</span>
                     <span th:text="${#strings.replace(#strings.listJoin(entry.exitConditions, ', '), '_', ' ')}">SAR BEARISH CROSSOVER</span>
+                </td>
+                <td>
+                    <a th:href="@{/ui/live/new(run=${run.id}, entry=${iter.count})}">Use live</a>
                 </td>
                 <td th:text="${entry.train.tradeCount}">0</td>
                 <td th:text="${entry.train.skippedSignals != null ? entry.train.skippedSignals : '—'}">0</td>

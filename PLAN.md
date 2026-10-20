@@ -25,7 +25,7 @@ for the pages and HTTP Basic for the API, a first-account signup, password recov
 SMTP settings stored on the settings page, and an HTTPS deployment on `https://at.bluris.nl` behind
 Caddy (PR #48). The trading-pair catalogue and the ledger reporting pass landed after that
 (PRs #50–#56), and the TradingView offset timestamps and the unused live-strategy `botId` went with
-PR #57.
+PR #57. The live strategy management UI landed with PR #58.
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
 next: the small live-run trial of the engine.
 
@@ -217,10 +217,15 @@ next: the small live-run trial of the engine.
     `Instant.parse`, so `2026-10-04T12:00:00+02:00` failed later as a 500 instead of the promised
     400. Validation now returns the parsed instant and the alert stores it, so both forms are
     accepted and normalised (PR #57)
-20. ⬜ Strategy management UI: create, edit and delete live strategies from the UI — the REST API
-    still needs update and delete endpoints (create exists; today the UI has none, so strategies can
-    only be created via the API). Scoped out of item 10 on 2026-10-14; the endpoints and the form
-    land together.
+20. ✅ Strategy management UI: create, edit, duplicate and delete live strategies from the UI,
+    backed by the REST API's `PUT` and `DELETE` (and `?includeArchived`). A name is required; the
+    startup initializer names documents that predate the field. The pair and interval stay editable
+    until the first start and lock afterwards; Duplicate creates a variant. Delete is real only for
+    a strategy that never started; one that has run is archived and stays in the history tab, with
+    the button and confirmation saying which. Dry-run is chosen at creation and never switched — a
+    real strategy is a copy whose name ends `-REAL` and whose anchor is fresh. Each ranked backtest
+    row has a **Use live** link that prefills the form. Edits require the strategy to be stopped
+    (PR #58)
 21. ⬜ Keep the live page's reads flat as histories grow: the statistics line walks a strategy's
     whole round-trip history in memory on every 10-second refresh (the orders query is already
     bounded in the database). Aggregate count, sum, win count and the averages Mongo-side (flagged

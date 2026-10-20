@@ -63,7 +63,7 @@ class LiveViewServiceTest {
                 .strategyId(STRATEGY_ID).market("BTC-EUR").status("CLOSED")
                 .quantity(0.00135153).entryPrice(73_990).entryFee(0.20).entryTime(SIGNAL_ENTRY)
                 .exitPrice(74_380.0).exitTime(SIGNAL_EXIT).profit(0.12).dryRun(true).build();
-        when(liveStrategyService.all()).thenReturn(List.of(strategy));
+        when(liveStrategyService.active()).thenReturn(List.of(strategy));
         when(liveStrategyService.isRunning(STRATEGY_ID)).thenReturn(true);
         when(liveStrategyService.isConnected(STRATEGY_ID)).thenReturn(true);
         when(liveStrategyService.lastError(STRATEGY_ID)).thenReturn(null);
@@ -83,6 +83,8 @@ class LiveViewServiceTest {
 
         assertEquals(1, cards.size());
         LiveCardView card = cards.get(0);
+        assertEquals("BTC 1m", card.name());
+        assertTrue(card.started());
         assertTrue(card.running());
         assertTrue(card.connected());
         assertFalse(card.parameters().isEmpty());
@@ -121,7 +123,7 @@ class LiveViewServiceTest {
 
     @Test
     void cards_degradeToDashesWhenTheBookIsUnavailable() {
-        when(liveStrategyService.all()).thenReturn(List.of(strategy()));
+        when(liveStrategyService.active()).thenReturn(List.of(strategy()));
         when(liveStrategyService.isRunning(STRATEGY_ID)).thenReturn(true);
         when(liveStrategyService.isConnected(STRATEGY_ID)).thenReturn(true);
         when(liveStrategyService.lastError(STRATEGY_ID)).thenReturn("errorCode 205: Invalid market");
@@ -145,7 +147,7 @@ class LiveViewServiceTest {
 
     @Test
     void cards_showAStoppedStrategyWithoutARunner() {
-        when(liveStrategyService.all()).thenReturn(List.of(strategy()));
+        when(liveStrategyService.active()).thenReturn(List.of(strategy()));
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
@@ -161,7 +163,7 @@ class LiveViewServiceTest {
 
     @Test
     void statsLine_reportsWinsLossesAndTheirAverages() {
-        when(liveStrategyService.all()).thenReturn(List.of(strategy()));
+        when(liveStrategyService.active()).thenReturn(List.of(strategy()));
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
                 .thenReturn(List.of(closedPosition(0.12), closedPosition(-0.11)));
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
@@ -178,7 +180,7 @@ class LiveViewServiceTest {
         LiveStrategy stopped = strategy();
         stopped.setId("strategy-2");
         stopped.setCreatedTime(Instant.parse("2026-10-14T09:20:00Z"));
-        when(liveStrategyService.all()).thenReturn(List.of(stopped, strategy()));
+        when(liveStrategyService.active()).thenReturn(List.of(stopped, strategy()));
         when(liveStrategyService.isRunning(STRATEGY_ID)).thenReturn(true);
         when(livePositionRepository.findAllByStrategyIdAndStatus(any(), eq("CLOSED"))).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(any(), eq("OPEN"))).thenReturn(Optional.empty());
@@ -196,6 +198,25 @@ class LiveViewServiceTest {
     }
 
     @Test
+    void cards_fallBackToThePairAndIntervalAndMarkANeverStartedStrategy() {
+        LiveStrategy strategy = strategy();
+        strategy.setName(null);
+        strategy.setLastStartedTime(null);
+        strategy.setSeriesStartTime(0);
+        when(liveStrategyService.active()).thenReturn(List.of(strategy));
+        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
+        when(bitvavoApiClient.getPublic(any(), eq(GetBookResponse.class)))
+                .thenThrow(new RestClientException("connect timed out"));
+
+        LiveCardView card = service.cards().get(0);
+
+        assertEquals("BTC-EUR 1m", card.name());
+        assertFalse(card.started());
+    }
+
+    @Test
     void zoneLabel_namesTheDisplayZone() {
         assertEquals("UTC", service.zoneLabel());
         assertEquals("UTC", service.zoneId());
@@ -210,6 +231,7 @@ class LiveViewServiceTest {
 
     private static LiveStrategy strategy() {
         LiveStrategy strategy = LiveStrategy.builder()
+                .name("BTC 1m")
                 .market("BTC-EUR")
                 .interval("1m")
                 .macdFastPeriod(12).macdSlowPeriod(26).macdSignalPeriod(9)

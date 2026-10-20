@@ -2,10 +2,12 @@ package nl.jimkaplan.autotrader.strategy.service;
 
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryRequest;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
+import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,11 +45,14 @@ class TradeHistoryServiceTest {
     @Mock
     private LiveOrderRepository orders;
 
+    @Mock
+    private LiveStrategyRepository strategies;
+
     private TradeHistoryService service;
 
     @BeforeEach
     void setUp() {
-        service = new TradeHistoryService(positions, orders, ZoneId.of("UTC"),
+        service = new TradeHistoryService(positions, orders, strategies, ZoneId.of("UTC"),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -373,6 +378,20 @@ class TradeHistoryServiceTest {
     }
 
     @Test
+    void view_labelsStrategiesByNameAndMarksArchivedOnes() {
+        stubPeriod(List.of(position(STRATEGY, NOW.minusSeconds(2 * 3600).toEpochMilli(), 0.12, true)));
+        LiveStrategy named = LiveStrategy.builder()
+                .name("BTC 2h breakout").archived(true).build();
+        named.setId(STRATEGY);
+        when(strategies.findAll()).thenReturn(List.of(named));
+
+        TradeHistoryView view = service.view(new TradeHistoryRequest());
+
+        assertEquals("BTC 2h breakout (archived)", view.rows().get(0).strategyLabel());
+        assertEquals("BTC 2h breakout (archived)", view.filters().strategyOptions().get(0).label());
+    }
+
+    @Test
     void view_coversDefensiveBranchesForMissingValues() {
         LivePosition incomplete = LivePosition.builder()
                 .strategyId("short").market(null).status("CLOSED")
@@ -387,7 +406,7 @@ class TradeHistoryServiceTest {
         TradeHistoryView view = service.view(request);
 
         TradeHistoryView.TradeRowView row = view.rows().get(0);
-        assertEquals("short", row.strategyId());
+        assertEquals("short", row.strategyLabel());
         assertEquals("—", row.exitText());
         assertEquals("€100,00 → —", row.priceText());
         assertEquals("+€0,00", row.resultText());
@@ -477,8 +496,10 @@ class TradeHistoryServiceTest {
 
     @Test
     void constructorsAcceptABlankOrMissingTimeZone() {
-        assertFalse(new TradeHistoryService(positions, orders, (String) null).zoneLabel().isBlank());
-        assertFalse(new TradeHistoryService(positions, orders, "  ").zoneLabel().isBlank());
+        assertFalse(new TradeHistoryService(positions, orders, strategies, (String) null)
+                .zoneLabel().isBlank());
+        assertFalse(new TradeHistoryService(positions, orders, strategies, "  ")
+                .zoneLabel().isBlank());
     }
 
     private static LivePosition heldPosition(long entryMillis, long heldSeconds) {
