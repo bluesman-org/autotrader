@@ -85,7 +85,6 @@ public class LiveStrategyService {
             throw new IllegalArgumentException("the warm-up candles must not be negative");
         }
         LiveStrategy strategy = LiveStrategy.builder()
-                .botId(request.getBotId())
                 .market(market)
                 .interval(interval.getCode())
                 .macdFastPeriod(macd.fastPeriod())

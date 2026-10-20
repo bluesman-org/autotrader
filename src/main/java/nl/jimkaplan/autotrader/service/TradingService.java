@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.MessageFormat;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
@@ -55,14 +56,15 @@ public class TradingService {
      * @throws IllegalArgumentException if the request is invalid
      */
     public void validateAndProcessAlert(TradingViewAlertRequest request) {
-        // Validate request
-        validateRequest(request);
+        // Validate request; the parsed instant is what gets stored, so the alert never carries a
+        // value this method did not accept.
+        Instant timestamp = validateRequest(request);
 
         // Get bot configuration
         BotConfiguration botConfig = getBotConfiguration(request.getBotId());
 
         // Log the alert
-        saveAlert(request);
+        saveAlert(request, timestamp);
 
         // Verify ticker matches bot's configured trading pair
         if (!request.getTicker().equals(botConfig.getTradingPair())) {
@@ -107,9 +109,10 @@ public class TradingService {
      * Validate the TradingView alert request.
      *
      * @param request The alert request to validate
+     * @return The alert's timestamp as an instant
      * @throws IllegalArgumentException if the request is invalid
      */
-    private void validateRequest(TradingViewAlertRequest request) {
+    private Instant validateRequest(TradingViewAlertRequest request) {
         // Use pattern matching for null/empty checks
         String botId = request.getBotId();
         if (botId == null || botId.isEmpty()) {
@@ -131,25 +134,28 @@ public class TradingService {
             throw new IllegalArgumentException("Timestamp is required");
         }
 
-        // Validate timestamp format
+        // Accept an ISO-8601 date-time with an offset (Z or +02:00) and normalise it to an
+        // instant. A local date-time without an offset is rejected: it names no instant.
         try {
-            DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(timestamp);
+            return OffsetDateTime.parse(timestamp, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant();
         } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("Invalid timestamp format. Expected format: yyyy-MM-ddTHH:mm:ssZ");
+            throw new IllegalArgumentException("Invalid timestamp format. Expected an ISO-8601 "
+                    + "timestamp with an offset, e.g. 2026-10-04T12:00:00Z");
         }
     }
 
     /**
      * Save the TradingView alert to the database.
      *
-     * @param request The alert request
+     * @param request   The alert request
+     * @param timestamp The alert's validated timestamp
      */
-    private void saveAlert(TradingViewAlertRequest request) {
+    private void saveAlert(TradingViewAlertRequest request, Instant timestamp) {
         TradingViewAlert alert = TradingViewAlert.builder()
                 .botId(request.getBotId())
                 .ticker(request.getTicker())
                 .action(request.getAction())
-                .timestamp(Instant.parse(request.getTimestamp()))
+                .timestamp(timestamp)
                 .build();
 
         tradingViewAlertService.saveAlert(alert);
