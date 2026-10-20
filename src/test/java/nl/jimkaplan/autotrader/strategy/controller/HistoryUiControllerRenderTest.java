@@ -55,7 +55,7 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("Engine trades")))
                 .andExpect(content().string(containsString("6ace5dbf")))
                 .andExpect(content().string(containsString("DRY RUN")))
-                .andExpect(content().string(containsString("14 Oct 14:10")))
+                .andExpect(content().string(containsString("14 Oct 2026 14:10")))
                 .andExpect(content().string(containsString("+€0,13")))
                 .andExpect(content().string(containsString("none — dry run (simulated)")))
                 .andExpect(content().string(containsString("sort=result")))
@@ -93,10 +93,10 @@ class HistoryUiControllerRenderTest {
 
     private static TradeHistoryView view() {
         TradeHistoryView.TradeRowView row = new TradeHistoryView.TradeRowView(1, "6ace5dbf", "schip hue-0",
-                "hue-0", "DRY RUN", "dry", "14 Oct 14:10", "14 Oct 14:11", "73,990 → 74,380",
+                "hue-0", "DRY RUN", "dry", "14 Oct 2026 14:10", "14 Oct 2026 14:11", "73,990 → 74,380",
                 "0.00135153", "+€0,13", "pos",
-                new TradeHistoryView.DetailsView("14 Oct 14:10 · 0,00135153 BTC @ €73.990,00", "fee €0,20",
-                        "14 Oct 14:11 · 0,00135153 BTC @ €74.380,00", "fee €0,20", "1 min 3 s",
+                new TradeHistoryView.DetailsView("14 Oct 2026 14:10 · 0,00135153 BTC @ €73.990,00", "fee €0,20",
+                        "14 Oct 2026 14:11 · 0,00135153 BTC @ €74.380,00", "fee €0,20", "1 min 3 s",
                         "none — dry run (simulated)"));
         List<TradeHistoryView.HeaderView> headers = List.of(
                 new TradeHistoryView.HeaderView("Entry", "left", "?sort=entry&dir=desc", true, "▼"),
@@ -111,7 +111,7 @@ class HistoryUiControllerRenderTest {
         TradeHistoryView.TotalsView totals = new TradeHistoryView.TotalsView(41, "−€16,68", "neg", "24%",
                 "Last 7 days");
         List<TradeHistoryView.DailyView> daily = List.of(
-                new TradeHistoryView.DailyView("13 Oct", 1, "−€0,11", "neg", "−€0,11", "neg"));
+                new TradeHistoryView.DailyView("13 Oct 2026", 1, "−€0,11", "neg", "−€0,11", "neg"));
         return new TradeHistoryView(List.of(row), headers, filters, pager, totals, daily);
     }
 
@@ -144,7 +144,7 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("0,0015 BTC")))
                 .andExpect(content().string(containsString("Balance after")))
                 .andExpect(content().string(containsString("counts only filled orders")))
-                .andExpect(content().string(containsString("14 Oct 09:00")))
+                .andExpect(content().string(containsString("14 Oct 2026 09:00")))
                 .andExpect(content().string(containsString("+€0,60")))
                 .andExpect(content().string(containsString("side-sell")))
                 .andExpect(content().string(containsString("fills (1)")))
@@ -204,7 +204,7 @@ class HistoryUiControllerRenderTest {
     private static LedgerView ledgerView(String unrealisedHint, String unrealisedText) {
         LedgerView.FillRowView fill = new LedgerView.FillRowView("09:00:00", "0.00050000", "€76.000,00",
                 "€0,0800", "taker", "+€37,92", "pos");
-        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 09:00", "SELL", "side-sell",
+        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00", "SELL", "side-sell",
                 "takeProfitLimit", "BTC-EUR", "0.00050000", "€76.000,00", "awaiting trigger", "",
                 "trigger €73.162,00 · limit €75.364,00", "0.0015", "€0,08",
                 "+€37,92", "pos", 1, "+€0,60", "pos", List.of(fill), "");
@@ -224,7 +224,7 @@ class HistoryUiControllerRenderTest {
     }
 
     private static LedgerView allPairsLedgerView() {
-        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 09:00", "SELL", "side-sell",
+        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00", "SELL", "side-sell",
                 "market", "BTC-EUR", "0.00050000", "€76.000,00", "filled", "ok", "", "0.0015",
                 "€0,08", "+€37,92", "pos", 1, "+€0,60", "pos", List.of(), "");
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "all", "Amount",

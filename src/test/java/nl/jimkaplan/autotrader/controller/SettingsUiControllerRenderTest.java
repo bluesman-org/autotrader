@@ -75,7 +75,7 @@ class SettingsUiControllerRenderTest {
                 .andExpect(content().string(containsString("configured")))
                 .andExpect(content().string(containsString("…1234")))
                 .andExpect(content().string(containsString("operator id 7")))
-                .andExpect(content().string(containsString("16 Oct 08:00 (UTC)")))
+                .andExpect(content().string(containsString("16 Oct 2026 08:00 (UTC)")))
                 .andExpect(content().string(containsString("type=\"password\" name=\"apiKey\"")))
                 .andExpect(content().string(containsString("type=\"password\" name=\"apiSecret\"")));
     }

@@ -520,7 +520,7 @@ public class LedgerService {
         String avgPrice = amount > 0 ? euro(quoteAmount / amount) : DASH;
         double netCash = buy ? -(quoteAmount + cashFee) : quoteAmount - cashFee;
         return new OrderRowView(number,
-                order.getCreated() == null ? DASH : display.minute(Instant.ofEpochMilli(order.getCreated())),
+                order.getCreated() == null ? DASH : display.minuteYear(Instant.ofEpochMilli(order.getCreated())),
                 buy ? "BUY" : "SELL", buy ? "side-buy" : "side-sell",
                 order.getOrderType() == null ? DASH : order.getOrderType(),
                 order.getMarket() == null ? market : order.getMarket(),
@@ -587,7 +587,7 @@ public class LedgerService {
             Transaction entry = sorted.get(i);
             String type = entry.getType() == null ? DASH : entry.getType();
             rows.add(new RawRowView(i + 1,
-                    entry.getExecutedAt() == null ? DASH : display.minute(entry.getExecutedAt()),
+                    entry.getExecutedAt() == null ? DASH : display.minuteYear(entry.getExecutedAt()),
                     type, typeClass(type),
                     amountWithCurrency(entry.getSentAmount(), entry.getSentCurrency()),
                     amountWithCurrency(entry.getReceivedAmount(), entry.getReceivedCurrency()),

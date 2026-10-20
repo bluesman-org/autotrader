@@ -198,9 +198,9 @@ public class TradeHistoryService {
         String hue = HUES.get(Math.floorMod(Objects.hashCode(position.getStrategyId()), HUES.size()));
         return new TradeRowView(number, shortId(position.getStrategyId()), "schip " + hue, hue,
                 dry ? "DRY RUN" : "REAL", dry ? "dry" : "real",
-                display.minute(Instant.ofEpochMilli(position.getEntryTime())),
+                display.minuteYear(Instant.ofEpochMilli(position.getEntryTime())),
                 position.getExitTime() == null ? DASH
-                        : display.minute(Instant.ofEpochMilli(position.getExitTime())),
+                        : display.minuteYear(Instant.ofEpochMilli(position.getExitTime())),
                 euro(position.getEntryPrice()) + " → "
                         + (position.getExitPrice() == null ? DASH : euro(position.getExitPrice())),
                 ViewText.decimal(position.getQuantity(), 8),
@@ -223,11 +223,11 @@ public class TradeHistoryService {
         String references = position.isDryRun() ? "none — dry run (simulated)"
                 : "buy " + shortRef(buy) + " · sell " + shortRef(sell);
         return new DetailsView(
-                display.minute(Instant.ofEpochMilli(position.getEntryTime())) + " · " + quantity + " "
+                display.minuteYear(Instant.ofEpochMilli(position.getEntryTime())) + " · " + quantity + " "
                         + asset + " @ " + euro(position.getEntryPrice()),
                 "fee " + boughtFee,
                 position.getExitTime() == null ? DASH
-                        : display.minute(Instant.ofEpochMilli(position.getExitTime())) + " · " + quantity
+                        : display.minuteYear(Instant.ofEpochMilli(position.getExitTime())) + " · " + quantity
                         + " " + asset + " @ " + (position.getExitPrice() == null ? DASH
                         : euro(position.getExitPrice())),
                 "fee " + soldFee,
@@ -318,7 +318,7 @@ public class TradeHistoryService {
         for (Map.Entry<LocalDate, double[]> entry : byDay.entrySet()) {
             double dayTotal = entry.getValue()[0];
             cumulative += dayTotal;
-            daily.add(new DailyView(display.day(entry.getKey()), (int) entry.getValue()[1],
+            daily.add(new DailyView(display.dayYear(entry.getKey()), (int) entry.getValue()[1],
                     signed(dayTotal), dayTotal >= 0 ? "pos" : "neg",
                     signed(cumulative), cumulative >= 0 ? "pos" : "neg"));
         }

@@ -80,7 +80,7 @@ class LedgerServiceTest {
         assertEquals(3, view.rows().size());
         LedgerView.OrderRowView open = view.rows().get(0);
         assertEquals("1", String.valueOf(open.number()));
-        assertEquals("15 Oct 08:00", open.dateText());
+        assertEquals("15 Oct 2026 08:00", open.dateText());
         assertEquals("BUY", open.side());
         assertEquals("side-buy", open.sideClass());
         assertEquals("limit", open.typeText());
@@ -194,7 +194,7 @@ class LedgerServiceTest {
         assertTrue(view.raw());
         assertEquals(4, view.rawRows().size());
         LedgerView.RawRowView fill = view.rawRows().get(0);
-        assertEquals("14 Oct 09:00", fill.timeText());
+        assertEquals("14 Oct 2026 09:00", fill.timeText());
         assertEquals("sell", fill.typeText());
         assertEquals("side-sell", fill.typeClass());
         assertEquals("0,0005 BTC", fill.sentText());
@@ -203,7 +203,7 @@ class LedgerServiceTest {
         LedgerView.RawRowView deposit = view.rawRows().get(3);
         assertEquals("deposit", deposit.typeText());
         assertEquals("", deposit.typeClass());
-        assertEquals("1 Oct 00:00", deposit.timeText());
+        assertEquals("1 Oct 2026 00:00", deposit.timeText());
     }
 
     @Test

@@ -240,7 +240,10 @@ autotrader:
 ```
 
 The pages show times in `autotrader.ui.time-zone` — the machine's zone when unset — and label them
-with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken for UTC.
+with the zone's short name (e.g. `14:48 CEST`), so a page can never be mistaken for UTC. History
+rows, the daily breakdown and a custom range's label always carry the year, because a range can span
+several; the live page's recent times stay compact (the clock for today, the date and minute
+otherwise).
 
 The history page's ledger tab reads the real Bitvavo account, not the engine's own records, with
 the system-wide Bitvavo API key — the same key the engine trades with (see "The Bitvavo key").
