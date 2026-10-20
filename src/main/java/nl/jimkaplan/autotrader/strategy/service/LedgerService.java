@@ -74,7 +74,9 @@ import java.util.stream.Collectors;
  * <p>The orders' columns sort on their underlying values, not their displayed text, and the
  * all-pairs view sums the filtered orders per market. The raw view filters on the exchange's
  * transaction types and sums them per type and currency, so staking income and external transfers
- * read as totals.</p>
+ * read as totals. The orders are the spot account's — the Exchange API exposes no margin orders or
+ * margin trades — and the raw history can return types its published list does not name, which the
+ * filter picks up.</p>
  */
 @Slf4j
 @Service
@@ -116,6 +118,9 @@ public class LedgerService {
             new Option("external_transferred_funds", "External transferred funds"),
             new Option("manually_assigned", "Manually assigned"),
             new Option("manually_assigned_bitvavo", "Manually assigned (Bitvavo)"));
+    private static final Set<String> RAW_TYPE_VALUES = RAW_TYPE_OPTIONS.stream()
+            .map(Option::value)
+            .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
     private static final List<Option> STATUS_OPTIONS = List.of(
             new Option("open", "Open"),
             new Option("awaitingTrigger", "Awaiting trigger"),
@@ -248,7 +253,10 @@ public class LedgerService {
 
         List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
                 : List.of();
-        List<Transaction> rawFiltered = raw ? filterRaw(rawEntries, filters.type()) : List.of();
+        // The order summary above filters on the request's order types; the raw table below uses
+        // the rebuilt options, which also name the transaction types this period actually contains.
+        FiltersView viewFilters = raw ? filters(request, market, true, rawEntries) : filters;
+        List<Transaction> rawFiltered = raw ? filterRaw(rawEntries, viewFilters.type()) : List.of();
         int rawPages = pages(rawFiltered.size(), pageSize);
         int rawPage = Math.min(clamp(request.getPage()), rawPages);
         List<RawRowView> rawRows = raw ? rawRows(rawFiltered, rawPage, pageSize) : List.of();
@@ -256,8 +264,8 @@ public class LedgerService {
                 ? pairTotals(filtered, results, euroFees, market) : List.of();
         List<RawTotalView> rawTotals = raw ? rawTotals(rawFiltered) : List.of();
 
-        return new LedgerView(null, price, filters,
-                headers(request, sortKey, ascending, filters.amountHeader(), pageSize),
+        return new LedgerView(null, price, viewFilters,
+                headers(request, sortKey, ascending, viewFilters.amountHeader(), pageSize),
                 totals(filtered, bases, results, balances, books, market, all, range, skipped),
                 rows, pager(request, sorted.size(), page, pages, sortKey,
                         ascending ? "asc" : "desc"), raw,
@@ -300,7 +308,12 @@ public class LedgerService {
      *         exactly what the request means
      */
     private static List<String> selected(List<String> values, List<String> known) {
-        return values == null ? List.of() : known.stream().filter(values::contains).toList();
+        // Case-insensitive, like the raw filter and the exchange's own comparisons: the submitted
+        // spelling is normalised to the option's, so a bookmark of "Deposit" still selects deposit.
+        return values == null ? List.of() : known.stream()
+                .filter(value -> values.stream()
+                        .anyMatch(submitted -> submitted.equalsIgnoreCase(value)))
+                .toList();
     }
 
     private List<Option> marketOptions(String market) {
@@ -643,9 +656,34 @@ public class LedgerService {
     }
 
     private FiltersView filters(LedgerRequest request, String market, boolean raw) {
+        return filters(request, market, raw, List.of());
+    }
+
+    /**
+     * @param rawEntries The period's raw transactions, when the raw view is selected: the exchange
+     *                   returns transaction types the published list does not name (a margin
+     *                   collateral deposit, for example), and those have to be filterable too
+     */
+    private FiltersView filters(LedgerRequest request, String market, boolean raw,
+                                List<Transaction> rawEntries) {
         boolean custom = HistoryPeriods.usesCustomRange(request.getPeriod(), request.getFromDate(),
                 request.getToDate());
-        List<Option> typeOptions = raw ? RAW_TYPE_OPTIONS : ORDER_TYPE_OPTIONS;
+        List<Option> typeOptions = new ArrayList<>(raw ? RAW_TYPE_OPTIONS : ORDER_TYPE_OPTIONS);
+        if (raw) {
+            rawEntries.stream().map(Transaction::getType)
+                    .filter(type -> type != null && !RAW_TYPE_VALUES.contains(type))
+                    .collect(Collectors.toCollection(
+                            () -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)))
+                    .forEach(type -> typeOptions.add(new Option(type, rawTypeLabel(type))));
+            // A selected type that this period does not contain stays in the list, so the filter
+            // stays applied and the table says the period has none instead of showing everything.
+            if (request.getType() != null) {
+                request.getType().stream().filter(LedgerService::notBlank)
+                        .filter(type -> typeOptions.stream()
+                                .noneMatch(option -> option.value().equalsIgnoreCase(type)))
+                        .forEach(type -> typeOptions.add(new Option(type, rawTypeLabel(type))));
+            }
+        }
         List<Option> statusOptions = raw ? List.of() : STATUS_OPTIONS;
         return new FiltersView(request.getSide(), market, amountHeader(market),
                 selected(request.getType(), typeOptions.stream().map(Option::value).toList()),
@@ -894,7 +932,17 @@ public class LedgerService {
                 .filter(option -> option.value().equalsIgnoreCase(type))
                 .map(Option::label)
                 .findFirst()
-                .orElse(type);
+                .orElseGet(() -> prettyType(type));
+    }
+
+    /**
+     * @param type An undocumented API type, e.g. {@code margin_loan_collateral_deposit}
+     * @return The type with its underscores read as spaces, e.g. {@code Margin loan collateral deposit}
+     */
+    private static String prettyType(String type) {
+        String text = type == null ? "" : type.replace('_', ' ').trim();
+        return text.isEmpty() ? type
+                : Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }
 
     private static List<Transaction> filterRaw(List<Transaction> entries, List<String> types) {
