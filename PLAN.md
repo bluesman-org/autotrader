@@ -110,7 +110,7 @@ next: the small live-run trial of the engine.
 - [x] New docker compose implementation for development (`docker-compose.dev.yml`: the app
       container plus the local Mongo, dev settings, no production credentials)
 - [x] All Dockerfiles multi-platform (the image no longer pins `linux/arm64`; the platform is
-      chosen at build time — native locally, `linux/arm64` in the deploy workflow)
+      chosen at build time — native locally, `linux/arm64` in the Docker workflow's portability build)
 
 ### Phase 5 — Live engine ✅ (PR #12)
 

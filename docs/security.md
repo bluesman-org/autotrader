@@ -69,10 +69,9 @@ Caddy on the host terminates TLS for `at.bluris.nl` and proxies to the app; Spri
 with `server.forward-headers-strategy=native`, Tomcat's trust list pinned to this host
 (`server.tomcat.remoteip.internal-proxies`), and a secure session cookie with `SameSite=Strict`
 (`SESSION_COOKIE_SECURE=true`), so redirects and cookies keep the https scheme and no forwarded
-header can speak for a client. That works end to end with the production compose, which runs with
-host networking; the development stack is on a bridge, so the app sees the docker gateway rather
-than the loopback and correctly distrusts the forwarded scheme — the site block therefore upgrades a
-`Location: http://` on its way out and sets HSTS. The site block:
+header can speak for a client. The stack on this box is on a bridge, so the app sees the docker
+gateway rather than the loopback and correctly distrusts the forwarded scheme — the site block
+therefore upgrades a `Location: http://` on its way out and sets HSTS. The site block:
 
 ```
 at.bluris.nl {
@@ -89,9 +88,9 @@ The app keeps its own context path, so every URL is `https://at.bluris.nl/autotr
 host redirects there). The TradingView webhook becomes
 `https://at.bluris.nl/autotrader/webhook/tradingview` — update the alerts when the address changes.
 
-The **development stack** is served through the same site on this box. The compose file is
-host-agnostic — it reads `SESSION_COOKIE_SECURE` and `AUTOTRADER_PUBLIC_URL` from the repo-root
-`.env` with plain local defaults — and this box's `.env` sets `true` and
+The stack on this box is production as well as development, served through the same site. The
+compose file is host-agnostic — it reads `SESSION_COOKIE_SECURE` and `AUTOTRADER_PUBLIC_URL` from
+the repo-root `.env` with plain local defaults — and this box's `.env` sets `true` and
 `https://at.bluris.nl/autotrader`, so the pages sign in over https and recovery mails link to the
 public address. Its published port is bound to `127.0.0.1:8081`, not to the network: the API takes
 HTTP Basic and the pages a session, and Caddy on the host is the only thing that should reach either.
@@ -104,8 +103,10 @@ the API and the pages alike — its Basic auth over http is why that port stays 
 1. DNS: an A/AAAA record for `at.bluris.nl` pointing at the host (done).
 2. Caddy installed on the host, the site block above in its config, ports 80 and 443 open;
    `caddy reload` picks it up and Caddy obtains the certificate.
-3. The production compose carries `SESSION_COOKIE_SECURE=true` and
-   `AUTOTRADER_PUBLIC_URL=https://at.bluris.nl/autotrader`; deploy the new image.
+3. The box's `.env` carries `SESSION_COOKIE_SECURE=true` and
+   `AUTOTRADER_PUBLIC_URL=https://at.bluris.nl/autotrader`; deploying is
+   `./mvnw package -DskipTests -Ddocker.skip=true` followed by
+   `docker compose -f docker-compose.dev.yml up -d --build` on the box.
 4. Create the account: open `https://at.bluris.nl/autotrader/` and sign up (the first signup). Note
    the username and password somewhere safe — recovery needs the email address on the account.
 5. Settings → **Mail**: store the SMTP server, then use "Forgot your password?" once and confirm the
