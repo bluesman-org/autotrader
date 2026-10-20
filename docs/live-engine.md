@@ -257,7 +257,10 @@ cash. The orders table's columns sort on their underlying values (the links keep
 paging), and the all-pairs view adds a Totals by pair table. The raw view filters on the exchange's
 transaction types (`deposit`, `withdrawal`, `staking`, …) and adds a Totals by type table, so
 staking income per coin and external transfers read as totals; its rows show the transfer address
-when Bitvavo reports one. Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
+when Bitvavo reports one. The orders table is the spot account's: the Exchange API exposes no margin
+orders or margin trades, so those appear only in Bitvavo's own app. The raw view lists what
+`GET /account/history` returns, which can include types the published list does not name — a margin
+collateral deposit, for example — and its Type filter offers those types too. Without a key the page says so instead of showing data. The orders come from `GET /orders` (with
 their fills and `feePaid`), the P&L walk and the raw transactions from `GET /account/history`, the
 balance from `GET /balance` and the prices from the public order book. A sell shows what it realised
 at the average cost of the coins it sold — the walk covers the market's whole buy/sell history, so a

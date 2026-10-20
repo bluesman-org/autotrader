@@ -260,7 +260,8 @@ next: the small live-run trial of the engine.
     view sums the filtered orders per market (orders, buy/sell volume, euro fees, realised); the
     raw view filters on the exchange's transaction types and sums them per type and currency, so
     staking income and external transfers are visible, with the transfer address when Bitvavo
-    reports one.
+    reports one. The raw Type filter also picks up undocumented types the API returns, and the page
+    notes that the orders are the spot account's and margin is not exposed by the Exchange API.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

@@ -144,6 +144,7 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString("0,0015 BTC")))
                 .andExpect(content().string(containsString("Balance after")))
                 .andExpect(content().string(containsString("counts only filled orders")))
+                .andExpect(content().string(containsString("margin trades are not exposed")))
                 .andExpect(content().string(containsString("14 Oct 2026 09:00")))
                 .andExpect(content().string(containsString("+€0,60")))
                 .andExpect(content().string(containsString("side-sell")))

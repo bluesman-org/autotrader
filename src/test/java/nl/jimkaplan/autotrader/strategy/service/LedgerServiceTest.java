@@ -210,6 +210,46 @@ class LedgerServiceTest {
     }
 
     @Test
+    void theRawTypeFilterIncludesUndocumentedApiTypes() {
+        when(credentials.get()).thenReturn(Optional.of(stored()));
+        when(strategies.all()).thenReturn(List.of());
+        when(markets.selectable()).thenReturn(List.of("BTC-EUR"));
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(new GetAccountBalanceResponse[]{
+                        balanceOf("BTC", "0"), balanceOf("EUR", "1000")});
+        List<Transaction> raw = List.of(
+                margin("2026-10-20T14:57:17Z", "margin_loan_collateral_deposit", "EUR", "100"),
+                staking("2026-10-19T10:00:00Z", "VET", "1.05", null));
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String endpoint = invocation.getArgument(0);
+                    return endpoint.contains("type=")
+                            ? new GetAccountHistoryResponse(List.of(), 1, 1, 200)
+                            : new GetAccountHistoryResponse(raw, 1, 1, 200);
+                });
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerRequest request = new LedgerRequest();
+        request.setView("raw");
+        request.setType(List.of("margin_loan_collateral_deposit"));
+        LedgerView view = service.view(request);
+
+        assertTrue(view.filters().typeOptions().stream().anyMatch(option ->
+                option.value().equals("margin_loan_collateral_deposit")
+                        && option.label().equals("Margin loan collateral deposit")));
+        assertEquals(1, view.rawRows().size());
+        assertEquals("margin_loan_collateral_deposit", view.rawRows().get(0).typeText());
+        assertEquals(1, view.rawTotals().size());
+        LedgerView.RawTotalView total = view.rawTotals().get(0);
+        assertEquals("Margin loan collateral deposit", total.typeText());
+        assertEquals("EUR", total.currency());
+        assertEquals("€100,00", total.amountText());
+        assertEquals(1, total.transactions());
+    }
+
+    @Test
     void theOrderTableSortsByTheRequestedColumnAndTogglesTheHeader() {
         accountReadable();
 
@@ -1342,6 +1382,16 @@ class LedgerServiceTest {
         }
         entry.setFeesCurrency("EUR");
         entry.setFeesAmount(new BigDecimal(fee));
+        return entry;
+    }
+
+    private static Transaction margin(String when, String type, String sentCurrency,
+                                      String sentAmount) {
+        Transaction entry = new Transaction();
+        entry.setType(type);
+        entry.setExecutedAt(Instant.parse(when));
+        entry.setSentCurrency(sentCurrency);
+        entry.setSentAmount(new BigDecimal(sentAmount));
         return entry;
     }
 
