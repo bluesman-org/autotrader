@@ -252,7 +252,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
-        response.setStatus("COMPLETED");
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -303,6 +303,32 @@ class LiveTradingServiceTest {
     }
 
     @Test
+    void fill_liveBuyWithANonFilledResponseLeavesTheRowPendingAndOpensNoPosition() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("partiallyFilled");
+        response.setFilledAmount(new BigDecimal("0.0005"));
+        response.setFilledAmountQuote(new BigDecimal("50.00"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("PENDING", saves.get(1).getStatus());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
     void fill_liveBuyBelowTheMarketMinimum_recordsARejection() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(credentialsService.get()).thenReturn(Optional.of(stored()));
@@ -346,7 +372,7 @@ class LiveTradingServiceTest {
                 .thenReturn(market(5.0, 2, 8));
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(UUID.randomUUID());
-        response.setStatus("COMPLETED");
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -374,7 +400,7 @@ class LiveTradingServiceTest {
                 .thenReturn(market(5.0, 2, 8));
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(UUID.randomUUID());
-        response.setStatus("COMPLETED");
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -400,6 +426,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
+        response.setStatus("filled");
         response.setFilledAmountQuote(new BigDecimal("110.00"));
         response.setFeePaid(new BigDecimal("0.22"));
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
@@ -437,6 +464,31 @@ class LiveTradingServiceTest {
         assertEquals("CLOSED", closed.getStatus());
         assertEquals(110.0 - 100.0 - 0.22 - 0.2, closed.getProfit(), 1e-9);
         assertEquals(decision.signalOpenTime(), closed.getExitTime());
+    }
+
+    @Test
+    void fill_liveSellWithACanceledResponseLeavesTheRowPendingAndKeepsThePositionOpen() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("canceledMarketProtection");
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("PENDING", saves.get(1).getStatus());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        verify(livePositionRepository, never()).save(any());
     }
 
     @Test
@@ -523,6 +575,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -552,6 +605,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
+        response.setStatus("filled");
         response.setFilledAmountQuote(new BigDecimal("110.00"));
         response.setFeePaid(new BigDecimal("0.22"));
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),

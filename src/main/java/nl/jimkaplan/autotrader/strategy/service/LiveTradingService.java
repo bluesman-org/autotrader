@@ -198,7 +198,9 @@ public class LiveTradingService {
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
-            applyFill(pending, response);
+            if (!applyFill(pending, response)) {
+                return;
+            }
             livePositionRepository.save(LivePosition.builder()
                     .strategyId(strategy.getId())
                     .market(strategy.getMarket())
@@ -280,7 +282,9 @@ public class LiveTradingService {
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
-            applyFill(pending, response);
+            if (!applyFill(pending, response)) {
+                return;
+            }
             double profit = TradeMath.closeProfit(TradeMath.zeroIfNull(pending.getAmountQuote()),
                     position.getQuantity(), position.getEntryPrice(), position.getEntryFee(),
                     TradeMath.zeroIfNull(pending.getFee()));
@@ -340,9 +344,20 @@ public class LiveTradingService {
 
     /**
      * Update the pre-written row with what the exchange reports, falling back to its estimates for
-     * anything the response omits.
+     * anything the response omits. Only a {@code filled} response settles the row as FILLED; any
+     * other status — partial, canceled, or one Bitvavo adds later — leaves it PENDING for the boot
+     * reconciliation, and the caller must not open or close a position.
+     *
+     * @return Whether the order filled, so the caller may move the position
      */
-    private void applyFill(LiveOrder order, CreateOrderResponse response) {
+    private boolean applyFill(LiveOrder order, CreateOrderResponse response) {
+        if (!"filled".equalsIgnoreCase(response.getStatus())) {
+            order.setOrderId(String.valueOf(response.getOrderId()));
+            liveOrderRepository.save(order);
+            log.warn("Order {} of strategy {} came back {}; left PENDING for reconciliation",
+                    response.getOrderId(), order.getStrategyId(), response.getStatus());
+            return false;
+        }
         double quantity = TradeMath.filled(
                 TradeMath.firstNonNull(response.getFilledAmount(), response.getAmount()),
                 TradeMath.zeroIfNull(order.getQuantity()));
@@ -355,6 +370,7 @@ public class LiveTradingService {
         order.setOrderId(String.valueOf(response.getOrderId()));
         order.setStatus("FILLED");
         liveOrderRepository.save(order);
+        return true;
     }
 
     /**

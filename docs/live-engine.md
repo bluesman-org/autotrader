@@ -68,8 +68,10 @@ candle channel of its market and interval. Our own policies:
   open orders, so a sequence number whose order was never accepted (or has long filled) is safe to
   reuse. The persisted sequence is advanced (a monotonic update — it can never move backwards)
   before the pre-write, so a crash can skip a number but never let a later order reuse one.
-  The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee, or
-  to `FAILED` with the error — so an ambiguous timeout between the write and the response stays
+  The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee when
+  the response's status is `filled`, or to `FAILED` with the error. Any other status (`new`,
+  `partiallyFilled`, a `canceled*` one, or a status Bitvavo adds later) leaves the row `PENDING` and
+  the caller does not open or close a position, so an ambiguous or partial response stays
   reconcilable at the next boot (see "Reconciliation on startup"). An order rejected before it is
   sent (no API key, insufficient balance, below the market minimum, an exchange error before the
   pre-write) is recorded as `REJECTED` with no client order ID; dry-run rows carry none either.
@@ -90,12 +92,13 @@ candle channel of its market and interval. Our own policies:
   `lastEvaluatedOpenTime`: the open time of the last evaluated candle. It is persisted **before** the order for that candle is
   placed, so a crash costs a trade instead of duplicating one, and evaluation is idempotent across
   restarts.
-- `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent),
-  `DRY_RUN`, `REJECTED` (a local, pre-flight rejection that never reached the exchange), `FILLED` or
-  `FAILED`, with the signal's candle open time, the rule set that fired, amounts, the fill or
-  estimated price, the fee, the exchange order ID for live fills and the client order ID the
-  pre-write sent. A boundary whose candle could not be resolved is recorded as `SKIPPED`, so a
-  missed signal window is visible through the API.
+- `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent,
+  and kept when the response was not `filled` so the next boot can settle it), `DRY_RUN`,
+  `REJECTED` (a local, pre-flight rejection that never reached the exchange), `FILLED` or `FAILED`,
+  with the signal's candle open time, the rule set that fired, amounts, the fill or estimated price,
+  the fee, the exchange order ID for live fills and the client order ID the pre-write sent. A
+  boundary whose candle could not be resolved is recorded as `SKIPPED`, so a missed signal window
+  is visible through the API.
 - `live_positions` — the position, closed in place (`OPEN` → `CLOSED`) with the realised profit
   after fees.
 
