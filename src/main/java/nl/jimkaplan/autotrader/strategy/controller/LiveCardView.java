@@ -6,8 +6,10 @@ import java.util.List;
  * One strategy's card on the live page.
  *
  * @param id         The strategy ID (shown shortened)
+ * @param name       The operator-facing name, falling back to the pair and interval
  * @param market     The market
  * @param interval   The candle interval code
+ * @param started    Whether the strategy has ever run, which decides Delete versus Archive
  * @param running    Whether the engine has a runner for it
  * @param connected  Whether its candle stream is up (never true when stopped)
  * @param dryRun     Whether its orders are simulated
@@ -17,9 +19,10 @@ import java.util.List;
  * @param statsLine  The realised round-trip statistics line
  * @param orders     The most recent orders, newest first
  */
-public record LiveCardView(String id, String market, String interval, boolean running, boolean connected,
-                           boolean dryRun, String parameters, String statusLine,
-                           PositionView position, String statsLine, List<OrderView> orders) {
+public record LiveCardView(String id, String name, String market, String interval, boolean started,
+                           boolean running, boolean connected, boolean dryRun, String parameters,
+                           String statusLine, PositionView position, String statsLine,
+                           List<OrderView> orders) {
 
     /** Copy the orders so the card's list cannot be mutated from outside. */
     public LiveCardView {

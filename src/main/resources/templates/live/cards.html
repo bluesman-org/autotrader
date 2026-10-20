@@ -3,19 +3,43 @@
 <body>
 <div th:fragment="cards">
     <p class="muted" th:if="${#lists.isEmpty(cards)}">
-        No live strategies yet — create one through the API (see the API docs) and it appears here.
+        No live strategies yet — use <b>New strategy</b> above to create one.
     </p>
 
     <div class="card" th:each="card : ${cards}">
         <div class="card-head">
-            <h2 th:text="|${card.market} · ${card.interval}|">BTC-EUR · 1m</h2>
-            <span class="mono muted" th:text="${#strings.substring(card.id, 0, 8)}">6ace5dbf</span>
+            <h2 th:text="${card.name}">BTC 2h breakout</h2>
+            <span class="muted"
+                  th:text="|${card.market} · ${card.interval} · ${#strings.substring(card.id, 0, 8)}|">BTC-EUR · 2h · 6ad07afb</span>
             <span class="badge" th:classappend="${card.running} ? 'ok'"
                   th:text="${card.running} ? '● Running' : 'Stopped'">Stopped</span>
             <span class="badge ok" th:if="${card.connected}">Connected</span>
             <span class="badge dry" th:if="${card.dryRun}">DRY RUN</span>
             <span class="badge real" th:unless="${card.dryRun}">REAL</span>
             <span class="spacer"></span>
+            <form th:if="${!card.running}" method="get"
+                  th:action="@{/ui/live/{id}/edit(id=${card.id})}">
+                <button class="secondary small" type="submit">Edit</button>
+            </form>
+            <form method="get" th:action="@{/ui/live/new}">
+                <input type="hidden" name="copy" th:value="${card.id}">
+                <button class="secondary small" type="submit">Duplicate</button>
+            </form>
+            <form th:if="${card.dryRun}" method="get" th:action="@{/ui/live/new}">
+                <input type="hidden" name="copy" th:value="${card.id}">
+                <input type="hidden" name="real" value="true">
+                <button class="secondary small" type="submit">Create real copy</button>
+            </form>
+            <form th:if="${!card.running and !card.started}"
+                  th:action="@{/ui/live/{id}/delete(id=${card.id})}" method="post"
+                  onsubmit="return confirm('This strategy has never run. Delete it?')">
+                <button class="secondary small" type="submit">Delete</button>
+            </form>
+            <form th:if="${!card.running and card.started}"
+                  th:action="@{/ui/live/{id}/delete(id=${card.id})}" method="post"
+                  onsubmit="return confirm('This strategy has run. Archive it and keep its history?')">
+                <button class="secondary small" type="submit">Archive</button>
+            </form>
             <form th:if="${card.running}" th:action="@{/ui/live/{id}/stop(id=${card.id})}" method="post">
                 <button class="secondary" type="submit">Stop</button>
             </form>
@@ -23,6 +47,9 @@
                 <button class="primary small" type="submit">Start</button>
             </form>
         </div>
+        <p class="muted card-meta tight" th:if="${card.running}">
+            Stop the strategy to edit or archive it.
+        </p>
 
         <p class="muted card-meta" th:text="${card.statusLine}">Running since 13 Oct 16:35 (1 d 22 h) ·
             Last evaluated 14 Oct 14:48:00 (12 s ago) · Last error: —</p>

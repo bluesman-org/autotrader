@@ -12,6 +12,9 @@
 <nav th:replace="~{fragments/nav :: nav}"></nav>
 <main class="container">
     <h1>Live engine</h1>
+    <p><a th:href="@{/ui/live/new}">+ New strategy</a></p>
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+    <div class="banner ok" th:if="${notice}" th:text="${notice}">notice</div>
     <p class="muted" th:text="|Order times are local time (${timeZoneLabel}) · Page refreshes every 10 seconds · DRY RUN = simulated orders, nothing sent to the exchange · REAL = live money|">
         Order times are local time (CEST) · Page refreshes every 10 seconds · DRY RUN = simulated
         orders, nothing sent to the exchange · REAL = live money

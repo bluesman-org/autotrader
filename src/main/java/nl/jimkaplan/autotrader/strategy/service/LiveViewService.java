@@ -80,7 +80,7 @@ public class LiveViewService {
      *         that could be read
      */
     public List<LiveCardView> cards() {
-        List<LiveStrategy> strategies = liveStrategyService.all();
+        List<LiveStrategy> strategies = liveStrategyService.active();
         Map<String, GetBookResponse> books = books(strategies);
         Instant now = Instant.now();
         return strategies.stream()
@@ -115,8 +115,12 @@ public class LiveViewService {
                 .findAllByStrategyIdAndStatus(strategy.getId(), "CLOSED");
         LivePosition position = livePositionRepository
                 .findByStrategyIdAndStatus(strategy.getId(), "OPEN").orElse(null);
-        return new LiveCardView(strategy.getId(), strategy.getMarket(), strategy.getInterval(),
-                running, connected, strategy.isDryRun(),
+        String name = strategy.getName() == null || strategy.getName().isBlank()
+                ? strategy.getMarket() + " " + strategy.getInterval()
+                : strategy.getName();
+        boolean started = strategy.hasStarted();
+        return new LiveCardView(strategy.getId(), name, strategy.getMarket(), strategy.getInterval(),
+                started, running, connected, strategy.isDryRun(),
                 parameters(strategy), statusLine(strategy, running, lastError, now),
                 position(position, book, strategy), statsLine(closed),
                 orders(strategy.getId(), position, closed));

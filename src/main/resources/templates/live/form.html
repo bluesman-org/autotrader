@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${editing} ? 'Edit strategy · Autotrader' : 'New strategy · Autotrader'">
+        New strategy · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1 th:text="${editing} ? 'Edit strategy' : 'New live strategy'">New live strategy</h1>
+    <p class="muted">
+        The engine evaluates these rules on closed candles and fills at the next candle's open, the
+        same way a backtest does. A new strategy is not started until you press Start on the live
+        page.
+    </p>
+
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+    <div class="banner warn" th:if="${running}">
+        Stop the strategy on the live page before saving changes.
+    </div>
+    <div class="banner warn" th:if="${!editing and form.dryRun == false}">
+        This strategy will send real orders to Bitvavo once it is started.
+    </div>
+
+    <form method="post" th:object="${form}" class="card"
+          th:action="${editing} ? @{/ui/live/{id}(id=${strategyId})} : @{/ui/live}">
+        <fieldset>
+            <legend>Identity</legend>
+            <div class="grid">
+                <label>Name
+                    <input type="text" th:field="*{name}" required>
+                </label>
+                <label>Market
+                    <select th:field="*{market}" th:disabled="${editing and started}" required>
+                        <option th:each="pair : ${markets}" th:value="${pair}"
+                                th:text="${pair}">BTC-EUR</option>
+                    </select>
+                </label>
+                <label>Interval
+                    <select th:field="*{interval}" th:disabled="${editing and started}">
+                        <option th:each="i : ${intervals}" th:value="${i.code}"
+                                th:text="${i.code}">1h</option>
+                    </select>
+                </label>
+            </div>
+            <p class="muted" th:if="${editing and started}">
+                The pair and interval are fixed after the first start. Duplicate the strategy to
+                use another market or timeframe.
+            </p>
+            <p class="muted" th:if="${editing}">
+                <span th:text="${form.dryRun} ? 'This is a dry-run strategy: its orders are simulated.' : 'This is a real strategy: its orders use real money.'"></span>
+                Dry-run is chosen when the strategy is created; use <b>Create real copy</b> on the
+                live page to go live.
+            </p>
+        </fieldset>
+
+        <fieldset>
+            <legend>Simulation</legend>
+            <div class="grid">
+                <label>Amount per buy (EUR)
+                    <input type="text" th:field="*{amountPerBuy}">
+                </label>
+                <label>Warm-up candles
+                    <input type="text" th:field="*{warmUpCandles}">
+                </label>
+                <label th:if="${!editing}">
+                    <input type="checkbox" th:field="*{dryRun}">
+                    Dry run (record orders without sending them)
+                </label>
+            </div>
+            <p class="muted">The amount is before fees; blank optional fields take the documented
+                defaults.</p>
+        </fieldset>
+
+        <fieldset>
+            <legend>Indicator parameters</legend>
+            <div class="grid">
+                <label>MACD fast period
+                    <input type="text" th:field="*{macdFastPeriod}">
+                </label>
+                <label>MACD slow period
+                    <input type="text" th:field="*{macdSlowPeriod}">
+                </label>
+                <label>MACD signal period
+                    <input type="text" th:field="*{macdSignalPeriod}">
+                </label>
+                <label>Parabolic SAR acceleration
+                    <input type="text" th:field="*{sarAcceleration}">
+                </label>
+                <label>Parabolic SAR maximum
+                    <input type="text" th:field="*{sarMaximum}">
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Entry rules</legend>
+            <label>Conditions combine with
+                <select th:field="*{entryOperator}">
+                    <option th:each="op : ${operators}" th:value="${op.name()}"
+                            th:text="${op.name()}">ALL</option>
+                </select>
+            </label>
+            <div class="checks">
+                <label th:each="c : ${conditions}">
+                    <input type="checkbox" th:field="*{entryConditions}" th:value="${c.name()}">
+                    <span th:text="${#strings.replace(c.name(), '_', ' ')}">MACD BULLISH CROSSOVER</span>
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Exit rules</legend>
+            <label>Conditions combine with
+                <select th:field="*{exitOperator}">
+                    <option th:each="op : ${operators}" th:value="${op.name()}"
+                            th:text="${op.name()}">ALL</option>
+                </select>
+            </label>
+            <div class="checks">
+                <label th:each="c : ${conditions}">
+                    <input type="checkbox" th:field="*{exitConditions}" th:value="${c.name()}">
+                    <span th:text="${#strings.replace(c.name(), '_', ' ')}">SAR BEARISH CROSSOVER</span>
+                </label>
+            </div>
+        </fieldset>
+
+        <div class="actions">
+            <button class="primary" type="submit" th:disabled="${running}"
+                    th:text="${editing} ? 'Save changes' : 'Create strategy'">Create strategy</button>
+            <a th:href="@{/ui/live}">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

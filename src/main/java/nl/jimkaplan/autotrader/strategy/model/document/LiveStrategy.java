@@ -28,6 +28,13 @@ import java.util.List;
 public class LiveStrategy extends BaseDocument {
 
     /**
+     * The operator-facing name. Required for new strategies; the startup initializer names the
+     * documents that predate the field.
+     */
+    @Field("name")
+    private String name;
+
+    /**
      * Market in Bitvavo format, e.g. "BTC-EUR".
      */
     @Field("market")
@@ -97,6 +104,13 @@ public class LiveStrategy extends BaseDocument {
     private boolean enabled;
 
     /**
+     * Whether the strategy is archived: hidden from the live page and the forms, but kept with its
+     * orders and positions so the history tab can still report what it did.
+     */
+    @Field("archived")
+    private boolean archived;
+
+    /**
      * Open time of the last candle this strategy evaluated; 0 when it never has.
      */
     @Field("last_evaluated_open_time")
@@ -136,4 +150,14 @@ public class LiveStrategy extends BaseDocument {
      */
     @Field("created_time")
     private Instant createdTime;
+
+    /**
+     * @return Whether the strategy has ever run. The pair and interval lock on this, Delete turns
+     *         into Archive, and the live page's edit form uses it to disable them; keeping the
+     *         definition here stops those four callers from drifting apart.
+     */
+    @JsonIgnore
+    public boolean hasStarted() {
+        return lastStartedTime != null || seriesStartTime > 0;
+    }
 }

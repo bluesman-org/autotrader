@@ -2,6 +2,7 @@ package nl.jimkaplan.autotrader.strategy.service;
 
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryRequest;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView;
@@ -16,6 +17,7 @@ import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView.TotalsView;
 import nl.jimkaplan.autotrader.strategy.controller.TradeHistoryView.TradeRowView;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
+import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -55,22 +57,25 @@ public class TradeHistoryService {
 
     private final LivePositionRepository positions;
     private final LiveOrderRepository orders;
+    private final LiveStrategyRepository strategies;
     private final DisplayZone display;
     private final HistoryPeriods periods;
     private final Clock clock;
 
     @Autowired
     public TradeHistoryService(LivePositionRepository positions, LiveOrderRepository orders,
+                               LiveStrategyRepository strategies,
                                @Value("${autotrader.ui.time-zone:}") String timeZone) {
-        this(positions, orders,
+        this(positions, orders, strategies,
                 timeZone == null || timeZone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(timeZone),
                 Clock.systemUTC());
     }
 
-    TradeHistoryService(LivePositionRepository positions, LiveOrderRepository orders, ZoneId zone,
-                        Clock clock) {
+    TradeHistoryService(LivePositionRepository positions, LiveOrderRepository orders,
+                        LiveStrategyRepository strategies, ZoneId zone, Clock clock) {
         this.positions = positions;
         this.orders = orders;
+        this.strategies = strategies;
         this.display = new DisplayZone(zone);
         this.periods = new HistoryPeriods(display, clock);
         this.clock = clock;
@@ -115,13 +120,30 @@ public class TradeHistoryService {
         List<LivePosition> pageRows = sorted.subList(fromIndex, toIndex);
 
         Map<String, LiveOrder> refs = orderReferences(pageRows);
+        Map<String, String> strategyLabels = strategyLabels();
         List<TradeRowView> rows = new ArrayList<>();
         for (int i = 0; i < pageRows.size(); i++) {
-            rows.add(row(pageRows.get(i), fromIndex + i + 1, refs));
+            rows.add(row(pageRows.get(i), fromIndex + i + 1, refs, strategyLabels));
         }
         return new TradeHistoryView(rows, headers(request, sortKey, ascending, size),
-                filters(request, periodRows), pager(request, fromIndex, toIndex, sorted.size(), page, pages, size),
+                filters(request, periodRows, strategyLabels),
+                pager(request, fromIndex, toIndex, sorted.size(), page, pages, size),
                 totals(sorted, range), daily(sorted));
+    }
+
+    /**
+     * The display label of every strategy, including the archived ones: their trades stay in this
+     * tab, so the filter must still be able to name them. A strategy whose name is missing falls
+     * back to the shortened id.
+     */
+    private Map<String, String> strategyLabels() {
+        Map<String, String> labels = new HashMap<>();
+        for (LiveStrategy strategy : strategies.findAll()) {
+            String name = strategy.getName();
+            String label = name == null || name.isBlank() ? shortId(strategy.getId()) : name;
+            labels.put(strategy.getId(), strategy.isArchived() ? label + " (archived)" : label);
+        }
+        return labels;
     }
 
     // ---- filtering, sorting, paging ---------------------------------------------------------
@@ -192,11 +214,14 @@ public class TradeHistoryService {
 
     // ---- the view ---------------------------------------------------------------------------
 
-    private TradeRowView row(LivePosition position, int number, Map<String, LiveOrder> refs) {
+    private TradeRowView row(LivePosition position, int number, Map<String, LiveOrder> refs,
+                             Map<String, String> strategyLabels) {
         boolean dry = position.isDryRun();
         double result = profit(position);
         String hue = HUES.get(Math.floorMod(Objects.hashCode(position.getStrategyId()), HUES.size()));
-        return new TradeRowView(number, shortId(position.getStrategyId()), "schip " + hue, hue,
+        return new TradeRowView(number,
+                strategyLabels.getOrDefault(position.getStrategyId(), shortId(position.getStrategyId())),
+                "schip " + hue, hue,
                 dry ? "DRY RUN" : "REAL", dry ? "dry" : "real",
                 display.minuteYear(Instant.ofEpochMilli(position.getEntryTime())),
                 position.getExitTime() == null ? DASH
@@ -255,12 +280,15 @@ public class TradeHistoryService {
                 active, active ? (ascending ? "▲" : "▼") : "");
     }
 
-    private FiltersView filters(TradeHistoryRequest request, List<LivePosition> periodRows) {
+    private FiltersView filters(TradeHistoryRequest request, List<LivePosition> periodRows,
+                                Map<String, String> strategyLabels) {
         List<Option> strategies = periodRows.stream().map(LivePosition::getStrategyId).distinct().sorted()
-                .map(id -> new Option(id, shortId(id))).collect(Collectors.toCollection(ArrayList::new));
+                .map(id -> new Option(id, strategyLabels.getOrDefault(id, shortId(id))))
+                .collect(Collectors.toCollection(ArrayList::new));
         if (notBlank(request.getStrategy())
                 && strategies.stream().noneMatch(option -> option.value().equals(request.getStrategy()))) {
-            strategies.add(new Option(request.getStrategy(), shortId(request.getStrategy())));
+            strategies.add(new Option(request.getStrategy(),
+                    strategyLabels.getOrDefault(request.getStrategy(), shortId(request.getStrategy()))));
         }
         List<Option> markets = periodRows.stream().map(LivePosition::getMarket)
                 .filter(Objects::nonNull).distinct().sorted()

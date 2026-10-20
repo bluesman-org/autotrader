@@ -86,8 +86,8 @@ candle channel of its market and interval. Our own policies:
 
 ## State
 
-- `live_strategies` — the configuration, `dryRun`, `enabled`, and `lastEvaluatedOpenTime`: the open
-  time of the last evaluated candle. It is persisted **before** the order for that candle is
+- `live_strategies` — the name, configuration, `archived`, `dryRun`, `enabled`, and
+  `lastEvaluatedOpenTime`: the open time of the last evaluated candle. It is persisted **before** the order for that candle is
   placed, so a crash costs a trade instead of duplicating one, and evaluation is idempotent across
   restarts.
 - `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent),
@@ -176,13 +176,17 @@ brings the two back together:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /api/live-strategies` | Create a strategy (market and interval required; dry-run defaults to true) |
-| `GET /api/live-strategies` | List strategies |
+| `POST /api/live-strategies` | Create a strategy (name, market and interval required; dry-run defaults to true) |
+| `GET /api/live-strategies` | List active strategies; `?includeArchived=true` includes archived ones |
 | `GET /api/live-strategies/{id}` | Strategy plus `running` and `connected` |
+| `PUT /api/live-strategies/{id}` | Update a stopped strategy |
+| `DELETE /api/live-strategies/{id}` | Delete a never-started strategy, or archive one that has run |
 | `POST /api/live-strategies/{id}/start` | Seed the history, subscribe, evaluate closed candles |
 | `POST /api/live-strategies/{id}/stop` | Disconnect and clear `enabled` |
 | `GET /api/live-strategies/{id}/orders` | The strategy's orders, newest first |
 | `GET /ui/live` | The live page: one card per strategy, refreshed in place every 10 seconds |
+| `GET /ui/live/new` | The create form, optionally prefilled from a copy or a ranked backtest entry |
+| `GET /ui/live/{id}/edit` | The edit form; the pair and interval stay fixed after the first start |
 Every `/ui/**` and `/api/**` endpoint below needs a signed-in account; the TradingView webhook is
 the exception, because it authenticates itself with its own webhook key (see `docs/security.md`).
 
@@ -191,6 +195,29 @@ the exception, because it authenticates itself with its own webhook key (see `do
 | `GET /api/bitvavo-credentials` | The system-wide Bitvavo API key, masked: whether one is configured, a hint that identifies it and the operator id |
 | `PUT /api/bitvavo-credentials` | Store or replace that key (the secret is write-only) |
 | `GET /ui/settings` | The settings page: the key's state, the trading pairs, the mail settings and the password |
+
+## Managing strategies
+
+The live page's **New strategy** form creates a strategy without starting it. A name is required;
+the startup initializer names documents created before the field existed from their pair, interval
+and creation minute (e.g. `BTC-EUR 1h · 12 Oct 21:04`).
+
+- **Pair and interval:** editable until the strategy's first start, then fixed. The candle series
+  anchor belongs to that pair and timeframe, so changing either later would mix two histories under
+  one record. Use **Duplicate** to try the same rules on another pair or timeframe.
+- **Editing:** only a stopped strategy can be edited; the card hides the link while it runs and the
+  service rejects the request. Amount, warm-up, indicator parameters and the rule sets stay
+  editable. `dryRun` is chosen at creation and never switched.
+- **Going real:** create a copy from a dry-run strategy with **Create real copy**. The form pre-fills
+  the same rules with dry-run off and the name suffixed `-REAL`; the new strategy starts its own
+  anchor, so its live record is separate from the trial's.
+- **Delete or archive:** a strategy that never started is deleted. One that has run is archived:
+  it leaves the live page and the forms, but its orders and positions stay, and the history tab
+  keeps showing it (labelled `(archived)` in the strategy filter). An open position blocks
+  archiving — close it first — so a real position can never be hidden behind an archived strategy.
+- **From a backtest:** each ranked row on a stored run has a **Use live** link that opens the create
+  form with the market, interval, parameters, rules and amount filled in. It saves dry-run unless
+  the form's dry-run checkbox is cleared.
 
 ## The Bitvavo key
 

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.jimkaplan.autotrader.bitvavo.MarketFormat;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
+import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
@@ -44,6 +45,7 @@ public class LiveStrategyService {
 
     private final LiveStrategyRepository liveStrategyRepository;
     private final LiveOrderRepository liveOrderRepository;
+    private final LivePositionRepository livePositionRepository;
     private final CandleHistoryService candleHistoryService;
     private final LiveTradingService liveTradingService;
     private final BitvavoCredentialsService credentialsService;
@@ -59,16 +61,14 @@ public class LiveStrategyService {
      */
     public LiveStrategy create(LiveStrategyRequest request) {
         Objects.requireNonNull(request, "request must not be null");
+        String name = required("name", request.getName());
         String market = MarketFormat.toMarket(required("market", request.getMarket()));
         MarketFormat.requireEuroQuoted(market);
         CandleInterval interval = CandleInterval.fromCode(required("interval", request.getInterval()));
         double amountPerBuy = request.getAmountPerBuy() == null
                 ? BacktestDefaults.AMOUNT_PER_BUY
                 : request.getAmountPerBuy();
-        if (amountPerBuy < LiveTradingService.MINIMUM_ORDER_EUR) {
-            throw new IllegalArgumentException("the amount per buy must be at least "
-                    + LiveTradingService.MINIMUM_ORDER_EUR + " EUR");
-        }
+        requireMinimumAmount(amountPerBuy);
         boolean dryRun = request.getDryRun() == null || request.getDryRun();
         if (!dryRun && !credentialsService.configured()) {
             throw new IllegalArgumentException(
@@ -85,6 +85,7 @@ public class LiveStrategyService {
             throw new IllegalArgumentException("the warm-up candles must not be negative");
         }
         LiveStrategy strategy = LiveStrategy.builder()
+                .name(name)
                 .market(market)
                 .interval(interval.getCode())
                 .macdFastPeriod(macd.fastPeriod())
@@ -100,6 +101,7 @@ public class LiveStrategyService {
                 .warmUpCandles(warmUpCandles)
                 .dryRun(dryRun)
                 .enabled(false)
+                .archived(false)
                 .lastEvaluatedOpenTime(0)
                 .createdTime(Instant.now())
                 .build();
@@ -107,10 +109,135 @@ public class LiveStrategyService {
     }
 
     /**
-     * @return All live strategies
+     * Update a stopped strategy in place. The pair and interval stay changeable until the first
+     * start; after that they are fixed because the candle series anchor belongs to them. Dry-run
+     * is chosen at creation and never switched here: a real strategy is a separate copy.
+     *
+     * @param id      The strategy ID
+     * @param request The new values; null fields keep the stored value
+     * @return The stored strategy
+     * @throws IllegalArgumentException if the strategy is running, archived, or a value is invalid
+     * @throws NoSuchElementException   if the strategy does not exist
+     */
+    public synchronized LiveStrategy update(String id, LiveStrategyRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        LiveStrategy strategy = require(id);
+        if (strategy.isArchived()) {
+            throw new IllegalArgumentException("the strategy is archived");
+        }
+        if (runners.containsKey(id)) {
+            throw new IllegalArgumentException("stop the strategy before editing it");
+        }
+        String name = required("name",
+                request.getName() == null ? strategy.getName() : request.getName());
+        boolean started = strategy.hasStarted();
+
+        String market = strategy.getMarket();
+        if (request.getMarket() != null && !request.getMarket().isBlank()) {
+            String requested = MarketFormat.toMarket(request.getMarket());
+            MarketFormat.requireEuroQuoted(requested);
+            if (!requested.equals(strategy.getMarket())) {
+                if (started) {
+                    throw new IllegalArgumentException("the market is fixed after the first start; "
+                            + "duplicate the strategy to trade another market");
+                }
+                market = requested;
+            }
+        }
+        CandleInterval interval = CandleInterval.fromCode(strategy.getInterval());
+        if (request.getInterval() != null && !request.getInterval().isBlank()) {
+            CandleInterval requested = CandleInterval.fromCode(request.getInterval());
+            if (!requested.equals(interval)) {
+                if (started) {
+                    throw new IllegalArgumentException("the interval is fixed after the first start; "
+                            + "duplicate the strategy to use another interval");
+                }
+                interval = requested;
+            }
+        }
+        if (request.getDryRun() != null && request.getDryRun() != strategy.isDryRun()) {
+            throw new IllegalArgumentException(
+                    "dry-run is chosen when the strategy is created; create a real copy instead");
+        }
+
+        double amountPerBuy = request.getAmountPerBuy() == null
+                ? strategy.getAmountPerBuy() : request.getAmountPerBuy();
+        requireMinimumAmount(amountPerBuy);
+        int warmUpCandles = request.getWarmUpCandles() == null
+                ? strategy.getWarmUpCandles() : request.getWarmUpCandles();
+        if (warmUpCandles < 0) {
+            throw new IllegalArgumentException("the warm-up candles must not be negative");
+        }
+
+        strategy.setName(name);
+        strategy.setMarket(market);
+        strategy.setInterval(interval.getCode());
+        strategy.setAmountPerBuy(amountPerBuy);
+        strategy.setWarmUpCandles(warmUpCandles);
+        if (request.getMacdParameters() != null) {
+            MacdParameters macd = macdParameters(request);
+            strategy.setMacdFastPeriod(macd.fastPeriod());
+            strategy.setMacdSlowPeriod(macd.slowPeriod());
+            strategy.setMacdSignalPeriod(macd.signalPeriod());
+        }
+        if (request.getSarParameters() != null) {
+            ParabolicSarParameters sar = sarParameters(request);
+            strategy.setSarAcceleration(sar.acceleration());
+            strategy.setSarMaximum(sar.maximum());
+        }
+        if (request.getEntryRules() != null) {
+            RuleGroup entry = ruleGroup("entry", request.getEntryRules(), BacktestDefaults.ENTRY_RULES);
+            strategy.setEntryOperator(entry.operator().name());
+            strategy.setEntryConditions(entry.conditions().stream().map(Enum::name).toList());
+        }
+        if (request.getExitRules() != null) {
+            RuleGroup exit = ruleGroup("exit", request.getExitRules(), BacktestDefaults.EXIT_RULES);
+            strategy.setExitOperator(exit.operator().name());
+            strategy.setExitConditions(exit.conditions().stream().map(Enum::name).toList());
+        }
+        return liveStrategyRepository.save(strategy);
+    }
+
+    /**
+     * Delete a strategy that never started, or archive one that has a history so its recorded
+     * orders and positions survive for the history tab.
+     *
+     * @param id The strategy ID
+     * @return {@code true} when the strategy was archived, {@code false} when it was deleted
+     * @throws IllegalArgumentException if the strategy is running or still holds an open position
+     * @throws NoSuchElementException   if the strategy does not exist
+     */
+    public synchronized boolean delete(String id) {
+        LiveStrategy strategy = require(id);
+        if (runners.containsKey(id)) {
+            throw new IllegalArgumentException("stop the strategy before deleting it");
+        }
+        if (!strategy.hasStarted()) {
+            liveStrategyRepository.delete(strategy);
+            log.info("Deleted live strategy {} (never started)", id);
+            return false;
+        }
+        if (livePositionRepository.findByStrategyIdAndStatus(id, "OPEN").isPresent()) {
+            throw new IllegalArgumentException("close the open position before archiving");
+        }
+        strategy.setArchived(true);
+        liveStrategyRepository.save(strategy);
+        log.info("Archived live strategy {} (it has run, so its history stays)", id);
+        return true;
+    }
+
+    /**
+     * @return All live strategies, including archived ones
      */
     public List<LiveStrategy> all() {
         return liveStrategyRepository.findAll();
+    }
+
+    /**
+     * @return The strategies the live page and the forms offer: everything not archived
+     */
+    public List<LiveStrategy> active() {
+        return liveStrategyRepository.findActive();
     }
 
     /**
@@ -145,6 +272,9 @@ public class LiveStrategyService {
      */
     public synchronized LiveStrategy start(String id) {
         LiveStrategy strategy = require(id);
+        if (strategy.isArchived()) {
+            throw new IllegalArgumentException("the strategy is archived");
+        }
         if (runners.containsKey(id)) {
             return strategy;
         }
@@ -218,7 +348,7 @@ public class LiveStrategyService {
      * @param failedReconciliation The ids of strategies whose reconciliation failed
      */
     public void startEnabled(Collection<String> failedReconciliation) {
-        for (LiveStrategy strategy : liveStrategyRepository.findByEnabledTrue()) {
+        for (LiveStrategy strategy : liveStrategyRepository.findActiveEnabled()) {
             if (failedReconciliation.contains(strategy.getId())) {
                 log.error("Live strategy {} not started: reconciliation failed; restart after fixing",
                         strategy.getId());
@@ -262,6 +392,13 @@ public class LiveStrategyService {
         }
         LogicalOperator operator = request.operator() == null ? LogicalOperator.ALL : request.operator();
         return new RuleGroup(operator, request.conditions());
+    }
+
+    private static void requireMinimumAmount(double amountPerBuy) {
+        if (amountPerBuy < LiveTradingService.MINIMUM_ORDER_EUR) {
+            throw new IllegalArgumentException("the amount per buy must be at least "
+                    + LiveTradingService.MINIMUM_ORDER_EUR + " EUR");
+        }
     }
 
     private static String required(String name, String value) {

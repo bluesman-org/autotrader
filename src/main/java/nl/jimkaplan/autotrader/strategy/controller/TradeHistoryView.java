@@ -27,7 +27,7 @@ public record TradeHistoryView(List<TradeRowView> rows, List<HeaderView> headers
      * One closed round trip.
      *
      * @param number       The row number in the current view (continues across pages)
-     * @param strategyId   The strategy ID, shortened
+     * @param strategyLabel The strategy's name, or its shortened ID when the name is missing
      * @param chipClass    The strategy chip's colour class
      * @param hueClass     The row accent's colour class
      * @param typeLabel    {@code DRY RUN} or {@code REAL}
@@ -40,7 +40,7 @@ public record TradeHistoryView(List<TradeRowView> rows, List<HeaderView> headers
      * @param resultClass  {@code pos}/{@code neg}
      * @param details      The expandable detail
      */
-    public record TradeRowView(int number, String strategyId, String chipClass, String hueClass,
+    public record TradeRowView(int number, String strategyLabel, String chipClass, String hueClass,
                                String typeLabel, String typeClass, String entryText, String exitText,
                                String priceText, String quantityText, String resultText,
                                String resultClass, DetailsView details) {
