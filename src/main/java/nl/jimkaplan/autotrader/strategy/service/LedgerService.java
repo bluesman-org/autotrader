@@ -552,7 +552,7 @@ public class LedgerService {
             double cashFee = quote(market).equals(fee.currency()) ? fee.amount() : 0;
             double netCash = isBuy(order) ? -(amount * price + cashFee) : amount * price - cashFee;
             rows.add(new FillRowView(
-                    fill.getTimestamp() == null ? DASH : display.clockSecond(fill.getTimestamp()),
+                    fill.getTimestamp() == null ? DASH : display.secondYear(fill.getTimestamp()),
                     amount8(amount), euro(price), feeText(fee),
                     Boolean.TRUE.equals(fill.getTaker()) ? "taker" : "maker",
                     signed(netCash), signClass(netCash)));

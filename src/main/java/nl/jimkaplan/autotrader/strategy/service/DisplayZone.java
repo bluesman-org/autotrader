@@ -18,6 +18,7 @@ public final class DisplayZone {
     private final DateTimeFormatter minuteFormat;
     private final DateTimeFormatter minuteYearFormat;
     private final DateTimeFormatter secondFormat;
+    private final DateTimeFormatter secondYearFormat;
     private final DateTimeFormatter clockFormat;
     private final DateTimeFormatter clockSecondFormat;
     private final DateTimeFormatter dayFormat;
@@ -33,6 +34,7 @@ public final class DisplayZone {
         this.minuteFormat = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH).withZone(zone);
         this.minuteYearFormat = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", Locale.ENGLISH).withZone(zone);
         this.secondFormat = DateTimeFormatter.ofPattern("d MMM HH:mm:ss", Locale.ENGLISH).withZone(zone);
+        this.secondYearFormat = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm:ss", Locale.ENGLISH).withZone(zone);
         this.clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH).withZone(zone);
         this.clockSecondFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ENGLISH).withZone(zone);
         this.dayFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH).withZone(zone);
@@ -85,6 +87,15 @@ public final class DisplayZone {
      */
     public String date(Instant when) {
         return dateFormat.format(when);
+    }
+
+    /**
+     * @param when The moment
+     * @return The date with its year and the second, e.g. {@code 14 Oct 2026 22:31:04} — a fill can
+     *         land on another day than the order that carries it
+     */
+    public String secondYear(Instant when) {
+        return secondYearFormat.format(when);
     }
 
     /**

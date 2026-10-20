@@ -104,7 +104,7 @@ class LedgerServiceTest {
         assertEquals("€0,08", sell.feeText());
         assertEquals("0,0015", sell.balanceAfterText());
         assertEquals(1, sell.fills().size());
-        assertEquals("09:00:00", sell.fills().get(0).timeText());
+        assertEquals("14 Oct 2026 09:00:00", sell.fills().get(0).timeText());
         assertEquals("0,00050000", sell.fills().get(0).amountText());
         assertEquals("€76.000,00", sell.fills().get(0).priceText());
         assertEquals("€0,0800", sell.fills().get(0).feeText());
