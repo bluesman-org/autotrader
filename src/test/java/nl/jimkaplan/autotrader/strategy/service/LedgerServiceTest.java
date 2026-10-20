@@ -221,6 +221,7 @@ class LedgerServiceTest {
                         balanceOf("BTC", "0"), balanceOf("EUR", "1000")});
         List<Transaction> raw = List.of(
                 margin("2026-10-20T14:57:17Z", "margin_loan_collateral_deposit", "EUR", "100"),
+                margin("2026-10-20T09:00:00Z", "Deposit", "EUR", "50"),
                 staking("2026-10-19T10:00:00Z", "VET", "1.05", null));
         when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
                 .thenAnswer(invocation -> {
@@ -239,6 +240,9 @@ class LedgerServiceTest {
         assertTrue(view.filters().typeOptions().stream().anyMatch(option ->
                 option.value().equals("margin_loan_collateral_deposit")
                         && option.label().equals("Margin loan collateral deposit")));
+        // The documented "deposit" is not duplicated by an API entry spelled "Deposit".
+        assertEquals(1, view.filters().typeOptions().stream()
+                .filter(option -> option.value().equalsIgnoreCase("deposit")).count());
         assertEquals(1, view.rawRows().size());
         assertEquals("margin_loan_collateral_deposit", view.rawRows().get(0).typeText());
         assertEquals(1, view.rawTotals().size());
@@ -247,6 +251,35 @@ class LedgerServiceTest {
         assertEquals("EUR", total.currency());
         assertEquals("€100,00", total.amountText());
         assertEquals(1, total.transactions());
+    }
+
+    @Test
+    void aSelectedRawTypeStaysInTheFilterWhenThePeriodLacksIt() {
+        when(credentials.get()).thenReturn(Optional.of(stored()));
+        when(strategies.all()).thenReturn(List.of());
+        when(markets.selectable()).thenReturn(List.of("BTC-EUR"));
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(new GetAccountBalanceResponse[]{
+                        balanceOf("BTC", "0"), balanceOf("EUR", "1000")});
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> invocation.getArgument(0).toString().contains("type=")
+                        ? new GetAccountHistoryResponse(List.of(), 1, 1, 200)
+                        : new GetAccountHistoryResponse(List.of(
+                                staking("2026-10-19T10:00:00Z", "VET", "1.05", null)), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerRequest request = new LedgerRequest();
+        request.setView("raw");
+        request.setType(List.of("margin_loan_collateral_deposit"));
+        LedgerView view = service.view(request);
+
+        assertEquals(List.of("margin_loan_collateral_deposit"), view.filters().type());
+        assertTrue(view.filters().typeOptions().stream().anyMatch(option ->
+                option.value().equals("margin_loan_collateral_deposit")));
+        assertEquals(0, view.rawRows().size());
+        assertEquals(0, view.rawTotals().size());
     }
 
     @Test

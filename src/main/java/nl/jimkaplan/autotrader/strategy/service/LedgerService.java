@@ -118,6 +118,9 @@ public class LedgerService {
             new Option("external_transferred_funds", "External transferred funds"),
             new Option("manually_assigned", "Manually assigned"),
             new Option("manually_assigned_bitvavo", "Manually assigned (Bitvavo)"));
+    private static final Set<String> RAW_TYPE_VALUES = RAW_TYPE_OPTIONS.stream()
+            .map(Option::value)
+            .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
     private static final List<Option> STATUS_OPTIONS = List.of(
             new Option("open", "Open"),
             new Option("awaitingTrigger", "Awaiting trigger"),
@@ -225,12 +228,10 @@ public class LedgerService {
         Map<String, Balance> balances = balances(credentials, fills);
         Map<String, Basis> bases = bases(fills, markets);
 
-        List<String> typeFilters = filters.type();
-        List<String> statusFilters = filters.status();
         List<OrderResponse> filtered = periodOrders.stream()
                 .filter(order -> matchesSide(order, request.getSide()))
-                .filter(order -> matchesType(order, typeFilters))
-                .filter(order -> matchesStatus(order, statusFilters))
+                .filter(order -> matchesType(order, filters.type()))
+                .filter(order -> matchesStatus(order, filters.status()))
                 .toList();
         String sortKey = sortKey(request.getSort());
         boolean ascending = "asc".equalsIgnoreCase(request.getDir());
@@ -252,12 +253,10 @@ public class LedgerService {
 
         List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
                 : List.of();
-        if (raw) {
-            // Rebuild with the transaction types this period actually contains, so an
-            // undocumented type (margin collateral, for example) is offered and can be selected.
-            filters = filters(request, market, true, rawEntries);
-        }
-        List<Transaction> rawFiltered = raw ? filterRaw(rawEntries, filters.type()) : List.of();
+        // The order summary above filters on the request's order types; the raw table below uses
+        // the rebuilt options, which also name the transaction types this period actually contains.
+        FiltersView viewFilters = raw ? filters(request, market, true, rawEntries) : filters;
+        List<Transaction> rawFiltered = raw ? filterRaw(rawEntries, viewFilters.type()) : List.of();
         int rawPages = pages(rawFiltered.size(), pageSize);
         int rawPage = Math.min(clamp(request.getPage()), rawPages);
         List<RawRowView> rawRows = raw ? rawRows(rawFiltered, rawPage, pageSize) : List.of();
@@ -265,8 +264,8 @@ public class LedgerService {
                 ? pairTotals(filtered, results, euroFees, market) : List.of();
         List<RawTotalView> rawTotals = raw ? rawTotals(rawFiltered) : List.of();
 
-        return new LedgerView(null, price, filters,
-                headers(request, sortKey, ascending, filters.amountHeader(), pageSize),
+        return new LedgerView(null, price, viewFilters,
+                headers(request, sortKey, ascending, viewFilters.amountHeader(), pageSize),
                 totals(filtered, bases, results, balances, books, market, all, range, skipped),
                 rows, pager(request, sorted.size(), page, pages, sortKey,
                         ascending ? "asc" : "desc"), raw,
@@ -666,12 +665,19 @@ public class LedgerService {
                 request.getToDate());
         List<Option> typeOptions = new ArrayList<>(raw ? RAW_TYPE_OPTIONS : ORDER_TYPE_OPTIONS);
         if (raw) {
-            Set<String> known = RAW_TYPE_OPTIONS.stream().map(Option::value)
-                    .collect(Collectors.toSet());
             rawEntries.stream().map(Transaction::getType)
-                    .filter(type -> type != null && !known.contains(type))
-                    .distinct().sorted()
+                    .filter(type -> type != null && !RAW_TYPE_VALUES.contains(type))
+                    .collect(Collectors.toCollection(
+                            () -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)))
                     .forEach(type -> typeOptions.add(new Option(type, rawTypeLabel(type))));
+            // A selected type that this period does not contain stays in the list, so the filter
+            // stays applied and the table says the period has none instead of showing everything.
+            if (request.getType() != null) {
+                request.getType().stream().filter(LedgerService::notBlank)
+                        .filter(type -> typeOptions.stream()
+                                .noneMatch(option -> option.value().equalsIgnoreCase(type)))
+                        .forEach(type -> typeOptions.add(new Option(type, rawTypeLabel(type))));
+            }
         }
         List<Option> statusOptions = raw ? List.of() : STATUS_OPTIONS;
         return new FiltersView(request.getSide(), market, amountHeader(market),
@@ -929,7 +935,7 @@ public class LedgerService {
      * @return The type with its underscores read as spaces, e.g. {@code Margin loan collateral deposit}
      */
     private static String prettyType(String type) {
-        String text = type.replace('_', ' ').trim();
+        String text = type == null ? "" : type.replace('_', ' ').trim();
         return text.isEmpty() ? type
                 : Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }
