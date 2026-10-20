@@ -44,8 +44,8 @@ public class LiveStrategyController {
      */
     @Operation(summary = "Create a live strategy",
             description = "Creates a strategy from the same rules, parameters and sizing a backtest " +
-                          "uses. Dry-run defaults to true; live orders need an active bot " +
-                          "configuration's credentials and operator ID.")
+                          "uses. Dry-run defaults to true; live orders need the system-wide Bitvavo " +
+                          "API key, including its operator ID, stored on the settings page.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Strategy created",
                     content = @Content(mediaType = "application/json",

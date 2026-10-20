@@ -101,7 +101,6 @@ class LiveStrategyServiceTest {
     @Test
     void create_whenLive_storesTheCustomConfiguration() {
         LiveStrategyRequest request = new LiveStrategyRequest();
-        request.setBotId("bot-1");
         request.setMarket("ETH-EUR");
         request.setInterval("4h");
         request.setAmountPerBuy(50.0);
@@ -118,7 +117,6 @@ class LiveStrategyServiceTest {
 
         LiveStrategy stored = liveStrategyService.create(request);
 
-        assertEquals("bot-1", stored.getBotId());
         assertEquals("ETH-EUR", stored.getMarket());
         assertEquals("4h", stored.getInterval());
         assertEquals(50.0, stored.getAmountPerBuy(), 1e-9);
@@ -319,7 +317,6 @@ class LiveStrategyServiceTest {
 
     private static LiveStrategy stored(String id, String market) {
         LiveStrategy strategy = LiveStrategy.builder()
-                .botId("bot-1")
                 .market(market)
                 .interval("1h")
                 .macdFastPeriod(12)

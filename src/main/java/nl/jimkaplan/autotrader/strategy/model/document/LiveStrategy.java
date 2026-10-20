@@ -14,8 +14,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * A live strategy: the same rules, parameters and sizing a backtest would use, tied to the
- * exchange credentials of a {@code BotConfiguration}, with dry-run on by default.
+ * A live strategy: the same rules, parameters and sizing a backtest would use, signed with the
+ * system-wide Bitvavo credential, with dry-run on by default.
  *
  * <p>Maps to the {@code live_strategies} collection.</p>
  */
@@ -26,14 +26,6 @@ import java.util.List;
 @EqualsAndHashCode(callSuper = true)
 @Document(collection = "live_strategies")
 public class LiveStrategy extends BaseDocument {
-
-    /**
-     * The bot configuration the strategy used to trade with. Historical only: the engine signs its
-     * orders with the system-wide Bitvavo API key (see {@code BitvavoCredentials}), so the field is
-     * ignored and kept for the documents that already carry one.
-     */
-    @Field("bot_id")
-    private String botId;
 
     /**
      * Market in Bitvavo format, e.g. "BTC-EUR".

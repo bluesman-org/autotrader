@@ -10,10 +10,6 @@ import lombok.Data;
 @Data
 public class LiveStrategyRequest {
 
-    @Schema(description = "Bot configuration whose credentials and operator ID are used when " +
-                          "dry-run is off; required then", example = "abc123")
-    private String botId;
-
     @Schema(description = "Market in Bitvavo format", example = "BTC-EUR")
     private String market;
 
