@@ -27,7 +27,6 @@ class DisplayZoneTest {
         assertEquals("14 Oct 2026 22:31", display.minuteYear(when));
         assertEquals("14 Oct 2026", display.date(when));
         assertEquals("14 Oct 22:31:04", display.second(when));
-        assertEquals("14 Oct 2026 22:31:04", display.secondYear(when));
         assertEquals("22:31", display.clock(when));
         assertEquals("22:31:04", display.clockSecond(when));
         assertEquals("14 Oct", display.day(LocalDate.of(2026, 10, 14)));

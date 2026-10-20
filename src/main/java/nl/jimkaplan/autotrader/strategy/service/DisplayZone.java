@@ -18,11 +18,9 @@ public final class DisplayZone {
     private final DateTimeFormatter minuteFormat;
     private final DateTimeFormatter minuteYearFormat;
     private final DateTimeFormatter secondFormat;
-    private final DateTimeFormatter secondYearFormat;
     private final DateTimeFormatter clockFormat;
     private final DateTimeFormatter clockSecondFormat;
     private final DateTimeFormatter dayFormat;
-    private final DateTimeFormatter dayYearFormat;
     private final DateTimeFormatter dateFormat;
 
     public DisplayZone(String timeZone) {
@@ -34,11 +32,9 @@ public final class DisplayZone {
         this.minuteFormat = DateTimeFormatter.ofPattern("d MMM HH:mm", Locale.ENGLISH).withZone(zone);
         this.minuteYearFormat = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", Locale.ENGLISH).withZone(zone);
         this.secondFormat = DateTimeFormatter.ofPattern("d MMM HH:mm:ss", Locale.ENGLISH).withZone(zone);
-        this.secondYearFormat = DateTimeFormatter.ofPattern("d MMM yyyy HH:mm:ss", Locale.ENGLISH).withZone(zone);
         this.clockFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH).withZone(zone);
         this.clockSecondFormat = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.ENGLISH).withZone(zone);
         this.dayFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH).withZone(zone);
-        this.dayYearFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH).withZone(zone);
         this.dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH).withZone(zone);
     }
 
@@ -91,15 +87,6 @@ public final class DisplayZone {
 
     /**
      * @param when The moment
-     * @return The date with its year and the second, e.g. {@code 14 Oct 2026 22:31:04} — a fill can
-     *         land on another day than the order that carries it
-     */
-    public String secondYear(Instant when) {
-        return secondYearFormat.format(when);
-    }
-
-    /**
-     * @param when The moment
      * @return The date and second, e.g. {@code 14 Oct 22:31:04}
      */
     public String second(Instant when) {
@@ -135,7 +122,7 @@ public final class DisplayZone {
      * @return The day with its year, e.g. {@code 14 Oct 2026} — a daily table can span years
      */
     public String dayYear(LocalDate day) {
-        return dayYearFormat.format(day);
+        return dateFormat.format(day);
     }
 
     /**

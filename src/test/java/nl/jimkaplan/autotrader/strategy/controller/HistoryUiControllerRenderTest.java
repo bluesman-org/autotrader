@@ -202,7 +202,7 @@ class HistoryUiControllerRenderTest {
     }
 
     private static LedgerView ledgerView(String unrealisedHint, String unrealisedText) {
-        LedgerView.FillRowView fill = new LedgerView.FillRowView("14 Oct 2026 09:00:00", "0.00050000", "€76.000,00",
+        LedgerView.FillRowView fill = new LedgerView.FillRowView("09:00:00", "0.00050000", "€76.000,00",
                 "€0,0800", "taker", "+€37,92", "pos");
         LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00", "SELL", "side-sell",
                 "takeProfitLimit", "BTC-EUR", "0.00050000", "€76.000,00", "awaiting trigger", "",
