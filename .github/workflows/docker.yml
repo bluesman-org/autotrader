@@ -1,9 +1,9 @@
 name: Docker image
 
-# The image build is not covered by the coverage workflow (it skips Docker) and only the deploy
-# workflow builds it, on dispatch. This job mirrors that arm64 build — through the pom's own buildx
-# configuration, under QEMU — whenever the pieces that shape the image change, and validates the
-# compose files.
+# The image build is not covered by the coverage workflow (it skips Docker). This job builds the
+# arm64 image through the pom's own buildx configuration, under QEMU, whenever the pieces that shape
+# the image change, and validates the compose files. Nothing is pushed: the box builds the image it
+# serves from docker-compose.dev.yml.
 on:
   pull_request:
     paths:

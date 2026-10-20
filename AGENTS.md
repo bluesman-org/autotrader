@@ -222,9 +222,8 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
 
 6. **GitHub Actions**:
     - Use the latest major version of every action when a workflow is created or updated
-      (currently `actions/checkout@v7`, `actions/setup-java@v6`, `docker/login-action@v4`,
-      `easingthemes/ssh-deploy@v6`, `appleboy/ssh-action@v1`), and never pin an action to a moving
-      branch such as `@master` or `@main`.
+      (currently `actions/checkout@v7`, `actions/setup-java@v6`, `docker/setup-qemu-action@v4`),
+      and never pin an action to a moving branch such as `@master` or `@main`.
 
 ## Development Workflow
 
