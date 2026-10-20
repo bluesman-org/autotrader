@@ -63,6 +63,18 @@ public class LedgerRequest {
     private String view;
 
     /**
+     * The order table's sort column: {@code date} (the default), {@code side}, {@code type},
+     * {@code market}, {@code amount}, {@code price}, {@code status}, {@code balance},
+     * {@code fee}, {@code netCash}, {@code fills} or {@code pnl}.
+     */
+    private String sort;
+
+    /**
+     * The sort direction: {@code asc}, or {@code desc} when absent.
+     */
+    private String dir;
+
+    /**
      * The order page number, 1-based.
      */
     private Integer page;

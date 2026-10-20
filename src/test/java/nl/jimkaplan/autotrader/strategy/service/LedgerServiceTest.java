@@ -17,9 +17,12 @@ import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -204,6 +207,130 @@ class LedgerServiceTest {
         assertEquals("deposit", deposit.typeText());
         assertEquals("", deposit.typeClass());
         assertEquals("1 Oct 2026 00:00", deposit.timeText());
+    }
+
+    @Test
+    void theOrderTableSortsByTheRequestedColumnAndTogglesTheHeader() {
+        accountReadable();
+
+        LedgerRequest request = new LedgerRequest();
+        request.setSort("date");
+        request.setDir("asc");
+        LedgerView view = service.view(request);
+
+        assertEquals("13 Oct 2026 10:00", view.rows().get(0).dateText());
+        assertEquals("15 Oct 2026 08:00", view.rows().get(2).dateText());
+        LedgerView.HeaderView date = view.headers().get(0);
+        assertEquals("Order date", date.label());
+        assertTrue(date.active());
+        assertEquals("▲", date.arrow());
+        assertTrue(date.query().contains("sort=date"));
+        assertTrue(date.query().contains("dir=desc"));
+    }
+
+    @Test
+    void theOrderTableSortsComputedColumnsAndKeepsAbsentValuesLast() {
+        accountReadable();
+
+        LedgerRequest byAmount = new LedgerRequest();
+        byAmount.setSort("amount");
+        byAmount.setDir("desc");
+        LedgerView amounts = service.view(byAmount);
+        assertEquals("0,00200000", amounts.rows().get(0).amountText());
+        assertEquals("0,00050000", amounts.rows().get(2).amountText());
+
+        LedgerRequest byPnl = new LedgerRequest();
+        byPnl.setSort("pnl");
+        byPnl.setDir("asc");
+        LedgerView pnl = service.view(byPnl);
+        assertEquals("+€0,60", pnl.rows().get(0).pnlText());
+        assertEquals("—", pnl.rows().get(1).pnlText());
+        assertEquals("—", pnl.rows().get(2).pnlText());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "date, asc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "date, desc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "side, asc, 15 Oct 2026 08:00|13 Oct 2026 10:00|14 Oct 2026 09:00",
+            "side, desc, 14 Oct 2026 09:00|15 Oct 2026 08:00|13 Oct 2026 10:00",
+            "type, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "type, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "market, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "market, desc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "amount, asc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "amount, desc, 15 Oct 2026 08:00|13 Oct 2026 10:00|14 Oct 2026 09:00",
+            "price, asc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "price, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "status, asc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "status, desc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "balance, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "balance, desc, 13 Oct 2026 10:00|15 Oct 2026 08:00|14 Oct 2026 09:00",
+            "fee, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "fee, desc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "netCash, asc, 13 Oct 2026 10:00|14 Oct 2026 09:00|15 Oct 2026 08:00",
+            "netCash, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "fills, asc, 15 Oct 2026 08:00|14 Oct 2026 09:00|13 Oct 2026 10:00",
+            "fills, desc, 14 Oct 2026 09:00|13 Oct 2026 10:00|15 Oct 2026 08:00",
+            "pnl, asc, 14 Oct 2026 09:00|15 Oct 2026 08:00|13 Oct 2026 10:00",
+            "pnl, desc, 14 Oct 2026 09:00|15 Oct 2026 08:00|13 Oct 2026 10:00"
+    })
+    void everyOrderColumnSortsInBothDirections(String sort, String dir, String expected) {
+        accountReadable();
+
+        LedgerRequest request = new LedgerRequest();
+        request.setSort(sort);
+        request.setDir(dir);
+        LedgerView view = service.view(request);
+
+        assertEquals(List.of(expected.split("\\|")),
+                view.rows().stream().map(LedgerView.OrderRowView::dateText).toList(),
+                sort + " " + dir);
+    }
+
+    @Test
+    void theRawViewFiltersByTransactionTypeAndSumsIncome() {
+        when(credentials.get()).thenReturn(Optional.of(stored()));
+        when(strategies.all()).thenReturn(List.of());
+        when(markets.selectable()).thenReturn(List.of("BTC-EUR"));
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(new GetAccountBalanceResponse[]{
+                        balanceOf("BTC", "0"), balanceOf("EUR", "1000")});
+        List<Transaction> raw = List.of(
+                staking("2026-10-01T10:00:00Z", "SAND", "0.0027269", "0xabc123"),
+                staking("2026-10-02T10:00:00Z", "SAND", "0.0028", null),
+                deposit("2026-10-03T10:00:00Z", "BTC", "0.5", "bc1qexample"));
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String endpoint = invocation.getArgument(0);
+                    return endpoint.contains("type=")
+                            ? new GetAccountHistoryResponse(List.of(), 1, 1, 200)
+                            : new GetAccountHistoryResponse(raw, 1, 1, 200);
+                });
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+
+        LedgerRequest request = new LedgerRequest();
+        request.setView("raw");
+        request.setType(List.of("staking"));
+        LedgerView view = service.view(request);
+
+        assertEquals(2, view.rawRows().size());
+        assertEquals("staking", view.rawRows().get(0).typeText());
+        assertEquals("—", view.rawRows().get(0).addressText());
+        assertEquals("0xabc123", view.rawRows().get(1).addressText());
+        assertEquals(1, view.rawTotals().size());
+        LedgerView.RawTotalView total = view.rawTotals().get(0);
+        assertEquals("Staking", total.typeText());
+        assertEquals("SAND", total.currency());
+        assertEquals("0,0055269 SAND", total.amountText());
+        assertEquals(2, total.transactions());
+        assertTrue(view.filters().typeOptions().stream()
+                .anyMatch(option -> option.label().equals("Staking")));
+        assertTrue(view.filters().typeOptions().stream()
+                .noneMatch(option -> option.value().equals("market")));
+        assertTrue(view.filters().statusOptions().isEmpty());
     }
 
     @Test
@@ -653,10 +780,17 @@ class LedgerServiceTest {
                             endpoint.contains("type=buy") ? buys : sells, 1, 1, 200);
                 });
         OrderResponse btcSell = sellOrder("BTC-EUR", "2026-10-14T10:00:00Z", "1", "110");
+        OrderResponse btcBuy = baseOrder("2026-10-13T10:00:00Z", "buy", "market");
+        btcBuy.setMarket("BTC-EUR");
+        btcBuy.setStatus("filled");
+        btcBuy.setFilledAmount(new BigDecimal("1"));
+        btcBuy.setFilledAmountQuote(new BigDecimal("100"));
+        btcBuy.setFeePaid(BigDecimal.ZERO);
+        btcBuy.setFills(List.of(fill("2026-10-13T10:00:00Z", "1", "100", "0")));
         OrderResponse ethSell = sellOrder("ETH-EUR", "2026-10-14T11:00:00Z", "2", "90");
         when(client.get(argThat(url -> url != null && url.contains("market=BTC-EUR")),
                 eq(OrderResponse[].class), anyString(), anyString()))
-                .thenReturn(new OrderResponse[]{btcSell});
+                .thenReturn(new OrderResponse[]{btcBuy, btcSell});
         when(client.get(argThat(url -> url != null && url.contains("market=ETH-EUR")),
                 eq(OrderResponse[].class), anyString(), anyString()))
                 .thenReturn(new OrderResponse[]{ethSell});
@@ -675,15 +809,27 @@ class LedgerServiceTest {
         assertEquals("all", view.filters().market());
         assertEquals("Amount", view.filters().amountHeader());
         assertEquals("All pairs", view.filters().marketOptions().get(0).label());
-        assertEquals(2, view.rows().size());
+        assertEquals(3, view.rows().size());
         assertEquals("ETH-EUR", view.rows().get(0).marketText());
         assertEquals("−€20,00", view.rows().get(0).pnlText());
         assertEquals("+€10,00", view.rows().get(1).pnlText());
+        assertEquals("—", view.rows().get(2).pnlText());
         assertEquals("−€10,00", view.totals().realisedText());
         assertEquals("€0,00", view.totals().feesText());
         assertEquals("€1.000,00", view.totals().balanceText());
         assertEquals("—", view.totals().unrealisedText());
         assertTrue(view.totals().unrealisedHint().contains("Nothing is held"));
+        assertEquals(2, view.pairTotals().size());
+        LedgerView.PairTotalView btc = view.pairTotals().get(0);
+        assertEquals("BTC-EUR", btc.market());
+        assertEquals(2, btc.orders());
+        assertEquals("€100,00", btc.buyVolumeText());
+        assertEquals("€110,00", btc.sellVolumeText());
+        assertEquals("+€10,00", btc.realisedText());
+        LedgerView.PairTotalView eth = view.pairTotals().get(1);
+        assertEquals("ETH-EUR", eth.market());
+        assertEquals("€180,00", eth.sellVolumeText());
+        assertEquals("−€20,00", eth.realisedText());
     }
 
     @Test
@@ -730,7 +876,7 @@ class LedgerServiceTest {
         when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
                 .thenReturn(new GetAccountBalanceResponse[]{balanceOf("BTC", "1"), balanceOf("EUR", "1000")});
         when(client.getPublic(eq("/ticker/book"), eq(GetBookResponse[].class)))
-                .thenReturn(new GetBookResponse[]{});
+                .thenThrow(new ResourceAccessException("down"));
 
         LedgerRequest request = new LedgerRequest();
         request.setMarket("all");
@@ -1196,6 +1342,28 @@ class LedgerServiceTest {
         }
         entry.setFeesCurrency("EUR");
         entry.setFeesAmount(new BigDecimal(fee));
+        return entry;
+    }
+
+    private static Transaction staking(String when, String currency, String amount,
+                                       String address) {
+        Transaction entry = new Transaction();
+        entry.setType("staking");
+        entry.setExecutedAt(Instant.parse(when));
+        entry.setReceivedCurrency(currency);
+        entry.setReceivedAmount(new BigDecimal(amount));
+        entry.setAddress(address);
+        return entry;
+    }
+
+    private static Transaction deposit(String when, String currency, String amount,
+                                       String address) {
+        Transaction entry = new Transaction();
+        entry.setType("deposit");
+        entry.setExecutedAt(Instant.parse(when));
+        entry.setReceivedCurrency(currency);
+        entry.setReceivedAmount(new BigDecimal(amount));
+        entry.setAddress(address);
         return entry;
     }
 
