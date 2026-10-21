@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.model.document;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -100,6 +101,16 @@ public class LiveOrder extends BaseDocument {
      */
     @Field("order_id")
     private String orderId;
+
+    /**
+     * Whether the engine must stand down for this strategy until reconciliation settles this row.
+     * Set on a real pre-write and on an ambiguous failure; cleared when the row fills, is rejected
+     * terminally by the exchange, or is proven never accepted. Engine bookkeeping only: kept out of
+     * the API.
+     */
+    @JsonIgnore
+    @Field("awaiting_reconciliation")
+    private boolean awaitingReconciliation;
 
     @Field("error_message")
     private String errorMessage;

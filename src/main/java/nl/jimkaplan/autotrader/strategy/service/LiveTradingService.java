@@ -102,10 +102,7 @@ public class LiveTradingService {
                     strategy.getId(), candleSeries.length(), strategy.getWarmUpCandles());
             return null;
         }
-        boolean unsettled = liveOrderRepository.existsByStrategyIdAndStatus(strategy.getId(), "PENDING")
-                || liveOrderRepository.existsByStrategyIdAndStatusAndOrderIdIsNull(
-                        strategy.getId(), "FAILED");
-        if (unsettled) {
+        if (liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(strategy.getId())) {
             if (standDownWarned.add(strategy.getId())) {
                 log.warn("{} has a real order awaiting reconciliation; no new decisions until it is "
                         + "settled", strategy.getId());
@@ -362,6 +359,7 @@ public class LiveTradingService {
                 .price(price)
                 .fee(fee)
                 .clientOrderId(clientOrderId.toString())
+                .awaitingReconciliation(true)
                 .createdTime(Instant.now())
                 .build();
         liveOrderRepository.save(order);
@@ -383,11 +381,13 @@ public class LiveTradingService {
             if (LiveOrderStatus.isTerminalNonFill(status)) {
                 String note = LiveOrderStatus.partialFillNote(response.getFilledAmountQuote());
                 order.setStatus("FAILED");
+                order.setAwaitingReconciliation(false);
                 order.setErrorMessage("exchange order status: " + status + note);
                 liveOrderRepository.save(order);
                 log.warn("Order {} of strategy {} came back {}; recorded FAILED{}",
                         response.getOrderId(), order.getStrategyId(), status, note);
             } else {
+                order.setAwaitingReconciliation(true);
                 liveOrderRepository.save(order);
                 log.warn("Order {} of strategy {} came back {}; left PENDING for reconciliation",
                         response.getOrderId(), order.getStrategyId(), status);
@@ -405,6 +405,7 @@ public class LiveTradingService {
         order.setFee(TradeMath.filled(response.getFeePaid(), TradeMath.zeroIfNull(order.getFee())));
         order.setOrderId(String.valueOf(response.getOrderId()));
         order.setStatus("FILLED");
+        order.setAwaitingReconciliation(false);
         liveOrderRepository.save(order);
         return true;
     }
@@ -422,6 +423,7 @@ public class LiveTradingService {
             return;
         }
         order.setStatus("FAILED");
+        order.setAwaitingReconciliation(true);
         order.setErrorMessage(message);
         liveOrderRepository.save(order);
     }

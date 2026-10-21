@@ -31,12 +31,13 @@ import java.util.stream.Collectors;
  * an order submission and its response.
  *
  * <p>A real order is written as a {@code PENDING} row carrying the client order ID that was sent
- * with it, so at boot this service can look that ID up in the exchange's order history and settle
- * the row: a filled order becomes {@code FILLED} with the exchange's figures, and a {@code PENDING}
- * row the exchange does not know — in a page known to be complete — was never accepted and becomes
- * {@code FAILED}. An incomplete page (the limit was reached, or an entry could not be read) leaves
- * such a row {@code PENDING} for the next boot. Only the rows of this strategy are ever touched —
- * nothing is adopted from the history that a row's client order ID does not claim — so two
+ * with it and an awaiting-reconciliation marker, so at boot this service can look that ID up in the
+ * exchange's order history and settle the row: a filled order becomes {@code FILLED} with the
+ * exchange's figures, and a row the exchange does not know — in a page known to be complete — was
+ * never accepted and becomes {@code FAILED}. An incomplete page (the limit was reached, or an entry
+ * could not be read) leaves it awaiting the next boot. The same marker covers an ambiguous failure:
+ * a timeout that may have hidden an accepted order. Only the rows of this strategy are ever touched
+ * — nothing is adopted from the history that a row's client order ID does not claim — so two
  * strategies (or the legacy path) trading one account and market cannot contaminate each other's
  * orders or positions.</p>
  *
@@ -47,10 +48,9 @@ import java.util.stream.Collectors;
  * its error, noting any partial fill v1 cannot book; an order that can still fill is warned and left
  * for a later boot. A real {@code FAILED} row recorded before the engine sent a client order ID
  * cannot be attributed and is warned for a manual check. The
- * service is idempotent — once a row is settled it is no longer {@code PENDING} or {@code FAILED},
- * so a second run writes nothing — and it never throws. It returns the ids of the strategies it
- * could not reconcile, so the caller can hold them back instead of letting them trade on stale
- * state.</p>
+ * service is idempotent — every settled outcome clears the awaiting-reconciliation marker, so a
+ * second run writes nothing — and it never throws. It returns the ids of the strategies it could
+ * not reconcile, so the caller can hold them back instead of letting them trade on stale state.</p>
  */
 @Slf4j
 @Service
@@ -193,15 +193,12 @@ public class LiveOrderReconciliationService {
             }
             highest = sequence;
             if (!"filled".equalsIgnoreCase(order.getStatus())) {
-                boolean canStillFill = "open".equalsIgnoreCase(order.getStatus())
-                        || "partiallyFilled".equalsIgnoreCase(order.getStatus());
-                if (!canStillFill) {
-                    // Terminal (or unreadable): a PENDING row could never settle, so keep the
-                    // skip and warn — including about any part the exchange did fill.
-                    log.warn("Recoverable exchange order {} of strategy {} is {} (cannot still fill{})"
-                                    + "; left alone", order.getOrderId(), strategy.getId(),
-                            order.getStatus(), order.getFilledAmountQuote() == null
-                                    ? "" : ", partially filled " + order.getFilledAmountQuote());
+                if (LiveOrderStatus.isTerminalNonFill(order.getStatus())) {
+                    // Terminal: the engine has no row to settle, so keep the skip and warn —
+                    // including about any part the exchange did fill.
+                    log.warn("Recoverable exchange order {} of strategy {} is {}; left alone{}",
+                            order.getOrderId(), strategy.getId(), order.getStatus(),
+                            LiveOrderStatus.partialFillNote(order.getFilledAmountQuote()));
                     continue;
                 }
                 // Persist it as PENDING exactly as the pre-write would have: the normal resolution
@@ -241,6 +238,7 @@ public class LiveOrderReconciliationService {
                 .side(order.getSide().toUpperCase(Locale.ROOT))
                 .status("FILLED")
                 .dryRun(false)
+                .awaitingReconciliation(false)
                 .signalOpenTime(0)
                 .reason("recovered after a restore: filled at the exchange but its record was lost")
                 .amountQuote(amountQuote)
@@ -255,8 +253,8 @@ public class LiveOrderReconciliationService {
 
     /**
      * One {@code PENDING} row for a matched exchange order that can still fill, mirroring what the
-     * pre-write would have saved: the normal resolution settles it once it fills (an order that
-     * later turns terminal stays PENDING under the v1 filled-only resolution, warned each boot).
+     * pre-write would have saved: the normal resolution settles it once it fills, turns a later
+     * terminal status into {@code FAILED}, and otherwise leaves it PENDING.
      */
     private static LiveOrder recoveredPendingRow(LiveStrategy strategy, OrderResponse order, String clientOrderId) {
         Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
@@ -268,6 +266,7 @@ public class LiveOrderReconciliationService {
                 .side(order.getSide().toUpperCase(Locale.ROOT))
                 .status("PENDING")
                 .dryRun(false)
+                .awaitingReconciliation(true)
                 .signalOpenTime(0)
                 .reason("recovered unfilled after a restore: awaiting the exchange's fill")
                 .amountQuote(amountQuote)
@@ -293,19 +292,17 @@ public class LiveOrderReconciliationService {
             }
             return;
         }
-        if (!"PENDING".equals(row.getStatus()) && !"FAILED".equals(row.getStatus())) {
+        if (!row.isAwaitingReconciliation() && !"PENDING".equals(row.getStatus())) {
             return;
         }
         OrderResponse order = history.byClientOrderId().get(row.getClientOrderId());
         if (order == null) {
-            if (!"PENDING".equals(row.getStatus())) {
-                return;
-            }
             if (history.complete()) {
                 notAccepted(row);
             } else {
-                log.info("Pending live order {} of strategy {} was not found in an incomplete page of "
-                        + "the exchange's order history; it will be retried at the next boot",
+                markAwaiting(row);
+                log.info("Live order {} of strategy {} was not found in an incomplete page of the "
+                        + "exchange's order history; it will be retried at the next boot",
                         row.getId(), strategy.getId());
             }
             return;
@@ -313,15 +310,28 @@ public class LiveOrderReconciliationService {
         if (!"filled".equalsIgnoreCase(order.getStatus())) {
             if (LiveOrderStatus.isTerminalNonFill(order.getStatus())) {
                 String note = LiveOrderStatus.partialFillNote(order.getFilledAmountQuote());
+                row.setOrderId(String.valueOf(order.getOrderId()));
                 row.setStatus("FAILED");
+                row.setAwaitingReconciliation(false);
                 row.setErrorMessage("exchange order status: " + order.getStatus() + note);
                 liveOrderRepository.save(row);
                 log.warn("Exchange order {} for strategy {} is {}; settled row {} as FAILED{}",
                         order.getOrderId(), strategy.getId(), order.getStatus(), row.getId(), note);
                 return;
             }
-            log.warn("Exchange order {} for strategy {} is {} (not filled); row {} is left alone",
-                    order.getOrderId(), strategy.getId(), order.getStatus(), row.getId());
+            if ("PENDING".equals(row.getStatus()) && row.isAwaitingReconciliation()) {
+                log.debug("Exchange order {} for strategy {} is {} (can still fill); row {} remains "
+                                + "PENDING", order.getOrderId(), strategy.getId(), order.getStatus(),
+                        row.getId());
+                return;
+            }
+            row.setStatus("PENDING");
+            row.setAwaitingReconciliation(true);
+            row.setErrorMessage(null);
+            liveOrderRepository.save(row);
+            log.info("Exchange order {} for strategy {} is {}; row {} is now PENDING for "
+                            + "reconciliation", order.getOrderId(), strategy.getId(), order.getStatus(),
+                    row.getId());
             return;
         }
         boolean corrected = "FAILED".equals(row.getStatus());
@@ -336,10 +346,18 @@ public class LiveOrderReconciliationService {
 
     private void notAccepted(LiveOrder row) {
         row.setStatus("FAILED");
+        row.setAwaitingReconciliation(false);
         row.setErrorMessage(NOT_ACCEPTED_MESSAGE);
         liveOrderRepository.save(row);
-        log.warn("Pending live order {} was not found in the exchange's order history; "
+        log.warn("Live order {} was not found in the exchange's order history; "
                 + "treated as never accepted", row.getId());
+    }
+
+    private void markAwaiting(LiveOrder row) {
+        if (!row.isAwaitingReconciliation()) {
+            row.setAwaitingReconciliation(true);
+            liveOrderRepository.save(row);
+        }
     }
 
     /**
@@ -348,6 +366,7 @@ public class LiveOrderReconciliationService {
      */
     private static void apply(LiveOrder row, OrderResponse order) {
         row.setStatus("FILLED");
+        row.setAwaitingReconciliation(false);
         row.setOrderId(String.valueOf(order.getOrderId()));
         Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
         Double quantity = TradeMath.amount(order.getFilledAmount(), order.getAmount());

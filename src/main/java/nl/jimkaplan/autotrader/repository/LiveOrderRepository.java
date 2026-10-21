@@ -32,27 +32,15 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     List<LiveOrder> findTop8ByStrategyIdOrderByCreatedTimeDesc(String strategyId);
 
     /**
-     * Whether the strategy has an order in the given status. The engine uses this to stand down
-     * while a real order is still `PENDING`: a slow or partial fill must not trigger a second real
-     * order before the boot reconciliation settles it.
+     * Whether the strategy has a real order the engine must stand down for: a pre-write that has
+     * not been settled, including an ambiguous submission recorded as {@code FAILED}. The marker
+     * is set when the row is written and cleared by every reconciliation outcome, so a timed-out
+     * request that Bitvavo accepted cannot trigger a second order.
      *
      * @param strategyId The strategy ID
-     * @param status     The order status, e.g. {@code PENDING}
      * @return Whether such an order exists
      */
-    boolean existsByStrategyIdAndStatus(String strategyId, String status);
-
-    /**
-     * Whether the strategy has an order in the given status that never received an exchange order
-     * ID. A {@code FAILED} row like this is an ambiguous submission: the request may have reached
-     * the exchange before the timeout. The engine must stand down until reconciliation settles it,
-     * just as it does for a {@code PENDING} row.
-     *
-     * @param strategyId The strategy ID
-     * @param status     The order status, e.g. {@code FAILED}
-     * @return Whether such an order exists
-     */
-    boolean existsByStrategyIdAndStatusAndOrderIdIsNull(String strategyId, String status);
+    boolean existsByStrategyIdAndAwaitingReconciliationTrue(String strategyId);
 
     /**
      * Orders whose decision candle falls in the given range, for the history page's order

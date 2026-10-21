@@ -160,6 +160,7 @@ class LiveOrderReconciliationServiceTest {
         UUID clientOrderId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         LiveOrder failed = failedRow("BUY", clientOrderId, Instant.ofEpochMilli(START), "entry ALL [TEST]");
+        failed.setAwaitingReconciliation(true);
         when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(failed));
         when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
                 .thenReturn(new OrderResponse[]{order(orderId, "buy", "filled", START, clientOrderId,
@@ -169,6 +170,7 @@ class LiveOrderReconciliationServiceTest {
         service.reconcileAll();
 
         assertEquals("FILLED", failed.getStatus());
+        assertFalse(failed.isAwaitingReconciliation());
         assertEquals(orderId.toString(), failed.getOrderId());
         assertEquals(100.0, failed.getAmountQuote(), 1e-9);
         assertEquals(0.001, failed.getQuantity(), 1e-12);
@@ -185,6 +187,7 @@ class LiveOrderReconciliationServiceTest {
         stubStrategyAndAccount();
         UUID clientOrderId = UUID.randomUUID();
         LiveOrder failed = failedRow("BUY", clientOrderId, Instant.ofEpochMilli(START), null);
+        failed.setAwaitingReconciliation(true);
         when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(failed));
         when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
                 .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy", "filled", START, clientOrderId,
@@ -219,9 +222,10 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
-    void aFailedRowWithAnUnknownClientOrderIdIsLeftAlone() {
+    void anAmbiguousFailedRowMissingFromACompletePageIsMarkedNeverAccepted() {
         stubStrategyAndAccount();
         LiveOrder failed = failedRow("BUY", UUID.randomUUID(), Instant.ofEpochMilli(START), "entry ALL [TEST]");
+        failed.setAwaitingReconciliation(true);
         when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of(failed));
         when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
                 .thenReturn(new OrderResponse[0]);
@@ -229,7 +233,9 @@ class LiveOrderReconciliationServiceTest {
         service.reconcileAll();
 
         assertEquals("FAILED", failed.getStatus());
-        verify(liveOrderRepository, never()).save(any());
+        assertFalse(failed.isAwaitingReconciliation());
+        assertEquals(LiveOrderReconciliationService.NOT_ACCEPTED_MESSAGE, failed.getErrorMessage());
+        verify(liveOrderRepository).save(failed);
     }
 
     @Test
@@ -263,6 +269,7 @@ class LiveOrderReconciliationServiceTest {
         assertTrue(service.reconcileAll().isEmpty());
 
         assertEquals("FAILED", pending.getStatus());
+        assertFalse(pending.isAwaitingReconciliation());
         assertEquals(LiveOrderReconciliationService.NOT_ACCEPTED_MESSAGE, pending.getErrorMessage());
     }
 
@@ -311,9 +318,33 @@ class LiveOrderReconciliationServiceTest {
         assertTrue(service.reconcileAll().isEmpty());
 
         assertEquals("FAILED", pending.getStatus());
+        assertNotNull(pending.getOrderId());
+        assertFalse(pending.isAwaitingReconciliation());
         assertTrue(pending.getErrorMessage().contains("canceledMarketProtection"));
         assertTrue(pending.getErrorMessage().contains("partial fill"));
         verify(liveOrderRepository).save(pending);
+    }
+
+    @Test
+    void anAmbiguousFailedRowTurnedTerminalAtTheExchangeIsSettled() {
+        stubStrategyAndAccount();
+        UUID clientOrderId = UUID.randomUUID();
+        LiveOrder failed = failedRow("BUY", clientOrderId, Instant.ofEpochMilli(START), "read timed out");
+        failed.setAwaitingReconciliation(true);
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of(failed));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy",
+                        "canceledMarketProtection", START + MINUTE, clientOrderId,
+                        null, "50.00", null)});
+
+        assertTrue(service.reconcileAll().isEmpty());
+
+        assertEquals("FAILED", failed.getStatus());
+        assertNotNull(failed.getOrderId());
+        assertFalse(failed.isAwaitingReconciliation());
+        assertTrue(failed.getErrorMessage().contains("canceledMarketProtection"));
+        verify(liveOrderRepository).save(failed);
     }
 
     @Test
@@ -331,6 +362,7 @@ class LiveOrderReconciliationServiceTest {
         assertTrue(service.reconcileAll().isEmpty());
 
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         verify(liveOrderRepository, never()).save(any());
     }
 
@@ -569,6 +601,7 @@ class LiveOrderReconciliationServiceTest {
         ArgumentCaptor<LiveOrder> saved = ArgumentCaptor.forClass(LiveOrder.class);
         verify(liveOrderRepository).save(saved.capture());
         assertEquals("PENDING", saved.getValue().getStatus());
+        assertTrue(saved.getValue().isAwaitingReconciliation());
         assertEquals(lostClientOrderId.toString(), saved.getValue().getClientOrderId());
         assertTrue(saved.getValue().getReason().contains("recovered"));
         verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
@@ -840,6 +873,7 @@ class LiveOrderReconciliationServiceTest {
                 .side(side)
                 .status("PENDING")
                 .dryRun(false)
+                .awaitingReconciliation(true)
                 .signalOpenTime(START)
                 .reason(side.toLowerCase() + " ALL [TEST]")
                 .amountQuote(100.0)

@@ -83,9 +83,7 @@ class LiveTradingServiceTest {
         assertEquals("BUY", decision.side());
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("MACD_BULLISH_CROSSOVER"));
-        verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
-        verify(liveOrderRepository)
-                .existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED");
+        verify(liveOrderRepository).existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID);
         verify(liveOrderRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
@@ -96,30 +94,18 @@ class LiveTradingServiceTest {
 
         assertNull(liveTradingService.decide(strategy, rising(60)));
 
-        verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
-        verify(liveOrderRepository)
-                .existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED");
+        verify(liveOrderRepository).existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID);
         verify(liveOrderRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
 
     @Test
-    void decide_returnsNullWhileARealOrderIsPending() {
+    void decide_returnsNullWhileAnOrderAwaitsReconciliation() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(liveOrderRepository.existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING")).thenReturn(true);
-
-        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
-        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
-
-        verify(livePositionRepository, never()).findByStrategyIdAndStatus(any(), any());
-    }
-
-    @Test
-    void decide_returnsNullWhileAFailedOrderWasNeverAnswered() {
-        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        when(liveOrderRepository.existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED"))
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID))
                 .thenReturn(true);
 
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
         assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
 
         verify(livePositionRepository, never()).findByStrategyIdAndStatus(any(), any());
@@ -145,9 +131,7 @@ class LiveTradingServiceTest {
         assertEquals("SELL", decision.side());
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("PRICE_ABOVE_SAR"));
-        verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
-        verify(liveOrderRepository)
-                .existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED");
+        verify(liveOrderRepository).existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID);
         verify(liveOrderRepository, never()).save(any());
     }
 
@@ -310,6 +294,7 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder order = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertNotNull(pending.getClientOrderId());
         assertEquals(100.0, pending.getAmountQuote(), 1e-9);
         assertEquals(100.0 / 62.0, pending.getQuantity(), 1e-9);
@@ -317,6 +302,7 @@ class LiveTradingServiceTest {
         assertEquals(0.2, pending.getFee(), 1e-9);
         assertEquals(pending.getClientOrderId(), request.getClientOrderId().toString());
         assertEquals("FILLED", order.getStatus());
+        assertFalse(order.isAwaitingReconciliation());
         assertEquals(orderId.toString(), order.getOrderId());
         assertEquals(0.001, order.getQuantity(), 1e-12);
         assertEquals(100000.0, order.getPrice(), 1e-9);
@@ -357,6 +343,7 @@ class LiveTradingServiceTest {
 
         assertEquals(2, saves.size());
         assertEquals("PENDING", saves.get(1).getStatus());
+        assertTrue(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         verify(livePositionRepository, never()).save(any());
@@ -383,6 +370,7 @@ class LiveTradingServiceTest {
 
         assertEquals(2, saves.size());
         assertEquals("FAILED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         assertTrue(saves.get(1).getErrorMessage().contains("canceledMarketProtection"));
@@ -409,6 +397,7 @@ class LiveTradingServiceTest {
         liveTradingService.fill(strategy, decision("BUY"), 62.0);
 
         assertEquals("PENDING", saves.get(1).getStatus());
+        assertTrue(saves.get(1).isAwaitingReconciliation());
         assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         verify(livePositionRepository, never()).save(any());
     }
@@ -532,12 +521,14 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder order = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertEquals("SELL", pending.getSide());
         assertEquals(0.001, pending.getQuantity(), 1e-12);
         assertEquals(160.0, pending.getPrice(), 1e-9);
         assertEquals(pending.getClientOrderId(), request.getClientOrderId().toString());
         assertEquals("SELL", order.getSide());
         assertEquals("FILLED", order.getStatus());
+        assertFalse(order.isAwaitingReconciliation());
         assertEquals(110.0, order.getAmountQuote(), 1e-9);
         assertEquals(110000.0, order.getPrice(), 1e-9);
         assertEquals(pending.getClientOrderId(), order.getClientOrderId());
@@ -572,6 +563,7 @@ class LiveTradingServiceTest {
 
         assertEquals(2, saves.size());
         assertEquals("FAILED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         assertTrue(saves.get(1).getErrorMessage().contains("canceledMarketProtection"));
@@ -600,6 +592,7 @@ class LiveTradingServiceTest {
 
         assertEquals(2, saves.size());
         assertEquals("PENDING", saves.get(1).getStatus());
+        assertTrue(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         verify(livePositionRepository, never()).save(any());
@@ -643,8 +636,10 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder failed = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertNotNull(pending.getClientOrderId());
         assertEquals("FAILED", failed.getStatus());
+        assertTrue(failed.isAwaitingReconciliation());
         assertEquals("read timed out", failed.getErrorMessage());
         assertEquals(pending.getClientOrderId(), failed.getClientOrderId());
         verify(livePositionRepository, never()).save(any());
@@ -670,8 +665,10 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder failed = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertEquals("SELL", pending.getSide());
         assertEquals("FAILED", failed.getStatus());
+        assertTrue(failed.isAwaitingReconciliation());
         assertEquals("read timed out", failed.getErrorMessage());
         assertEquals(pending.getClientOrderId(), failed.getClientOrderId());
         assertEquals("OPEN", position.getStatus());
@@ -704,6 +701,7 @@ class LiveTradingServiceTest {
         assertEquals(2, saves.size());
         assertEquals("PENDING", saves.get(0).getStatus());
         assertEquals("FILLED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertNull(saves.get(1).getErrorMessage());
     }
@@ -734,6 +732,7 @@ class LiveTradingServiceTest {
         assertEquals("PENDING", saves.get(0).getStatus());
         assertEquals("SELL", saves.get(1).getSide());
         assertEquals("FILLED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertNull(saves.get(1).getErrorMessage());
     }
@@ -778,6 +777,7 @@ class LiveTradingServiceTest {
                 .fee(order.getFee())
                 .orderId(order.getOrderId())
                 .clientOrderId(order.getClientOrderId())
+                .awaitingReconciliation(order.isAwaitingReconciliation())
                 .errorMessage(order.getErrorMessage())
                 .createdTime(order.getCreatedTime())
                 .build();
