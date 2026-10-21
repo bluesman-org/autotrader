@@ -124,7 +124,9 @@ which holds them back rather than let them trade on stale state.
 
 - **Attribution by client order ID**: reconciliation only ever touches this strategy's own rows —
   a row marked awaiting reconciliation (a pre-write or an ambiguous failure), plus a `PENDING` row
-  from before the marker. Each is looked up in the history by its client order ID, and the restore
+  from before the marker. An unmarked `FAILED` row is intentionally left alone: the first real live
+  run is gated on this change, so no real row can predate the marker (the deployment had only
+  dry-run rows). Each row is looked up in the history by its client order ID, and the restore
   recovery below re-derives IDs from this strategy's own sequence namespace — so nothing is adopted
   that a row or a re-derived ID does not claim. Two strategies (or the legacy TradingView path)
   trading one account and market therefore cannot contaminate each other's orders or positions.
@@ -132,9 +134,10 @@ which holds them back rather than let them trade on stale state.
   `GET /orders?market={market}&start={strategy.createdTime epoch millis}&limit=1000` (Bitvavo's
   maximum page size), so fills that predate the strategy are never considered.
 - **Resolution**: a `PENDING` row found `filled` becomes `FILLED` in place with the exchange's
-  amounts, price (derived as `filledAmountQuote / filledAmount`) and fee, clearing its error. A
-  `FAILED` row found `filled` is corrected the same way and its reason records that the exchange had
-  accepted the order despite the recorded failure. A row the exchange does not know is marked
+  amounts, price (derived as `filledAmountQuote / filledAmount`) and fee, clearing its error. An
+  awaiting `FAILED` row found `filled` is corrected the same way and its reason records that the
+  exchange had accepted the order despite the recorded failure; an unmarked `FAILED` row is left
+  alone. A row the exchange does not know is marked
   `FAILED` ("not found in the exchange's order history within the strategy's lifetime; treated as
   never accepted") — including an ambiguous `FAILED` row — but only when the page is known to be
   complete: a non-null page shorter than the limit with no client-order-ID entry skipped as

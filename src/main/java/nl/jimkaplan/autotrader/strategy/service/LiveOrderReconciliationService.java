@@ -47,10 +47,11 @@ import java.util.stream.Collectors;
  * {@code expired}, {@code rejected}) settles the row as {@code FAILED} with the exchange status in
  * its error, noting any partial fill v1 cannot book; an order that can still fill is warned and left
  * for a later boot. A real {@code FAILED} row recorded before the engine sent a client order ID
- * cannot be attributed and is warned for a manual check. The
- * service is idempotent — every settled outcome clears the awaiting-reconciliation marker, so a
- * second run writes nothing — and it never throws. It returns the ids of the strategies it could
- * not reconcile, so the caller can hold them back instead of letting them trade on stale state.</p>
+ * cannot be attributed and is warned for a manual check. An unmarked {@code FAILED} row is left
+ * alone: the first real live run is gated on the marker, so no real row can predate it. The service
+ * is idempotent — every settled outcome clears the awaiting-reconciliation marker, so a second run
+ * writes nothing — and it never throws. It returns the ids of the strategies it could not
+ * reconcile, so the caller can hold them back instead of letting them trade on stale state.</p>
  */
 @Slf4j
 @Service

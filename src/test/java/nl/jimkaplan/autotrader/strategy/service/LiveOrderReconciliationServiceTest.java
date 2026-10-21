@@ -222,6 +222,25 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
+    void anUnmarkedFailedRowIsLeftAlone() {
+        stubStrategyAndAccount();
+        UUID clientOrderId = UUID.randomUUID();
+        LiveOrder failed = failedRow("BUY", clientOrderId, Instant.ofEpochMilli(START), "read timed out");
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of(failed));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy", "filled", START,
+                        clientOrderId, "0.001", "100.00", "0.2")});
+
+        service.reconcileAll();
+
+        assertEquals("FAILED", failed.getStatus());
+        assertNull(failed.getOrderId());
+        verify(liveOrderRepository, never()).save(any());
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
     void anAmbiguousFailedRowMissingFromACompletePageIsMarkedNeverAccepted() {
         stubStrategyAndAccount();
         LiveOrder failed = failedRow("BUY", UUID.randomUUID(), Instant.ofEpochMilli(START), "entry ALL [TEST]");
