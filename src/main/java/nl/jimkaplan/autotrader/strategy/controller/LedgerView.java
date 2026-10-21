@@ -127,7 +127,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters,
      * One order of the period.
      *
      * @param number           The row number in the current view (continues across pages)
-     * @param dateText         When the order was created
+     * @param dateText         When the order was placed
+     * @param dateNote         When the order traded, shown under the date when that is another day
      * @param side             {@code BUY} or {@code SELL}
      * @param sideClass        The side chip's colour class, or empty for a neutral side
      * @param typeText         The order type
@@ -137,7 +138,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters,
      * @param statusLabel      The status, spelled out
      * @param statusClass      The status badge's colour class, or empty
      * @param triggerText      For a resting or trigger-waiting order: its trigger price and, when
-     *                         the order type carries one, its limit price; empty once it traded
+     *                         the order type carries one, its limit price; the prices a conditional
+     *                         order carried once it traded, so a long wait can be read off the row
      * @param balanceAfterText The base-currency balance after the order's fills
      * @param feeText          The order's total fee, or a dash while nothing filled
      * @param netCashText      The filled cash flow, fees included
@@ -148,7 +150,8 @@ public record LedgerView(String message, PriceView price, FiltersView filters,
      * @param fills            The fills, for the expandable detail
      * @param filledText       What filled of the order and what remains
      */
-    public record OrderRowView(int number, String dateText, String side, String sideClass,
+    public record OrderRowView(int number, String dateText, String dateNote, String side,
+                               String sideClass,
                                String typeText, String marketText, String amountText,
                                String avgPriceText, String statusLabel, String statusClass,
                                String triggerText,

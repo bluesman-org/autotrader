@@ -576,8 +576,10 @@ public class LedgerService {
         // carries is named under its status instead.
         String avgPrice = amount > 0 ? euro(quoteAmount / amount) : DASH;
         double netCash = buy ? -(quoteAmount + cashFee) : quoteAmount - cashFee;
+        Instant moment = moment(order);
         return new OrderRowView(number,
-                order.getCreated() == null ? DASH : display.minuteYear(Instant.ofEpochMilli(order.getCreated())),
+                moment == null ? DASH : display.minuteYear(moment),
+                dateNote(order, moment),
                 buy ? "BUY" : "SELL", buy ? "side-buy" : "side-sell",
                 order.getOrderType() == null ? DASH : order.getOrderType(),
                 order.getMarket() == null ? market : order.getMarket(),
@@ -609,12 +611,28 @@ public class LedgerService {
             double cashFee = quote(market).equals(fee.currency()) ? fee.amount() : 0;
             double netCash = isBuy(order) ? -(amount * price + cashFee) : amount * price - cashFee;
             rows.add(new FillRowView(
-                    fill.getTimestamp() == null ? DASH : display.clockSecond(fill.getTimestamp()),
+                    fillTime(order, fill),
                     amount8(amount), euro(price), feeText(fee),
                     Boolean.TRUE.equals(fill.getTaker()) ? "taker" : "maker",
                     signed(netCash), signClass(netCash)));
         }
         return rows;
+    }
+
+    /**
+     * @param order The order the fill belongs to
+     * @param fill  The fill
+     * @return The fill's time of day, or its date and minute when it traded on another day than
+     *         the row's own date — a fill that arrives days later must not read as that day's time
+     */
+    private String fillTime(OrderResponse order, Fills fill) {
+        if (fill.getTimestamp() == null) {
+            return DASH;
+        }
+        Instant moment = moment(order);
+        return moment != null && !otherDay(moment, fill.getTimestamp())
+                ? display.clockSecond(fill.getTimestamp())
+                : display.secondYear(fill.getTimestamp());
     }
 
     private String filledText(OrderResponse order, String market) {
@@ -1256,6 +1274,59 @@ public class LedgerService {
         return order.getCreated() == null ? 0 : order.getCreated();
     }
 
+    /**
+     * @param order The order
+     * @return The moment the row is dated by: when the order was placed. Its trading moment is
+     *         reported beside that date, because the exchange's own order query — and so the
+     *         period these rows come from — filters on the placement too
+     */
+    private static Instant moment(OrderResponse order) {
+        return order.getCreated() == null ? null : Instant.ofEpochMilli(order.getCreated());
+    }
+
+    /**
+     * @param order The order
+     * @return The last moment the order traded, or {@code null} while nothing filled
+     */
+    private static Instant lastFill(OrderResponse order) {
+        Instant latest = null;
+        if (order.getFills() != null) {
+            for (Fills fill : order.getFills()) {
+                if (fill.getTimestamp() != null
+                        && (latest == null || fill.getTimestamp().isAfter(latest))) {
+                    latest = fill.getTimestamp();
+                }
+            }
+        }
+        return latest;
+    }
+
+    /**
+     * @param order  The order
+     * @param moment The moment the row is dated by
+     * @return When the order traded, shown under the date when that is another day — a conditional
+     *         order armed days before it triggers would otherwise read as a trade on its placement
+     *         day; empty when it is the same day, since the fills panel already shows the times
+     */
+    private String dateNote(OrderResponse order, Instant moment) {
+        Instant traded = lastFill(order);
+        if (moment == null || traded == null || !otherDay(moment, traded)) {
+            return "";
+        }
+        return ("filled".equalsIgnoreCase(order.getStatus()) ? "filled " : "last fill ")
+                + display.minuteYear(traded);
+    }
+
+    /**
+     * @param first  A moment
+     * @param second Another moment
+     * @return Whether the two fall on different days in the zone the page displays
+     */
+    private boolean otherDay(Instant first, Instant second) {
+        return !first.atZone(display.zone()).toLocalDate()
+                .equals(second.atZone(display.zone()).toLocalDate());
+    }
+
     private static long time(Transaction fill) {
         return fill.getExecutedAt() == null ? 0 : fill.getExecutedAt().toEpochMilli();
     }
@@ -1362,12 +1433,16 @@ public class LedgerService {
     /**
      * @param order The order
      * @return For a resting or trigger-waiting order: its trigger price and, when the order type
-     *         carries one, its limit price; empty once it traded or when it carries neither
+     *         carries one, its limit price; for a conditional order that has already traded, the
+     *         same pair, so that a wait of days can be read off the row; empty otherwise
      */
     private static String triggerText(OrderResponse order) {
         boolean waiting = "awaitingtrigger".equalsIgnoreCase(order.getStatus())
                 || "new".equalsIgnoreCase(order.getStatus());
-        if (!waiting) {
+        String type = order.getOrderType() == null ? ""
+                : order.getOrderType().toLowerCase(Locale.ENGLISH);
+        boolean conditional = type.startsWith("stoploss") || type.startsWith("takeprofit");
+        if (!waiting && !(conditional && "filled".equalsIgnoreCase(order.getStatus()))) {
             return "";
         }
         boolean hasTrigger = order.getTriggerPrice() != null && order.getTriggerPrice().signum() != 0;
@@ -1380,9 +1455,8 @@ public class LedgerService {
             parts.add("trigger " + euro(order.getTriggerPrice().doubleValue()));
         }
         if (hasPrice) {
-            boolean limit = order.getOrderType() != null
-                    && order.getOrderType().toLowerCase(Locale.ENGLISH).endsWith("limit");
-            parts.add((limit ? "limit " : "price ") + euro(order.getPrice().doubleValue()));
+            parts.add((type.endsWith("limit") ? "limit " : "price ")
+                    + euro(order.getPrice().doubleValue()));
         }
         return String.join(" · ", parts);
     }

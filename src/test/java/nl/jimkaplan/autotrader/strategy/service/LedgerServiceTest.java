@@ -677,10 +677,10 @@ class LedgerServiceTest {
         assertEquals("trigger €73.000,00 · price €73.100,00", plainTakeProfitRow.triggerText());
         LedgerView.OrderRowView stopLoss = view.rows().get(2);
         assertEquals("trigger €73.000,00", stopLoss.triggerText());
-        // The readout is for the orders still open at the exchange; a traded one shows no trigger
-        // text (its fills carry the average price instead).
+        // A conditional order that already traded keeps its trigger and limit: a take-profit armed
+        // days before it triggers would otherwise carry no sign of what it was waiting for.
         LedgerView.OrderRowView traded = view.rows().get(3);
-        assertEquals("", traded.triggerText());
+        assertEquals("trigger €74.000,00 · limit €74.100,00", traded.triggerText());
 
         // The filter reaches a waiting order by name and through Open.
         LedgerRequest byName = new LedgerRequest();
@@ -1139,7 +1139,111 @@ class LedgerServiceTest {
                 .filter(TradeHistoryView.SizeOption::selected).findFirst().orElseThrow().label());
     }
 
+    @Test
+    void aFillOnAnotherDayIsShownUnderTheOrderDate() {
+        OrderResponse armed = baseOrder("2026-10-08T14:20:00Z", "sell", "takeProfitLimit");
+        armed.setStatus("filled");
+        armed.setTriggerPrice(new BigDecimal("75300"));
+        armed.setPrice(new BigDecimal("75364"));
+        armed.setAmount(new BigDecimal("0.13363920"));
+        armed.setFilledAmount(new BigDecimal("0.13363920"));
+        armed.setFilledAmountQuote(new BigDecimal("10071.00"));
+        armed.setFills(List.of(fill("2026-10-14T16:52:03Z", "0.13363920", "75364", "10.07")));
+        accountWith(armed);
+
+        LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
+
+        assertEquals("8 Oct 2026 14:20", row.dateText());
+        assertEquals("filled 14 Oct 2026 16:52", row.dateNote());
+        // The fills panel carries the day too; a bare 16:52:03 would read as the placement day's.
+        assertEquals("14 Oct 2026 16:52:03", row.fills().get(0).timeText());
+        assertEquals("trigger €75.300,00 · limit €75.364,00", row.triggerText());
+    }
+
+    @Test
+    void anOrderThatFilledTheDayItWasPlacedCarriesNoSecondDate() {
+        accountReadable();
+
+        LedgerView.OrderRowView buy = service.view(new LedgerRequest()).rows().get(2);
+
+        assertEquals("13 Oct 2026 10:00", buy.dateText());
+        assertEquals("", buy.dateNote());
+        assertEquals("10:00:00", buy.fills().get(0).timeText());
+    }
+
+    @Test
+    void anOrderStillFillingOnAnotherDayReadsAsItsLastFill() {
+        OrderResponse partial = baseOrder("2026-10-08T09:00:00Z", "buy", "limit");
+        partial.setStatus("partiallyFilled");
+        partial.setAmount(new BigDecimal("0.002"));
+        partial.setAmountRemaining(new BigDecimal("0.001"));
+        partial.setFilledAmount(new BigDecimal("0.001"));
+        partial.setFilledAmountQuote(new BigDecimal("75.00"));
+        partial.setFills(List.of(fill("2026-10-14T18:00:00Z", "0.001", "75000", "0.15")));
+        accountWith(partial);
+
+        LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
+
+        assertEquals("last fill 14 Oct 2026 18:00", row.dateNote());
+    }
+
+    @Test
+    void aFillWithoutATimestampCarriesNoSecondDate() {
+        OrderResponse sell = baseOrder("2026-10-08T14:20:00Z", "sell", "market");
+        sell.setStatus("filled");
+        sell.setAmount(new BigDecimal("0.001"));
+        sell.setFilledAmount(new BigDecimal("0.001"));
+        sell.setFilledAmountQuote(new BigDecimal("75.00"));
+        Fills undated = fill("2026-10-14T16:52:03Z", "0.001", "75000", "0.15");
+        undated.setTimestamp(null);
+        sell.setFills(List.of(undated));
+        accountWith(sell);
+
+        LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
+
+        assertEquals("", row.dateNote());
+        assertEquals("—", row.fills().get(0).timeText());
+    }
+
+    @Test
+    void theSecondDateFollowsTheDisplayZone() {
+        // 23:50 CEST on 8 Oct and 00:10 CEST on 9 Oct are the same day in UTC and different days in
+        // the zone the page shows.
+        OrderResponse sell = baseOrder("2026-10-08T21:50:00Z", "sell", "market");
+        sell.setStatus("filled");
+        sell.setAmount(new BigDecimal("0.001"));
+        sell.setFilledAmount(new BigDecimal("0.001"));
+        sell.setFilledAmountQuote(new BigDecimal("75.20"));
+        sell.setFills(List.of(fill("2026-10-08T22:10:00Z", "0.001", "75200", "0.15")));
+        accountWith(sell);
+        LedgerService amsterdam = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("Europe/Amsterdam")), Clock.fixed(NOW, ZoneId.of("UTC")));
+
+        LedgerView.OrderRowView utc = service.view(new LedgerRequest()).rows().get(0);
+        LedgerView.OrderRowView cest = amsterdam.view(new LedgerRequest()).rows().get(0);
+
+        assertEquals("", utc.dateNote());
+        assertEquals("22:10:00", utc.fills().get(0).timeText());
+        assertEquals("filled 9 Oct 2026 00:10", cest.dateNote());
+        assertEquals("9 Oct 2026 00:10:00", cest.fills().get(0).timeText());
+    }
+
     // ---- fixtures ---------------------------------------------------------------------------
+
+    /**
+     * The account readable with exactly these orders and no trade history, for the rows' own
+     * presentation.
+     */
+    private void accountWith(OrderResponse... orders) {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(orders);
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+    }
 
     private void accountReadable() {
         accountReadableWithoutOrders();
