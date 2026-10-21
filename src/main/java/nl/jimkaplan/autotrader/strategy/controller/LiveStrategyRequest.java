@@ -4,15 +4,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 /**
- * Request to create a live strategy. Only the market and interval are required; the rest falls
- * back to the same documented defaults a backtest uses, with dry-run on by default.
+ * Request to create or update a live strategy. On create the name, market and interval are
+ * required; the rest falls back to the same documented defaults a backtest uses, with dry-run on
+ * by default. On update null fields keep the stored value, and dry-run cannot be switched.
  */
 @Data
 public class LiveStrategyRequest {
 
-    @Schema(description = "Bot configuration whose credentials and operator ID are used when " +
-                          "dry-run is off; required then", example = "abc123")
-    private String botId;
+    @Schema(description = "Operator-facing strategy name; required when creating", example = "BTC 2h breakout")
+    private String name;
 
     @Schema(description = "Market in Bitvavo format", example = "BTC-EUR")
     private String market;

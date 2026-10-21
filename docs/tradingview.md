@@ -11,8 +11,9 @@ proposed that were never built.
 - `POST /webhook/tradingview` (`TradingViewWebhookController`), body
   `{botId, ticker, action, timestamp, dryRun}`:
   - `ticker` must match the bot's configured pair and be EUR-quoted;
-  - `action` is `buy` or `sell`; `timestamp` must end in `Z` (`yyyy-MM-ddTHH:mm:ssZ`; an offset
-    such as `+02:00` currently passes validation and then fails later with a 500 — PLAN item 19);
+  - `action` is `buy` or `sell`; `timestamp` is an ISO-8601 date-time with an offset
+    (`2026-10-04T12:00:00Z` or `2026-10-04T14:00:00+02:00`), stored as the equivalent instant; a
+    local date-time without an offset is rejected with 400;
   - `dryRun: true` runs the whole path except sending the order to Bitvavo; the recorded order
     carries a `dry-run-...` exchange id (the strategy engine has its own dry-run).
 - **Authorization**: alerts from TradingView's published webhook IPs (52.89.214.238,
@@ -20,9 +21,9 @@ proposed that were never built.
   present the bot's webhook key in `X-API-KEY`, whose SHA-256 hash is stored on the bot
   (`webhookKeyHash`). The key is returned once by bot creation (`POST /api/bots/create`) and can be
   regenerated per bot (`POST /api/bots/webhook-key/{botId}`). Everything else answers 401.
-- **Responses**: 200 on success; 400 for client errors (missing field, bad timestamp in the strict
-  `Z` form, unknown or inactive bot, ticker mismatch, unsupported ticker, missing operator id,
-  invalid action); 401 for the auth cases; 500 for processing failures.
+- **Responses**: 200 on success; 400 for client errors (missing field, bad timestamp, unknown or
+  inactive bot, ticker mismatch, unsupported ticker, missing operator id, invalid action); 401 for
+  the auth cases; 500 for processing failures.
 
 ## What it does
 

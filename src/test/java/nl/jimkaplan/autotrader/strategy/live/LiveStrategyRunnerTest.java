@@ -382,7 +382,6 @@ class LiveStrategyRunnerTest {
 
     private static LiveStrategy strategy(long lastEvaluated) {
         LiveStrategy strategy = LiveStrategy.builder()
-                .botId("bot-1")
                 .market("BTC-EUR")
                 .interval("1h")
                 .macdFastPeriod(3)

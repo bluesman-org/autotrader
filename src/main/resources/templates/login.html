@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container" style="max-width:520px">
+    <h1>Sign in</h1>
+    <div class="card" style="padding:18px 22px">
+        <div class="banner" th:if="${param.logout}">You are signed out.</div>
+        <div class="banner" th:if="${param.reset}">Your new password is set — sign in with it.</div>
+        <div class="banner error" th:if="${param.error}">That username and password do not match.</div>
+        <form method="post" th:action="@{/login}">
+            <div class="filters">
+                <div class="f">
+                    <label>Username</label>
+                    <input type="text" name="username" autocomplete="username" required autofocus
+                           style="width:260px">
+                </div>
+                <div class="f">
+                    <label>Password</label>
+                    <input type="password" name="password" autocomplete="current-password" required
+                           style="width:260px">
+                </div>
+                <div>
+                    <button class="primary small" type="submit">Sign in</button>
+                </div>
+            </div>
+        </form>
+        <p class="muted" style="margin:14px 0 0">
+            <a th:href="@{/forgot-password}">Forgot your password?</a>
+        </p>
+    </div>
+</main>
+</body>
+</html>

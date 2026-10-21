@@ -44,13 +44,47 @@ class LiveStrategyControllerTest {
     }
 
     @Test
-    void all_returnsTheStrategies() {
-        when(liveStrategyService.all()).thenReturn(List.of(strategy()));
+    void all_returnsTheActiveStrategies() {
+        when(liveStrategyService.active()).thenReturn(List.of(strategy()));
 
-        ResponseEntity<List<LiveStrategy>> response = liveStrategyController.all();
+        ResponseEntity<List<LiveStrategy>> response = liveStrategyController.all(false);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(1, response.getBody().size());
+    }
+
+    @Test
+    void all_includesArchivedStrategiesWhenAsked() {
+        when(liveStrategyService.all()).thenReturn(List.of(strategy()));
+
+        ResponseEntity<List<LiveStrategy>> response = liveStrategyController.all(true);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1, response.getBody().size());
+        verify(liveStrategyService).all();
+    }
+
+    @Test
+    void update_delegatesAndReturnsTheStoredStrategy() {
+        LiveStrategyRequest request = new LiveStrategyRequest();
+        LiveStrategy strategy = strategy();
+        when(liveStrategyService.update("strategy-1", request)).thenReturn(strategy);
+
+        ResponseEntity<LiveStrategy> response = liveStrategyController.update("strategy-1", request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(strategy, response.getBody());
+    }
+
+    @Test
+    void delete_reportsWhetherTheStrategyWasArchived() {
+        when(liveStrategyService.delete("strategy-1")).thenReturn(true);
+
+        ResponseEntity<LiveStrategyDeletion> response = liveStrategyController.delete("strategy-1");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("strategy-1", response.getBody().id());
+        assertTrue(response.getBody().archived());
     }
 
     @Test
@@ -112,6 +146,7 @@ class LiveStrategyControllerTest {
 
     private static LiveStrategy strategy() {
         LiveStrategy strategy = LiveStrategy.builder()
+                .name("BTC 1h")
                 .market("BTC-EUR")
                 .interval("1h")
                 .dryRun(true)

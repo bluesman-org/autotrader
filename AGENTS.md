@@ -124,12 +124,17 @@ It reads `MONGO_ROOT_PASSWORD`, `MONGO_APP_PASSWORD` and `ENCRYPTION_MASTER_KEY`
 repo-root `.env`; nothing loads it for a `spring-boot:run` run, so the loop shares the key and
 the database only while it exports that same value (as in the example above). With the same key
 on both sides, bots and exchange credentials stay readable through either path. The UI is served
-on `http://<host>:8081/autotrader/ui/backtests`. `./mvnw spring-boot:run` remains the faster
-edit/run loop (devtools restarts the app on recompiles); the container is the stable one.
+on `http://127.0.0.1:8081/autotrader/ui/backtests` — the published port is bound to the loopback,
+since the API takes HTTP Basic and the pages a session (see `docs/security.md`). On the box that
+serves `https://at.bluris.nl`, `.env` sets `SESSION_COOKIE_SECURE=true` and
+`AUTOTRADER_PUBLIC_URL=https://at.bluris.nl/autotrader`, and the pages sign in over https there.
+`./mvnw spring-boot:run` remains the faster edit/run loop (devtools restarts the app on recompiles);
+the container is the stable one.
 
 The `Dockerfile` is platform-agnostic: the target platform is chosen at build time — native for
-local builds, and `-Ddocker.platforms=linux/arm64` (buildx) in the deploy workflow for the arm64
-deployment host.
+the local build, and `-Ddocker.platforms=linux/arm64` (buildx) for the Docker workflow's portable
+arm64 build. This box is the production host: the container from `docker-compose.dev.yml` is what
+`https://at.bluris.nl` serves.
 
 Historical candles are cached in this database. They are excluded from
 `scripts/backup-mongo.sh` because they can be re-downloaded from Bitvavo; the nightly dumps
@@ -196,9 +201,17 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Never commit API keys or secrets to version control
     - Always use environment variables for sensitive information
     - Follow the authentication pattern used for Bitvavo API
-    - The REST API is not authenticated: anyone who can reach the app can manage bots and read
-      account data, including transaction history. Run it on a private network behind the host's
-      firewall; the production compose uses host networking, so exposure is whatever the host allows.
+    - The app holds one account (see `docs/security.md`): the pages sign in with a form and a
+      session, the API with HTTP Basic, and a fresh installation starts at `/signup`. The
+      TradingView webhook stays open because it authenticates itself, everything else — pages, API,
+      Swagger UI — needs a sign-in. A page asks with a redirect to `/login`; an API request answers
+      401. Recovery mail goes out through the SMTP server stored on the settings page.
+    - Production is served on `https://at.bluris.nl` behind Caddy, with
+      `server.forward-headers-strategy=native` (Tomcat trusts forwarded addresses only from a proxy
+      on the host, which is what makes the exporter's loopback rule safe) and
+      `SESSION_COOKIE_SECURE=true` with `SameSite=Strict`, so redirects and cookies keep the https
+      scheme. The site block and the deployment checklist are in
+      `docs/security.md`; the host change is the operator's.
 
 5. **Bitvavo HTTP clients**:
     - `restTemplate` is used for signed trading calls and deliberately has no socket timeouts: a read
@@ -209,9 +222,8 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
 
 6. **GitHub Actions**:
     - Use the latest major version of every action when a workflow is created or updated
-      (currently `actions/checkout@v7`, `actions/setup-java@v6`, `docker/login-action@v4`,
-      `easingthemes/ssh-deploy@v6`, `appleboy/ssh-action@v1`), and never pin an action to a moving
-      branch such as `@master` or `@main`.
+      (currently `actions/checkout@v7`, `actions/setup-java@v6`, `docker/setup-qemu-action@v4`),
+      and never pin an action to a moving branch such as `@master` or `@main`.
 
 ## Development Workflow
 

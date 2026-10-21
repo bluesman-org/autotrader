@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -15,11 +16,23 @@ import java.util.List;
 public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, String> {
 
     /**
-     * The strategies the engine should be running.
+     * The strategies the engine should be running. Archived strategies are excluded even when a
+     * stale document still carries {@code enabled: true}.
      *
-     * @return Enabled strategies
+     * @return Enabled, non-archived strategies
      */
-    List<LiveStrategy> findByEnabledTrue();
+    @Query("{ 'enabled' : true, 'archived' : { $ne : true } }")
+    List<LiveStrategy> findActiveEnabled();
+
+    /**
+     * The strategies the live page and the forms offer: everything that has not been archived. The
+     * condition matches a missing {@code archived} field too, so documents created before the field
+     * existed stay visible.
+     *
+     * @return Non-archived strategies
+     */
+    @Query("{ 'archived' : { $ne : true } }")
+    List<LiveStrategy> findActive();
 
     /**
      * Set the enabled flag without touching any other field; the runner and the API can flip it
@@ -31,6 +44,17 @@ public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, St
     @Query("{ '_id' : ?0 }")
     @Update("{ '$set' : { 'enabled' : ?1 } }")
     void updateEnabled(String id, boolean enabled);
+
+    /**
+     * Name a strategy without touching any other field, so the startup backfill cannot clobber an
+     * evaluation update from another instance.
+     *
+     * @param id   The strategy ID
+     * @param name The generated name
+     */
+    @Query("{ '_id' : ?0 }")
+    @Update("{ '$set' : { 'name' : ?1 } }")
+    void updateName(String id, String name);
 
     /**
      * Advance the last evaluated candle without touching any other field.
@@ -68,4 +92,16 @@ public interface LiveStrategyRepository extends MongoRepository<LiveStrategy, St
     @Query("{ '_id' : ?0, 'series_start_time' : { $in : [ null, 0 ] } }")
     @Update("{ '$set' : { 'series_start_time' : ?1 } }")
     long updateSeriesStartTime(String id, long seriesStartTime);
+
+    /**
+     * Record when the current run started, so the live page can show how long the strategy has
+     * been running. A targeted update, like the enabled flag: a concurrent evaluation-state write
+     * is never clobbered.
+     *
+     * @param id      The strategy ID
+     * @param started When the run started
+     */
+    @Query("{ '_id' : ?0 }")
+    @Update("{ '$set' : { 'last_started_time' : ?1 } }")
+    void updateLastStartedTime(String id, Instant started);
 }

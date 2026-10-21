@@ -1,5 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.model.document;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -38,9 +39,10 @@ public class LiveOrder extends BaseDocument {
 
     /**
      * "PENDING", "DRY_RUN", "REJECTED", "FILLED", "FAILED" or "SKIPPED". A real order is written as
-     * {@code PENDING} before it is sent (so an ambiguous failure stays reconcilable), updated to
-     * {@code FILLED} or {@code FAILED} afterwards; {@code REJECTED} is a local, pre-flight
-     * rejection that never reached the exchange.
+     * {@code PENDING} before it is sent (so an ambiguous failure stays reconcilable), then updated
+     * to {@code FILLED}; to {@code FAILED} for an error or a terminal non-filled exchange status;
+     * or left {@code PENDING} when the exchange says it can still fill. {@code REJECTED} is a
+     * local, pre-flight rejection that never reached the exchange.
      */
     @Field("status")
     private String status;
@@ -99,6 +101,16 @@ public class LiveOrder extends BaseDocument {
      */
     @Field("order_id")
     private String orderId;
+
+    /**
+     * Whether the engine must stand down for this strategy until reconciliation settles this row.
+     * Set on a real pre-write and on an ambiguous failure; cleared when the row fills, is rejected
+     * terminally by the exchange, or is proven never accepted. Engine bookkeeping only: kept out of
+     * the API.
+     */
+    @JsonIgnore
+    @Field("awaiting_reconciliation")
+    private boolean awaitingReconciliation;
 
     @Field("error_message")
     private String errorMessage;

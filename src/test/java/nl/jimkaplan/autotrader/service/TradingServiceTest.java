@@ -183,6 +183,7 @@ class TradingServiceTest {
         assertEquals(TEST_BOT_ID, alertCaptor.getValue().getBotId());
         assertEquals(TEST_TICKER, alertCaptor.getValue().getTicker());
         assertEquals("buy", alertCaptor.getValue().getAction());
+        assertEquals(Instant.parse(TEST_TIMESTAMP), alertCaptor.getValue().getTimestamp());
 
         verify(bitvavoApiClient).get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
         verify(bitvavoApiClient).get(eq("/markets?market=" + TEST_MARKET), eq(GetMarketResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET));
@@ -194,6 +195,41 @@ class TradingServiceTest {
         assertEquals("market", capturedRequest.getOrderType());
         assertEquals(TEST_OPERATOR_ID, capturedRequest.getOperatorId());
         assertEquals(0, BigDecimal.valueOf(TEST_EUR_BALANCE).compareTo(capturedRequest.getAmountQuote()));
+    }
+
+    @Test
+    void validateAndProcessAlert_withOffsetTimestamp_storesTheNormalisedInstant() {
+        // Arrange: 13:00 at +01:00 is the same instant as 12:00Z
+        validBuyRequest.setTimestamp("2023-01-01T13:00:00+01:00");
+        when(tradingViewAlertService.saveAlert(any())).thenReturn(savedAlert);
+        when(botConfigurationService.getBotConfiguration(TEST_BOT_ID)).thenReturn(Optional.of(botConfig));
+        when(bitvavoApiClient.get(eq("/balance?symbol=EUR"), eq(GetAccountBalanceResponse[].class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(new GetAccountBalanceResponse[]{eurBalanceResponse});
+        when(bitvavoApiClient.get(eq("/markets?market=" + TEST_MARKET), eq(GetMarketResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(btcMarketResponse);
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class), eq(CreateOrderResponse.class), eq(TEST_API_KEY), eq(TEST_API_SECRET))).thenReturn(orderResponse);
+        when(positionService.getPositionByBotIdAndTickerAndStatus(TEST_BOT_ID, TEST_TICKER, "OPEN")).thenReturn(Optional.empty());
+
+        // Act
+        tradingService.validateAndProcessAlert(validBuyRequest);
+
+        // Assert
+        verify(tradingViewAlertService).saveAlert(alertCaptor.capture());
+        assertEquals(Instant.parse(TEST_TIMESTAMP), alertCaptor.getValue().getTimestamp());
+    }
+
+    @Test
+    void validateAndProcessAlert_withLocalDateTimeWithoutOffset_throwsException() {
+        // Arrange: a local date-time names no instant and must not be accepted
+        TradingViewAlertRequest request = new TradingViewAlertRequest();
+        request.setBotId(TEST_BOT_ID);
+        request.setTicker(TEST_TICKER);
+        request.setAction("buy");
+        request.setTimestamp("2023-01-01T12:00:00");
+
+        // Act & Assert
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> tradingService.validateAndProcessAlert(request));
+        assertEquals("Invalid timestamp format. Expected an ISO-8601 timestamp with an offset, "
+                + "e.g. 2026-10-04T12:00:00Z", exception.getMessage());
     }
 
     @Test
@@ -337,7 +373,8 @@ class TradingServiceTest {
         // Act & Assert
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> tradingService.validateAndProcessAlert(request));
-        assertEquals("Invalid timestamp format. Expected format: yyyy-MM-ddTHH:mm:ssZ", exception.getMessage());
+        assertEquals("Invalid timestamp format. Expected an ISO-8601 timestamp with an offset, "
+                + "e.g. 2026-10-04T12:00:00Z", exception.getMessage());
     }
 
     // Ticker mismatch test

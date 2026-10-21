@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="ledger">
+    <div class="card" style="padding:14px 22px" th:if="${ledger.price != null}">
+        <div class="price-now">
+            <span class="pn-label">Current price of <b th:text="${ledger.price.market}">BTC-EUR</b></span>
+            <span class="pn-label">Buy <span class="pn-value pn-buy" th:text="${ledger.price.buyText}">€74,578.00</span></span>
+            <span class="pn-label">Sell <span class="pn-value pn-sell" th:text="${ledger.price.sellText}">€74,562.00</span></span>
+        </div>
+    </div>
+
+    <form class="card" style="padding:16px 20px" method="get" th:action="@{/ui/history}">
+        <input type="hidden" name="tab" value="ledger">
+        <input type="hidden" name="sort" th:value="${ledger.filters.sort}">
+        <input type="hidden" name="dir" th:value="${ledger.filters.dir}">
+        <div class="filters">
+            <div class="f"><label>Time</label>
+                <select name="period" th:attr="data-default-period=${ledger.filters.defaultPeriod}">
+                    <option value="" th:selected="${#strings.isEmpty(ledger.filters.period)}">Custom range</option>
+                    <option th:each="option : ${ledger.filters.timeOptions}" th:value="${option.value}"
+                            th:text="${option.label}"
+                            th:selected="${option.value == ledger.filters.period}">Last 7 days</option>
+                </select>
+            </div>
+            <div class="f" style="min-width:250px"><label>Custom range — from</label>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <input type="date" name="fromDate" th:value="${ledger.filters.fromDate}" style="width:150px">
+                    <input type="text" name="fromTime" th:value="${ledger.filters.fromTime}"
+                           placeholder="HH:MM" style="width:64px">
+                </div>
+            </div>
+            <div class="f" style="min-width:250px"><label>to</label>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <input type="date" name="toDate" th:value="${ledger.filters.toDate}" style="width:150px">
+                    <input type="text" name="toTime" th:value="${ledger.filters.toTime}"
+                           placeholder="HH:MM" style="width:64px">
+                    <button type="button" class="secondary small" data-today
+                            title="Set the end of the range to now">Today</button>
+                </div>
+            </div>
+            <div class="f"><label>Side</label>
+                <select name="side">
+                    <option value="">All sides</option>
+                    <option value="buy" th:selected="${ledger.filters.side == 'buy'}">Buy</option>
+                    <option value="sell" th:selected="${ledger.filters.side == 'sell'}">Sell</option>
+                </select>
+            </div>
+            <div class="f"><label>Market</label>
+                <select name="market">
+                    <option th:each="option : ${ledger.filters.marketOptions}" th:value="${option.value}"
+                            th:text="${option.label}"
+                            th:selected="${option.value == ledger.filters.market}">BTC-EUR</option>
+                </select>
+            </div>
+            <div class="f f-checks"><label>Type <span class="muted">any of</span></label>
+                <div class="checks checks-inline">
+                    <label th:each="option : ${ledger.filters.typeOptions}">
+                        <input type="checkbox" name="type" th:value="${option.value}"
+                               th:checked="${#lists.contains(ledger.filters.type, option.value)}">
+                        <span th:text="${option.label}">market</span>
+                    </label>
+                </div>
+            </div>
+            <div class="f f-checks" th:if="${not #lists.isEmpty(ledger.filters.statusOptions)}"><label>Status <span class="muted">any of</span></label>
+                <div class="checks checks-inline">
+                    <label th:each="option : ${ledger.filters.statusOptions}">
+                        <input type="checkbox" name="status" th:value="${option.value}"
+                               th:checked="${#lists.contains(ledger.filters.status, option.value)}">
+                        <span th:text="${option.label}">filled</span>
+                    </label>
+                </div>
+            </div>
+            <div class="f"><label>View</label>
+                <select name="view">
+                    <option value="orders" th:selected="${ledger.filters.view == 'orders'}">Orders</option>
+                    <option value="raw" th:selected="${ledger.filters.view == 'raw'}">Raw transactions</option>
+                </select>
+            </div>
+            <div>
+                <button class="primary small" type="submit">Apply</button>
+            </div>
+        </div>
+    </form>
+
+    <div class="card" style="padding:18px 22px" th:if="${ledger.message != null}">
+        <p class="muted" style="margin:0" th:text="${ledger.message}">No active Bitvavo API key is configured.</p>
+    </div>
+
+    <th:block th:if="${ledger.message == null}">
+        <div class="card" style="padding:14px 22px">
+            <div class="totals" style="margin:0">
+                <div class="stat">Period<b th:text="${ledger.totals.periodText}">Last 7 days</b></div>
+                <div class="stat">Orders<b th:text="${ledger.totals.orders}">200</b></div>
+                <div class="stat">Total fees<b th:text="${ledger.totals.feesText}">€41.20</b></div>
+                <div class="stat">Realised<b th:classappend="${ledger.totals.realisedClass}"
+                                              th:text="${ledger.totals.realisedText}">+€18.40</b></div>
+                <div class="stat">Unrealised<b th:classappend="${ledger.totals.unrealisedClass}"
+                                                th:text="${ledger.totals.unrealisedText}">+€0.21</b></div>
+                <div class="stat">Balance<b th:text="${ledger.totals.balanceText}">0.00214403 BTC</b></div>
+            </div>
+            <p class="muted" style="margin:8px 0 0" th:if="${not #strings.isEmpty(ledger.totals.unrealisedHint)}"
+               th:text="${ledger.totals.unrealisedHint}">Unrealised needs today as the end date.</p>
+            <p class="muted" style="margin:8px 0 0" th:if="${not #strings.isEmpty(ledger.totals.note)}"
+               th:text="${ledger.totals.note}">Could not read some markets.</p>
+        </div>
+
+        <ul class="muted" style="margin:0 0 8px 0;padding-left:20px">
+            <li>Orders and fills are the spot account's, read from Bitvavo's Exchange API. Margin
+                orders and margin trades are not exposed by the Exchange API this page uses, so
+                they cannot appear here; Bitvavo's app shows its own margin ledger.</li>
+            <li>"Balance after" counts only filled orders.</li>
+            <li>Sells show what they realised, at the average cost of the coins they sold — the math
+                looks back before the period to know what those coins cost. A buy shows no result of
+                its own: the sell that closes it carries it.</li>
+            <li>Unrealised in the summary is the coins still held, at the current price against what
+                they cost. It shows only when the range ends today — a range that ends earlier cannot
+                know a past holding's worth at today's price. Coins that arrived without a buy (a
+                deposit) have no cost to compare against.</li>
+            <li>If Status shows open, nothing is filled yet.</li>
+            <li>Net cash amounts show only the filled parts of paid or received, and a fee is shown in
+                the currency the exchange charged it in; a fee charged in the coin is not part of the
+                cash.</li>
+        </ul>
+
+        <th:block th:unless="${ledger.raw}">
+            <p class="muted" th:if="${#lists.isEmpty(ledger.rows)}">No orders match these filters.</p>
+
+            <div class="table-wrap table-scroll" data-scroll-key="orders" th:unless="${#lists.isEmpty(ledger.rows)}">
+                <table>
+                    <thead>
+                    <tr>
+                        <th class="left">#</th>
+                        <th th:each="header : ${ledger.headers}" th:classappend="${header.alignClass}">
+                            <a th:href="@{'/ui/history' + ${header.query}}"
+                               th:classappend="${header.active} ? 'sorted'" th:text="${header.label}">Order date</a><span
+                                    class="arrow" th:if="${header.active}" th:text="${header.arrow}">▼</span>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <th:block th:each="row : ${ledger.rows}">
+                        <tr>
+                            <td class="left" th:text="${row.number}">1</td>
+                            <td class="left" th:text="${row.dateText}">14 Oct 15:02</td>
+                            <td class="left"><span class="schip" th:classappend="${row.sideClass}"
+                                                   th:text="${row.side}">BUY</span></td>
+                            <td class="left" th:text="${row.typeText}">limit</td>
+                            <td class="left" th:text="${row.marketText}">BTC-EUR</td>
+                            <td th:text="${row.amountText}">0.00150000</td>
+                            <td th:text="${row.avgPriceText}">€73,500.00</td>
+                            <td class="left">
+                                <span class="badge" th:classappend="${row.statusClass}"
+                                      th:text="${row.statusLabel}">open</span>
+                                <div class="muted" style="font-size:0.8rem" th:if="${not #strings.isEmpty(row.triggerText)}"
+                                     th:text="${row.triggerText}">trigger €73.162,00 · limit €75.364,00</div>
+                            </td>
+                            <td th:text="${row.balanceAfterText}">0.00214403</td>
+                            <td th:text="${row.feeText}">€0.12</td>
+                            <td th:classappend="${row.netCashClass}" th:text="${row.netCashText}">−€59.16</td>
+                            <td th:text="${row.fillsCount}">2</td>
+                            <td th:classappend="${row.pnlClass}" th:text="${row.pnlText}">+€0.38</td>
+                        </tr>
+                        <tr class="detail">
+                            <td colspan="13">
+                                <details>
+                                    <summary th:text="|fills (${row.fillsCount})|">fills (2)</summary>
+                                    <div style="padding:6px 0 10px" th:if="${not #lists.isEmpty(row.fills)}">
+                                        <table class="fills-table">
+                                            <colgroup>
+                                                <col style="width:110px"><col style="width:150px"><col style="width:130px">
+                                                <col style="width:110px"><col style="width:110px"><col style="width:150px">
+                                            </colgroup>
+                                            <thead>
+                                            <tr>
+                                                <th class="left">Time</th>
+                                                <th th:text="${ledger.filters.amountHeader}">Amount (BTC)</th>
+                                                <th>Price</th>
+                                                <th>Fee</th>
+                                                <th class="left">Maker/Taker</th>
+                                                <th>Net cash</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            <tr th:each="fill : ${row.fills}">
+                                                <td class="left" th:text="${fill.timeText}">14:52:04</td>
+                                                <td th:text="${fill.amountText}">0.00041000</td>
+                                                <td th:text="${fill.priceText}">€73,798.00</td>
+                                                <td th:text="${fill.feeText}">€0.0605</td>
+                                                <td class="left" th:text="${fill.makerTakerText}">maker</td>
+                                                <td th:classappend="${fill.netCashClass}"
+                                                    th:text="${fill.netCashText}">−€30.32</td>
+                                            </tr>
+                                            </tbody>
+                                        </table>
+                                        <div class="muted" style="padding-top:6px" th:if="${not #strings.isEmpty(row.filledText)}"
+                                             th:text="${row.filledText}">Filled 0.00080 of 0.00130000 BTC · 0.00050 remaining</div>
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                    </th:block>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pager" th:if="${ledger.pager.total > 0}">
+                <span>Showing <b th:text="|${ledger.pager.from}–${ledger.pager.to}|">1–10</b> of
+                    <b th:text="${ledger.pager.total}">200</b> orders · page
+                    <b th:text="${ledger.pager.page}">1</b> of <b th:text="${ledger.pager.pages}">20</b></span>
+                <span>Rows per page</span>
+                <select data-history-size>
+                    <option th:each="size : ${ledger.pager.sizes}"
+                            th:value="@{'/ui/history' + ${size.query}}" th:text="${size.label}"
+                            th:selected="${size.selected}">10</option>
+                </select>
+                <a th:if="${ledger.pager.prevQuery != null}" th:href="@{'/ui/history' + ${ledger.pager.prevQuery}}">← Newer</a>
+                <span class="disabled" th:unless="${ledger.pager.prevQuery != null}">← Newer</span>
+                <a th:if="${ledger.pager.nextQuery != null}" th:href="@{'/ui/history' + ${ledger.pager.nextQuery}}">Older →</a>
+                <span class="disabled" th:unless="${ledger.pager.nextQuery != null}">Older →</span>
+            </div>
+
+            <div class="card" style="padding:18px 22px" th:if="${not #lists.isEmpty(ledger.pairTotals)}">
+                <h2 style="margin-top:0">Totals by pair</h2>
+                <p class="muted" style="margin:0 0 8px">The filtered orders of the period, per
+                    market. Volume is the filled cash; fees are the euro part.</p>
+                <div class="table-wrap" style="box-shadow:none;background:transparent;padding:0">
+                    <table>
+                        <thead>
+                        <tr><th class="left">Pair</th><th>Orders</th><th>Buy volume</th>
+                            <th>Sell volume</th><th>Fees</th><th>Realised</th></tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="total : ${ledger.pairTotals}">
+                            <td class="left" th:text="${total.market}">BTC-EUR</td>
+                            <td th:text="${total.orders}">10</td>
+                            <td th:text="${total.buyVolumeText}">€100,00</td>
+                            <td th:text="${total.sellVolumeText}">€0,00</td>
+                            <td th:text="${total.feesText}">€0,20</td>
+                            <td th:classappend="${total.realisedClass}"
+                                th:text="${total.realisedText}">+€1,00</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </th:block>
+
+        <th:block th:if="${ledger.raw}">
+            <h2>Raw transactions</h2>
+            <p class="muted" style="margin:0 0 8px">Every account transaction in the selected period:
+                fills, deposits, withdrawals, staking and rebates. <b>Deposit</b> is crypto
+                transferred in from outside and <b>withdrawal</b> is a transfer out; the Address
+                column shows the counterpart when Bitvavo reports one. A deposit is not a trade: it
+                has no market, no fee and no cost basis in the average-cost walk. The exchange's
+                history API can also omit some product entries — the buys and sells of a margin
+                trade, for example — so the raw list is everything the API returned, not everything
+                the Bitvavo app shows.</p>
+            <p class="muted" th:if="${#lists.isEmpty(ledger.rawRows)}">No transactions in this period.</p>
+
+            <div class="table-wrap table-scroll" data-scroll-key="raw" th:unless="${#lists.isEmpty(ledger.rawRows)}">
+                <table>
+                    <thead>
+                    <tr>
+                        <th class="left">#</th>
+                        <th class="left">Time</th>
+                        <th class="left">Type</th>
+                        <th class="left">Sent</th>
+                        <th class="left">Received</th>
+                        <th>Fee</th>
+                        <th class="left">Address</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="row : ${ledger.rawRows}">
+                        <td class="left" th:text="${row.number}">1</td>
+                        <td class="left" th:text="${row.timeText}">14 Oct 14:45</td>
+                        <td class="left">
+                            <span class="schip" th:if="${not #strings.isEmpty(row.typeClass)}"
+                                  th:classappend="${row.typeClass}" th:text="${row.typeText}">buy</span>
+                            <span th:if="${#strings.isEmpty(row.typeClass)}" th:text="${row.typeText}">staking</span>
+                        </td>
+                        <td class="left" th:text="${row.sentText}">€100.20 EUR</td>
+                        <td class="left" th:text="${row.receivedText}">0.00134403 BTC</td>
+                        <td th:text="${row.feeText}">€0.20</td>
+                        <td class="left" th:text="${#strings.abbreviate(row.addressText, 24)}"
+                            th:title="${row.addressText}">—</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pager" th:if="${ledger.rawPager.total > 0}">
+                <span>Showing <b th:text="|${ledger.rawPager.from}–${ledger.rawPager.to}|">1–10</b> of
+                    <b th:text="${ledger.rawPager.total}">5</b> entries · page
+                    <b th:text="${ledger.rawPager.page}">1</b> of <b th:text="${ledger.rawPager.pages}">1</b></span>
+                <span>Rows per page</span>
+                <select data-history-size>
+                    <option th:each="size : ${ledger.rawPager.sizes}"
+                            th:value="@{'/ui/history' + ${size.query}}" th:text="${size.label}"
+                            th:selected="${size.selected}">10</option>
+                </select>
+                <a th:if="${ledger.rawPager.prevQuery != null}" th:href="@{'/ui/history' + ${ledger.rawPager.prevQuery}}">← Newer</a>
+                <span class="disabled" th:unless="${ledger.rawPager.prevQuery != null}">← Newer</span>
+                <a th:if="${ledger.rawPager.nextQuery != null}" th:href="@{'/ui/history' + ${ledger.rawPager.nextQuery}}">Older →</a>
+                <span class="disabled" th:unless="${ledger.rawPager.nextQuery != null}">Older →</span>
+            </div>
+
+            <div class="card" style="padding:18px 22px" th:if="${not #lists.isEmpty(ledger.rawTotals)}">
+                <h2 style="margin-top:0">Totals by type</h2>
+                <p class="muted" style="margin:0 0 8px">The filtered transactions, summed per type
+                    and currency. A staking row is that coin's total staking income; a deposit row is
+                    what arrived from outside.</p>
+                <div class="table-wrap" style="box-shadow:none;background:transparent;padding:0">
+                    <table>
+                        <thead>
+                        <tr><th class="left">Type</th><th class="left">Currency</th>
+                            <th>Amount</th><th>Transactions</th></tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="total : ${ledger.rawTotals}">
+                            <td class="left" th:text="${total.typeText}">Staking</td>
+                            <td class="left" th:text="${total.currency}">SAND</td>
+                            <td th:text="${total.amountText}">195,27 SAND</td>
+                            <td th:text="${total.transactions}">24</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </th:block>
+    </th:block>
+</div>
+</body>
+</html>

@@ -7,8 +7,12 @@
 # Stop:
 #   docker compose -f docker-compose.dev.yml down
 #
-# Reads MONGO_ROOT_PASSWORD, MONGO_APP_PASSWORD and ENCRYPTION_MASTER_KEY from the repo-root
-# .env file (gitignored). The UI is served on http://<host>:8081/autotrader/ui/backtests.
+# Reads MONGO_ROOT_PASSWORD, MONGO_APP_PASSWORD, ENCRYPTION_MASTER_KEY and — when the stack is
+# served behind a proxy — SESSION_COOKIE_SECURE and AUTOTRADER_PUBLIC_URL from the repo-root .env
+# file (gitignored). The UI is served on http://127.0.0.1:8081/autotrader/ui/backtests; the port is
+# bound to the loopback, so reach it through the host (or the proxy in front of it), not from the
+# network. On the box that serves https://at.bluris.nl, .env sets the secure cookie and the public
+# URL, and the pages sign in over https.
 include:
   - docker-compose.local.yml
 
@@ -31,8 +35,16 @@ services:
       MONGODB_SSL_ENABLED: "false"
       ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?set ENCRYPTION_MASTER_KEY in .env}
       BITVAVO_API_URL: ${BITVAVO_API_URL:-https://api.bitvavo.com/v2}
+      # The public face of the stack, when it has one: a secure session cookie and the address the
+      # recovery mails link to. The defaults are the local flow; the box behind at.bluris.nl sets
+      # both in .env (a Secure cookie is never sent over plain http, so http sign-in is for the
+      # local default only).
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      AUTOTRADER_PUBLIC_URL: ${AUTOTRADER_PUBLIC_URL:-http://localhost:8081/autotrader}
     ports:
-      - "8081:8081"
+      # Loopback only: Caddy on the host reaches it, the network does not. The API takes HTTP Basic
+      # and the pages a session, so a publicly bound port would hand both to the LAN in plaintext.
+      - "127.0.0.1:8081:8081"
     volumes:
       # Its own subdirectory: the container writes as root and must not clash with the Maven loop
       - ./logs/autotrader-dev:/app/logs

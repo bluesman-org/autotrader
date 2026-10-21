@@ -2,7 +2,10 @@ package nl.jimkaplan.autotrader.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.jimkaplan.autotrader.model.document.AppUser;
 import nl.jimkaplan.autotrader.model.document.BotConfiguration;
+import nl.jimkaplan.autotrader.model.document.Market;
+import nl.jimkaplan.autotrader.model.document.PasswordResetToken;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
@@ -56,6 +59,13 @@ public class MongoIndexInitializer implements ApplicationRunner {
                 .on("openTime", Sort.Direction.ASC)
                 .unique());
         ensureBotIdIndex();
+        ensureIndex(AppUser.class, new Index().on("username", Sort.Direction.ASC).unique());
+        ensureIndex(AppUser.class, new Index().on("email", Sort.Direction.ASC).unique());
+        // One document per market symbol: the catalogue is read by symbol everywhere and a
+        // duplicate would offer the same pair twice.
+        ensureIndex(Market.class, new Index().on("market", Sort.Direction.ASC).unique());
+        ensureIndex(PasswordResetToken.class,
+                new Index().on("token_hash", Sort.Direction.ASC).unique());
         ensureIndex(BacktestRun.class, new Index()
                 .on("runAt", Sort.Direction.DESC));
         ensureIndex(LiveOrder.class, new Index()
@@ -64,6 +74,12 @@ public class MongoIndexInitializer implements ApplicationRunner {
         ensureIndex(LivePosition.class, new Index()
                 .on("strategyId", Sort.Direction.ASC)
                 .on("status", Sort.Direction.ASC));
+        // The history page reads orders by signal time and positions by status plus entry time.
+        ensureIndex(LiveOrder.class, new Index()
+                .on("signalOpenTime", Sort.Direction.ASC));
+        ensureIndex(LivePosition.class, new Index()
+                .on("status", Sort.Direction.ASC)
+                .on("entryTime", Sort.Direction.ASC));
     }
 
     /**

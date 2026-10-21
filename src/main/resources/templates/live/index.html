@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live engine · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1>Live engine</h1>
+    <p><a th:href="@{/ui/live/new}">+ New strategy</a></p>
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+    <div class="banner ok" th:if="${notice}" th:text="${notice}">notice</div>
+    <p class="muted" th:text="|Order times are local time (${timeZoneLabel}) · Page refreshes every 10 seconds · DRY RUN = simulated orders, nothing sent to the exchange · REAL = live money|">
+        Order times are local time (CEST) · Page refreshes every 10 seconds · DRY RUN = simulated
+        orders, nothing sent to the exchange · REAL = live money
+    </p>
+    <p class="muted">Last refresh: <span id="last-refresh">just loaded</span></p>
+
+    <div id="live-cards" th:attr="data-refresh-url=@{/ui/live/cards},data-time-zone=${timeZoneId}"
+         th:insert="~{live/cards :: cards}"></div>
+</main>
+
+<script>
+    // Refresh the cards in place every 10 seconds: scroll position, expanded details and any
+    // half-typed input stay put, and a number that changed gets a brief highlight. A failed fetch
+    // keeps the last state on screen.
+    (function () {
+        var container = document.getElementById('live-cards');
+        if (!container) {
+            return;
+        }
+        var url = container.getAttribute('data-refresh-url');
+        var zone = container.getAttribute('data-time-zone');
+        var lastRefresh = document.getElementById('last-refresh');
+        var lastOk = null;
+
+        function values(root) {
+            var map = {};
+            root.querySelectorAll('[data-live]').forEach(function (el) {
+                map[el.getAttribute('data-live')] = el.textContent;
+            });
+            return map;
+        }
+
+        function nowText() {
+            var options = { hour12: false };
+            if (zone) {
+                options.timeZone = zone;
+            }
+            return new Date().toLocaleTimeString([], options);
+        }
+
+        // Show when the page last refreshed, so an unchanged page still visibly ticks. The stamp
+        // always answers "how old is what I am looking at?": on a failed refresh the last
+        // successful time stays put, with the failure noted beside it.
+        function refreshed(ok) {
+            if (!lastRefresh) {
+                return;
+            }
+            var now = nowText();
+            if (ok) {
+                lastOk = now;
+                lastRefresh.textContent = now;
+            } else {
+                lastRefresh.textContent = 'last update ' + (lastOk || 'none yet')
+                        + ' — refresh failed at ' + now;
+            }
+            lastRefresh.classList.toggle('neg', !ok);
+            lastRefresh.classList.remove('flash');
+            void lastRefresh.offsetWidth;
+            lastRefresh.classList.add('flash');
+        }
+
+        function refresh() {
+            if (document.hidden) {
+                // Nothing to keep current for an unwatched tab; it refreshes on the way back.
+                return;
+            }
+            fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
+                .then(function (response) { return response.ok ? response.text() : null; })
+                .then(function (html) {
+                    if (html === null) {
+                        refreshed(false);
+                        return;
+                    }
+                    var before = values(container);
+                    container.innerHTML = html;
+                    container.querySelectorAll('[data-live]').forEach(function (el) {
+                        var key = el.getAttribute('data-live');
+                        if (before[key] !== undefined && before[key] !== el.textContent) {
+                            el.classList.add('flash');
+                            window.setTimeout(function () { el.classList.remove('flash'); }, 1100);
+                        }
+                    });
+                    refreshed(true);
+                })
+                .catch(function () { refreshed(false); });
+        }
+
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                refresh();
+            }
+        });
+
+        window.setInterval(refresh, 10000);
+    })();
+</script>
+</body>
+</html>

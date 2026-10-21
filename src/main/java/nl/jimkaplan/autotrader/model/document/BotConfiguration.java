@@ -3,6 +3,7 @@ package nl.jimkaplan.autotrader.model.document;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.ToString;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -14,6 +15,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
  * Maps to the 'bot_configurations' collection.
  */
 @Data
+@ToString(exclude = {"apiKey", "apiSecret"})
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

@@ -9,6 +9,7 @@ import nl.jimkaplan.autotrader.strategy.backtest.SkipReason;
 import nl.jimkaplan.autotrader.strategy.backtest.SkippedSignal;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,8 @@ class BacktestUiControllerTest {
 
     @Mock
     private BacktestService backtestService;
+    @Mock
+    private MarketService marketService;
 
     @InjectMocks
     private BacktestUiController backtestUiController;
@@ -45,6 +48,7 @@ class BacktestUiControllerTest {
     @Test
     void form_providesTheDefaultsAndOptions() {
         when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of("ETH-EUR", "BTC-EUR"));
         Model model = new ExtendedModelMap();
 
         String view = backtestUiController.form(model);
@@ -56,12 +60,16 @@ class BacktestUiControllerTest {
         assertNotNull(model.getAttribute("rankingMetrics"));
         assertNotNull(model.getAttribute("conditions"));
         assertNotNull(model.getAttribute("operators"));
+        assertEquals(List.of("ETH-EUR", "BTC-EUR"), model.getAttribute("markets"));
+        assertEquals("ETH-EUR",
+                ((BacktestRunForm) model.getAttribute("form")).getMarket());
         assertNotNull(model.getAttribute("runs"));
     }
 
     @Test
     void form_keepsAFlashedForm() {
         when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of("BTC-EUR"));
         Model model = new ExtendedModelMap();
         BacktestRunForm flashed = BacktestRunForm.defaults();
         flashed.setMarket("ETH-EUR");
@@ -70,6 +78,20 @@ class BacktestUiControllerTest {
         backtestUiController.form(model);
 
         assertSame(flashed, model.getAttribute("form"));
+        assertEquals("ETH-EUR", flashed.getMarket());
+        assertEquals(List.of("BTC-EUR", "ETH-EUR"), model.getAttribute("markets"));
+    }
+
+    @Test
+    void form_offersTheDefaultPairWhenTheCatalogueIsEmpty() {
+        when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of());
+        Model model = new ExtendedModelMap();
+
+        backtestUiController.form(model);
+
+        assertEquals(List.of("BTC-EUR"), model.getAttribute("markets"));
+        assertEquals("BTC-EUR", ((BacktestRunForm) model.getAttribute("form")).getMarket());
     }
 
     @Test
