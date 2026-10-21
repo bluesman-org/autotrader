@@ -68,13 +68,19 @@ candle channel of its market and interval. Our own policies:
   open orders, so a sequence number whose order was never accepted (or has long filled) is safe to
   reuse. The persisted sequence is advanced (a monotonic update — it can never move backwards)
   before the pre-write, so a crash can skip a number but never let a later order reuse one.
-  The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee, or
-  to `FAILED` with the error — so an ambiguous timeout between the write and the response stays
-  reconcilable at the next boot (see "Reconciliation on startup"). An order rejected before it is
-  sent (no API key, insufficient balance, below the market minimum, an exchange error before the
-  pre-write) is recorded as `REJECTED` with no client order ID; dry-run rows carry none either.
-- One position at a time: entry signals are ignored while a position is open, exit signals while
-  flat.
+  The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee when
+  the response's status is `filled`, or to `FAILED` with the error or a terminal non-fill (`canceled*`,
+  `expired`, `rejected`). A status that can still fill (`new`, `partiallyFilled`, `awaitingTrigger`,
+  or one Bitvavo adds later) leaves the row `PENDING` and the caller does not move a position. A
+  terminal partial fill is warned and noted in the error because v1 cannot book it. While a real
+  order is marked awaiting reconciliation — a pre-write, or a timeout that may have hidden an
+  accepted order — `decide` stands down, so a slow or ambiguous fill cannot trigger a second real
+  order; the stand-down is logged at warn once.
+  An order rejected before it is sent (no API key, insufficient balance, below the market minimum,
+  an exchange error before the pre-write) is recorded as `REJECTED` with no client order ID;
+  dry-run rows carry none either.
+- One position at a time: entry signals are ignored while a position is open or a real order is
+  awaiting reconciliation, exit signals while flat.
 - **Sizing**: a fixed EUR amount per buy (`amountPerBuy`, default 100, minimum 5 EUR), rounded down
   to the market's notional decimals for live orders; sells round the position quantity down to the
   market's quantity decimals. Only EUR-quoted markets are accepted, since the sizing, the balance
@@ -90,12 +96,13 @@ candle channel of its market and interval. Our own policies:
   `lastEvaluatedOpenTime`: the open time of the last evaluated candle. It is persisted **before** the order for that candle is
   placed, so a crash costs a trade instead of duplicating one, and evaluation is idempotent across
   restarts.
-- `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent),
-  `DRY_RUN`, `REJECTED` (a local, pre-flight rejection that never reached the exchange), `FILLED` or
-  `FAILED`, with the signal's candle open time, the rule set that fired, amounts, the fill or
-  estimated price, the fee, the exchange order ID for live fills and the client order ID the
-  pre-write sent. A boundary whose candle could not be resolved is recorded as `SKIPPED`, so a
-  missed signal window is visible through the API.
+- `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent,
+  and kept when the response can still fill so the next boot can settle it), `DRY_RUN`,
+  `REJECTED` (a local, pre-flight rejection that never reached the exchange), `FILLED` or `FAILED`,
+  with the signal's candle open time, the rule set that fired, amounts, the fill or estimated price,
+  the fee, the exchange order ID for live fills and the client order ID the pre-write sent. A
+  boundary whose candle could not be resolved is recorded as `SKIPPED`, so a missed signal window
+  is visible through the API.
 - `live_positions` — the position, closed in place (`OPEN` → `CLOSED`) with the realised profit
   after fees.
 
@@ -115,30 +122,34 @@ repaired from the exchange's order history at the next boot. It returns the ids 
 it could not reconcile; `LiveStrategyStarter` passes those to `LiveStrategyService.startEnabled`,
 which holds them back rather than let them trade on stale state.
 
-- **Attribution by client order ID**: reconciliation only ever touches this strategy's own rows — a
-  `PENDING` row, and a `FAILED` row that still carries a `clientOrderId`. Each is looked up in the
-  history by its client order ID, and the restore recovery below re-derives IDs from this
-  strategy's own sequence namespace — so nothing is adopted that a row or a re-derived ID does not
-  claim. Two strategies (or the legacy TradingView path) trading one account and market therefore
-  cannot contaminate each other's orders or positions.
+- **Attribution by client order ID**: reconciliation only ever touches this strategy's own rows —
+  a row marked awaiting reconciliation (a pre-write or an ambiguous failure), plus a `PENDING` row
+  from before the marker. An unmarked `FAILED` row is intentionally left alone: the first real live
+  run is gated on this change, so no real row can predate the marker (the deployment had only
+  dry-run rows). Each row is looked up in the history by its client order ID, and the restore
+  recovery below re-derives IDs from this strategy's own sequence namespace — so nothing is adopted
+  that a row or a re-derived ID does not claim. Two strategies (or the legacy TradingView path)
+  trading one account and market therefore cannot contaminate each other's orders or positions.
 - **Bounded to the strategy's lifetime**: the history is read with
   `GET /orders?market={market}&start={strategy.createdTime epoch millis}&limit=1000` (Bitvavo's
   maximum page size), so fills that predate the strategy are never considered.
 - **Resolution**: a `PENDING` row found `filled` becomes `FILLED` in place with the exchange's
-  amounts, price (derived as `filledAmountQuote / filledAmount`) and fee, clearing its error. A
-  `FAILED` row found `filled` is corrected the same way and its reason records that the exchange had
-  accepted the order despite the recorded failure. A `PENDING` row the exchange does not know is
-  marked `FAILED` ("not found in the exchange's order history within the strategy's lifetime;
-  treated as never accepted") — but only when the page is known to be complete: a non-null page
-  shorter than the limit with no client-order-ID entry skipped as incomplete. When the page is not
-  complete (the limit was reached, the response was null, or an entry with a client order ID could
-  not be read) such a row is left `PENDING` and retried at the next boot, since "not in this page"
-  is not "never accepted". A `FAILED` row the exchange does not know is left as it is either way.
-- **Filled only**: only `filled` entries are acted on. An order still `open`, `partiallyFilled`,
-  `canceled` or `expired` is logged and left alone by the normal resolution (v1 does not reconcile
-  partial or abandoned orders); in the restore recovery below, a matched order that can still fill
-  is instead recorded as `PENDING` so it settles once it fills, and a terminal match is skipped
-  with a warning. An entry without a client order ID (the legacy webhook path, the exchange UI) cannot be
+  amounts, price (derived as `filledAmountQuote / filledAmount`) and fee, clearing its error. An
+  awaiting `FAILED` row found `filled` is corrected the same way and its reason records that the
+  exchange had accepted the order despite the recorded failure; an unmarked `FAILED` row is left
+  alone. A row the exchange does not know is marked
+  `FAILED` ("not found in the exchange's order history within the strategy's lifetime; treated as
+  never accepted") — including an ambiguous `FAILED` row — but only when the page is known to be
+  complete: a non-null page shorter than the limit with no client-order-ID entry skipped as
+  incomplete. When the page is not complete (the limit was reached, the response was null, or an
+  entry with a client order ID could not be read) the row is left awaiting reconciliation and
+  retried at the next boot, since "not in this page" is not "never accepted".
+- **Filled or terminal**: a `filled` entry is booked; a terminal non-fill (`canceled*`, `expired`,
+  `rejected`) settles the row as `FAILED` with the exchange status in its error and a note when a
+  partial fill cannot be booked (v1 does not book partial fills); an order that can still fill is
+  logged and left alone. In the restore recovery below, a matched order that can still fill is
+  recorded as `PENDING` so it settles once it fills, and a terminal match is skipped with a
+  warning. An entry without a client order ID (the legacy webhook path, the exchange UI) cannot be
   the row being searched and is skipped at debug without affecting completeness; an entry that has a
   client order ID but is missing its order ID, creation time or side is warned and marks the page
   incomplete.

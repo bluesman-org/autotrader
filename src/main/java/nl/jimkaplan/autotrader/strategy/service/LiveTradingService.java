@@ -33,7 +33,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Evaluates a live strategy on closed candles with the same rules and parameters as the backtester,
@@ -45,10 +47,15 @@ import java.util.UUID;
  * point. Live fills use what the exchange reports; dry-run fills use that open.</p>
  *
  * <p>A real order is written as a {@code PENDING} row with a generated client order ID before it is
- * sent, and that same row is updated in place to {@code FILLED} or {@code FAILED} afterwards. The
- * client order ID is sent to the exchange, so a crash or an ambiguous timeout between the write and
- * the response leaves a row the next boot can reconcile against the exchange's order history
- * (see {@link LiveOrderReconciliationService}) instead of a lost or duplicated order.</p>
+ * sent, and that same row is updated in place to {@code FILLED}, or to {@code FAILED} when the
+ * exchange reports a terminal non-fill. A response that can still fill — or one whose status this
+ * version does not know — leaves the row {@code PENDING}, and no new decision is taken until the
+ * next boot's reconciliation settles it. An ambiguous submission is marked awaiting reconciliation
+ * as well: the timeout may have hidden an accepted order, so the engine must not send a second one.
+ * The client order ID is sent to
+ * the exchange, so a crash or an ambiguous timeout between the write and the response leaves a row
+ * the next boot can reconcile against the exchange's order history (see
+ * {@link LiveOrderReconciliationService}) instead of a lost or duplicated order.</p>
  *
  * <p>One position at a time: entry signals are only decided while flat, exit signals only while a
  * position is open. Live orders are priced and rounded from the exchange's market metadata; a
@@ -68,11 +75,19 @@ public class LiveTradingService {
     private final LiveStrategyRepository liveStrategyRepository;
 
     /**
+     * Strategies already warned about standing down, so a long wait logs once instead of on every
+     * closed candle. An id is removed as soon as a decision is evaluated again without an
+     * unsettled order.
+     */
+    private final Set<String> standDownWarned = ConcurrentHashMap.newKeySet();
+
+    /**
      * Decide what the last closed candle of the series asks for.
      *
      * @param strategy The live strategy
      * @param series   The strategy's candle window, oldest first, ending in the closed candle
-     * @return The decision to fill at the next candle's open, or null when no signal fired
+     * @return The decision to fill at the next candle's open, or null when no signal fired or a
+     *         real order is still awaiting reconciliation
      */
     public LiveDecision decide(LiveStrategy strategy, List<Candle> series) {
         if (series.isEmpty()) {
@@ -87,6 +102,14 @@ public class LiveTradingService {
                     strategy.getId(), candleSeries.length(), strategy.getWarmUpCandles());
             return null;
         }
+        if (liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(strategy.getId())) {
+            if (standDownWarned.add(strategy.getId())) {
+                log.warn("{} has a real order awaiting reconciliation; no new decisions until it is "
+                        + "settled", strategy.getId());
+            }
+            return null;
+        }
+        standDownWarned.remove(strategy.getId());
         Candle candle = series.get(series.size() - 1);
         boolean open = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN").isPresent();
         if (open) {
@@ -198,7 +221,9 @@ public class LiveTradingService {
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
-            applyFill(pending, response);
+            if (!applyFill(pending, response)) {
+                return;
+            }
             livePositionRepository.save(LivePosition.builder()
                     .strategyId(strategy.getId())
                     .market(strategy.getMarket())
@@ -280,7 +305,9 @@ public class LiveTradingService {
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
-            applyFill(pending, response);
+            if (!applyFill(pending, response)) {
+                return;
+            }
             double profit = TradeMath.closeProfit(TradeMath.zeroIfNull(pending.getAmountQuote()),
                     position.getQuantity(), position.getEntryPrice(), position.getEntryFee(),
                     TradeMath.zeroIfNull(pending.getFee()));
@@ -332,6 +359,7 @@ public class LiveTradingService {
                 .price(price)
                 .fee(fee)
                 .clientOrderId(clientOrderId.toString())
+                .awaitingReconciliation(true)
                 .createdTime(Instant.now())
                 .build();
         liveOrderRepository.save(order);
@@ -340,9 +368,32 @@ public class LiveTradingService {
 
     /**
      * Update the pre-written row with what the exchange reports, falling back to its estimates for
-     * anything the response omits.
+     * anything the response omits. Only a {@code filled} response settles the row as FILLED; any
+     * other status — partial, canceled, or one Bitvavo adds later — leaves it PENDING for the boot
+     * reconciliation, and the caller must not open or close a position.
+     *
+     * @return Whether the order filled, so the caller may move the position
      */
-    private void applyFill(LiveOrder order, CreateOrderResponse response) {
+    private boolean applyFill(LiveOrder order, CreateOrderResponse response) {
+        String status = response.getStatus();
+        if (!"filled".equalsIgnoreCase(status)) {
+            order.setOrderId(String.valueOf(response.getOrderId()));
+            if (LiveOrderStatus.isTerminalNonFill(status)) {
+                String note = LiveOrderStatus.partialFillNote(response.getFilledAmountQuote());
+                order.setStatus("FAILED");
+                order.setAwaitingReconciliation(false);
+                order.setErrorMessage("exchange order status: " + status + note);
+                liveOrderRepository.save(order);
+                log.warn("Order {} of strategy {} came back {}; recorded FAILED{}",
+                        response.getOrderId(), order.getStrategyId(), status, note);
+            } else {
+                order.setAwaitingReconciliation(true);
+                liveOrderRepository.save(order);
+                log.warn("Order {} of strategy {} came back {}; left PENDING for reconciliation",
+                        response.getOrderId(), order.getStrategyId(), status);
+            }
+            return false;
+        }
         double quantity = TradeMath.filled(
                 TradeMath.firstNonNull(response.getFilledAmount(), response.getAmount()),
                 TradeMath.zeroIfNull(order.getQuantity()));
@@ -354,7 +405,9 @@ public class LiveTradingService {
         order.setFee(TradeMath.filled(response.getFeePaid(), TradeMath.zeroIfNull(order.getFee())));
         order.setOrderId(String.valueOf(response.getOrderId()));
         order.setStatus("FILLED");
+        order.setAwaitingReconciliation(false);
         liveOrderRepository.save(order);
+        return true;
     }
 
     /**
@@ -370,6 +423,7 @@ public class LiveTradingService {
             return;
         }
         order.setStatus("FAILED");
+        order.setAwaitingReconciliation(true);
         order.setErrorMessage(message);
         liveOrderRepository.save(order);
     }

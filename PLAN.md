@@ -25,7 +25,8 @@ for the pages and HTTP Basic for the API, a first-account signup, password recov
 SMTP settings stored on the settings page, and an HTTPS deployment on `https://at.bluris.nl` behind
 Caddy (PR #48). The trading-pair catalogue and the ledger reporting pass landed after that
 (PRs #50–#56), and the TradingView offset timestamps and the unused live-strategy `botId` went with
-PR #57. The live strategy management UI landed with PR #58.
+PR #57. The live strategy management UI landed with PR #58, and the live order status guard with
+PR #59.
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
 next: the small live-run trial of the engine.
 
@@ -272,12 +273,15 @@ next: the small live-run trial of the engine.
     staking income and external transfers are visible, with the transfer address when Bitvavo
     reports one. The raw Type filter also picks up undocumented types the API returns, and the page
     notes that the orders are the spot account's and margin is not exposed by the Exchange API.
-30. ⬜ Accept only filled order responses in the live engine: `applyFill` marks every accepted
-    `POST /order` response `FILLED` without reading its `status`, so a `partiallyFilled` or
-    `canceled*` response would open or close the position at the estimated size, and the boot
-    reconciliation (which revisits only `PENDING`/`FAILED` rows) would never correct it. Treat a
-    non-`filled` status as `PENDING` for reconciliation, or poll it to a final state (flagged in
-    the 2026-10-20 review; the live trial is gated on this item)
+30. ✅ Accept only filled order responses in the live engine: `applyFill` used to mark every
+    accepted `POST /order` response `FILLED` without reading its `status`, so a `partiallyFilled`
+    or `canceled*` response would open or close the position at the estimated size and the boot
+    reconciliation (which revisits only `PENDING`/`FAILED` rows) would never correct it. Only a
+    `filled` status settles the row; a status that can still fill (or one Bitvavo adds later)
+    leaves it `PENDING` and blocks further decisions until reconciliation. An ambiguous failure
+    carries the same awaiting-reconciliation marker, so a timeout cannot hide an accepted order;
+    a terminal non-fill, or a complete history proving the exchange never accepted it, settles as
+    `FAILED` with the exchange status in the error (PR #59)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

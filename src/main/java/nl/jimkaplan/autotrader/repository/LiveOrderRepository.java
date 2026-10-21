@@ -32,6 +32,17 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     List<LiveOrder> findTop8ByStrategyIdOrderByCreatedTimeDesc(String strategyId);
 
     /**
+     * Whether the strategy has a real order the engine must stand down for: a pre-write that has
+     * not been settled, including an ambiguous submission recorded as {@code FAILED}. The marker
+     * is set when the row is written and cleared by every reconciliation outcome, so a timed-out
+     * request that Bitvavo accepted cannot trigger a second order.
+     *
+     * @param strategyId The strategy ID
+     * @return Whether such an order exists
+     */
+    boolean existsByStrategyIdAndAwaitingReconciliationTrue(String strategyId);
+
+    /**
      * Orders whose decision candle falls in the given range, for the history page's order
      * references: a round trip's buy carries the position's entry signal time, its sell the exit
      * signal time. Explicit {@code @Query} for the same reason as

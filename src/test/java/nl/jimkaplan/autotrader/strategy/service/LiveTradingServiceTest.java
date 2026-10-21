@@ -83,7 +83,9 @@ class LiveTradingServiceTest {
         assertEquals("BUY", decision.side());
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("MACD_BULLISH_CROSSOVER"));
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, credentialsService);
+        verify(liveOrderRepository).existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID);
+        verify(liveOrderRepository, never()).save(any());
+        verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
 
     @Test
@@ -92,7 +94,21 @@ class LiveTradingServiceTest {
 
         assertNull(liveTradingService.decide(strategy, rising(60)));
 
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, credentialsService);
+        verify(liveOrderRepository).existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID);
+        verify(liveOrderRepository, never()).save(any());
+        verifyNoInteractions(bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void decide_returnsNullWhileAnOrderAwaitsReconciliation() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID))
+                .thenReturn(true);
+
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
+
+        verify(livePositionRepository, never()).findByStrategyIdAndStatus(any(), any());
     }
 
     @Test
@@ -115,7 +131,8 @@ class LiveTradingServiceTest {
         assertEquals("SELL", decision.side());
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("PRICE_ABOVE_SAR"));
-        verifyNoInteractions(liveOrderRepository);
+        verify(liveOrderRepository).existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID);
+        verify(liveOrderRepository, never()).save(any());
     }
 
     @Test
@@ -252,7 +269,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
-        response.setStatus("COMPLETED");
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -277,6 +294,7 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder order = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertNotNull(pending.getClientOrderId());
         assertEquals(100.0, pending.getAmountQuote(), 1e-9);
         assertEquals(100.0 / 62.0, pending.getQuantity(), 1e-9);
@@ -284,6 +302,7 @@ class LiveTradingServiceTest {
         assertEquals(0.2, pending.getFee(), 1e-9);
         assertEquals(pending.getClientOrderId(), request.getClientOrderId().toString());
         assertEquals("FILLED", order.getStatus());
+        assertFalse(order.isAwaitingReconciliation());
         assertEquals(orderId.toString(), order.getOrderId());
         assertEquals(0.001, order.getQuantity(), 1e-12);
         assertEquals(100000.0, order.getPrice(), 1e-9);
@@ -300,6 +319,87 @@ class LiveTradingServiceTest {
         assertEquals(100000.0, position.getEntryPrice(), 1e-9);
         assertEquals(0.2, position.getEntryFee(), 1e-9);
         assertEquals(decision.signalOpenTime(), position.getEntryTime());
+    }
+
+    @Test
+    void fill_liveBuyWithANonFilledResponseLeavesTheRowPendingAndOpensNoPosition() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("partiallyFilled");
+        response.setFilledAmount(new BigDecimal("0.0005"));
+        response.setFilledAmountQuote(new BigDecimal("50.00"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("PENDING", saves.get(1).getStatus());
+        assertTrue(saves.get(1).isAwaitingReconciliation());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveBuyWithATerminalResponseRecordsFailedAndOpensNoPosition() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("canceledMarketProtection");
+        response.setFilledAmountQuote(new BigDecimal("50.00"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("FAILED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        assertTrue(saves.get(1).getErrorMessage().contains("canceledMarketProtection"));
+        assertTrue(saves.get(1).getErrorMessage().contains("partial fill"));
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveBuyWithAnUnknownStatusLeavesTheRowPending() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("someFutureStatus");
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals("PENDING", saves.get(1).getStatus());
+        assertTrue(saves.get(1).isAwaitingReconciliation());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        verify(livePositionRepository, never()).save(any());
     }
 
     @Test
@@ -346,7 +446,7 @@ class LiveTradingServiceTest {
                 .thenReturn(market(5.0, 2, 8));
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(UUID.randomUUID());
-        response.setStatus("COMPLETED");
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -374,7 +474,7 @@ class LiveTradingServiceTest {
                 .thenReturn(market(5.0, 2, 8));
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(UUID.randomUUID());
-        response.setStatus("COMPLETED");
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -400,6 +500,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
+        response.setStatus("filled");
         response.setFilledAmountQuote(new BigDecimal("110.00"));
         response.setFeePaid(new BigDecimal("0.22"));
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
@@ -420,12 +521,14 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder order = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertEquals("SELL", pending.getSide());
         assertEquals(0.001, pending.getQuantity(), 1e-12);
         assertEquals(160.0, pending.getPrice(), 1e-9);
         assertEquals(pending.getClientOrderId(), request.getClientOrderId().toString());
         assertEquals("SELL", order.getSide());
         assertEquals("FILLED", order.getStatus());
+        assertFalse(order.isAwaitingReconciliation());
         assertEquals(110.0, order.getAmountQuote(), 1e-9);
         assertEquals(110000.0, order.getPrice(), 1e-9);
         assertEquals(pending.getClientOrderId(), order.getClientOrderId());
@@ -437,6 +540,62 @@ class LiveTradingServiceTest {
         assertEquals("CLOSED", closed.getStatus());
         assertEquals(110.0 - 100.0 - 0.22 - 0.2, closed.getProfit(), 1e-9);
         assertEquals(decision.signalOpenTime(), closed.getExitTime());
+    }
+
+    @Test
+    void fill_liveSellWithATerminalResponseRecordsFailedAndKeepsThePositionOpen() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("canceledMarketProtection");
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("FAILED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        assertTrue(saves.get(1).getErrorMessage().contains("canceledMarketProtection"));
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveSellWithAPartiallyFilledResponseLeavesTheRowPendingAndKeepsThePositionOpen() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("partiallyFilled");
+        response.setFilledAmountQuote(new BigDecimal("50.00"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("PENDING", saves.get(1).getStatus());
+        assertTrue(saves.get(1).isAwaitingReconciliation());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        verify(livePositionRepository, never()).save(any());
     }
 
     @Test
@@ -477,8 +636,10 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder failed = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertNotNull(pending.getClientOrderId());
         assertEquals("FAILED", failed.getStatus());
+        assertTrue(failed.isAwaitingReconciliation());
         assertEquals("read timed out", failed.getErrorMessage());
         assertEquals(pending.getClientOrderId(), failed.getClientOrderId());
         verify(livePositionRepository, never()).save(any());
@@ -504,8 +665,10 @@ class LiveTradingServiceTest {
         LiveOrder pending = saves.get(0);
         LiveOrder failed = saves.get(1);
         assertEquals("PENDING", pending.getStatus());
+        assertTrue(pending.isAwaitingReconciliation());
         assertEquals("SELL", pending.getSide());
         assertEquals("FAILED", failed.getStatus());
+        assertTrue(failed.isAwaitingReconciliation());
         assertEquals("read timed out", failed.getErrorMessage());
         assertEquals(pending.getClientOrderId(), failed.getClientOrderId());
         assertEquals("OPEN", position.getStatus());
@@ -523,6 +686,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
+        response.setStatus("filled");
         response.setFilledAmount(new BigDecimal("0.001"));
         response.setFilledAmountQuote(new BigDecimal("100.00"));
         response.setFeePaid(new BigDecimal("0.2"));
@@ -537,6 +701,7 @@ class LiveTradingServiceTest {
         assertEquals(2, saves.size());
         assertEquals("PENDING", saves.get(0).getStatus());
         assertEquals("FILLED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertNull(saves.get(1).getErrorMessage());
     }
@@ -552,6 +717,7 @@ class LiveTradingServiceTest {
         UUID orderId = UUID.randomUUID();
         CreateOrderResponse response = new CreateOrderResponse();
         response.setOrderId(orderId);
+        response.setStatus("filled");
         response.setFilledAmountQuote(new BigDecimal("110.00"));
         response.setFeePaid(new BigDecimal("0.22"));
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
@@ -566,6 +732,7 @@ class LiveTradingServiceTest {
         assertEquals("PENDING", saves.get(0).getStatus());
         assertEquals("SELL", saves.get(1).getSide());
         assertEquals("FILLED", saves.get(1).getStatus());
+        assertFalse(saves.get(1).isAwaitingReconciliation());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertNull(saves.get(1).getErrorMessage());
     }
@@ -610,6 +777,7 @@ class LiveTradingServiceTest {
                 .fee(order.getFee())
                 .orderId(order.getOrderId())
                 .clientOrderId(order.getClientOrderId())
+                .awaitingReconciliation(order.isAwaitingReconciliation())
                 .errorMessage(order.getErrorMessage())
                 .createdTime(order.getCreatedTime())
                 .build();
