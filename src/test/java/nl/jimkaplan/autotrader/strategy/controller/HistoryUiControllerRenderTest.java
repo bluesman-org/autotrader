@@ -186,7 +186,7 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString(">Amount</a>")))
                 .andExpect(content().string(containsString("Totals by pair")))
                 .andExpect(content().string(containsString("€110,00")))
-                .andExpect(content().string(containsString("filled 15 Oct 2026 16:52")))
+                .andExpect(content().string(containsString("placed 13 Oct 2026 09:00")))
                 .andExpect(content().string(not(containsString("Current price of"))));
     }
 
@@ -248,7 +248,7 @@ class HistoryUiControllerRenderTest {
 
     private static LedgerView allPairsLedgerView() {
         LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00",
-                "filled 15 Oct 2026 16:52", "SELL", "side-sell",
+                "placed 13 Oct 2026 09:00", "SELL", "side-sell",
                 "market", "BTC-EUR", "0.00050000", "€76.000,00", "filled", "ok", "", "0.0015",
                 "€0,08", "+€37,92", "pos", 1, "+€0,60", "pos", List.of(), "");
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "all", "Amount",

@@ -1311,6 +1311,45 @@ class LedgerServiceTest {
     }
 
     @Test
+    void aConditionalOrderKeepsItsPricesInEveryState() {
+        OrderResponse partial = baseOrder("2026-10-14T18:30:00Z", "sell", "takeProfitLimit");
+        partial.setStatus("partiallyFilled");
+        partial.setTriggerPrice(new BigDecimal("75000"));
+        partial.setPrice(new BigDecimal("75100"));
+        OrderResponse canceled = baseOrder("2026-10-14T19:00:00Z", "sell", "stopLossLimit");
+        canceled.setStatus("canceled");
+        canceled.setTriggerPrice(new BigDecimal("75200"));
+        canceled.setPrice(new BigDecimal("75300"));
+        OrderResponse filledLimit = baseOrder("2026-10-14T19:30:00Z", "buy", "limit");
+        filledLimit.setStatus("filled");
+        filledLimit.setPrice(new BigDecimal("74000"));
+        accountWith(partial, canceled, filledLimit);
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        // A filled plain limit order is waiting for nothing, so it shows no prices.
+        assertEquals("", view.rows().get(0).triggerText());
+        assertEquals("trigger €75.200,00 · limit €75.300,00", view.rows().get(1).triggerText());
+        assertEquals("trigger €75.000,00 · limit €75.100,00", view.rows().get(2).triggerText());
+    }
+
+    @Test
+    void anAllOrNoneCancellationCountsAsGone() {
+        OrderResponse gone = baseOrder("2026-10-01T09:00:00Z", "buy", "limit");
+        gone.setStatus("canceledAon");
+        gone.setUpdated(Instant.parse("2026-10-13T10:00:00Z").toEpochMilli());
+        gone.setAmount(new BigDecimal("0.001"));
+        gone.setPrice(new BigDecimal("70000"));
+        gone.setFills(List.of());
+        accountWith(gone);
+
+        LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
+
+        assertEquals("13 Oct 2026 10:00", row.dateText());
+        assertEquals("placed 1 Oct 2026 09:00", row.dateNote());
+    }
+
+    @Test
     void theDateSortFollowsTheTradingMoment() {
         OrderResponse armed = baseOrder("2026-10-01T09:00:00Z", "sell", "takeProfitLimit");
         armed.setStatus("filled");

@@ -226,8 +226,11 @@ public class LedgerService {
         // The period is when the orders did something, which the exchange cannot filter on: it
         // filters by placement, and a conditional order can trade days after it was armed. So the
         // read is bounded at the end only and the period filter runs here, on each order's moment.
-        List<OrderResponse> periodOrders = orders(credentials, markets, range, skipped, capped).stream()
-                .filter(order -> inPeriod(order, range))
+        // The moment is computed once: the sort, the balance and every row read it back.
+        List<OrderResponse> read = orders(credentials, markets, range, skipped, capped);
+        Map<OrderResponse, Instant> moments = moments(read);
+        List<OrderResponse> periodOrders = read.stream()
+                .filter(order -> inPeriod(moments.get(order), range))
                 .toList();
         Map<String, List<Transaction>> fills = fillsByBase(credentials,
                 clock.instant().toEpochMilli());
@@ -243,7 +246,8 @@ public class LedgerService {
         boolean ascending = "asc".equalsIgnoreCase(request.getDir());
         Map<OrderResponse, Double> results = results(filtered, bases, market);
         Map<OrderResponse, Double> euroFees = euroFees(filtered, market);
-        List<OrderResponse> sorted = sorted(filtered, request, balances, market, results, euroFees);
+        List<OrderResponse> sorted = sorted(filtered, request, balances, market, results, euroFees,
+                moments);
 
         int pageSize = pageSize(request.getSize());
         int pages = pages(sorted.size(), pageSize);
@@ -254,7 +258,7 @@ public class LedgerService {
         for (int i = fromIndex; i < toIndex; i++) {
             OrderResponse order = sorted.get(i);
             rows.add(row(order, i + 1, balances, market,
-                    results.getOrDefault(order, Double.NaN)));
+                    results.getOrDefault(order, Double.NaN), moments.get(order)));
         }
 
         List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
@@ -395,13 +399,28 @@ public class LedgerService {
     }
 
     /**
-     * @param order The order
-     * @param range The selected period
+     * @param orders The orders the account read returned
+     * @return Each order's moment, once per request: the sort, the rows and the balance walk read
+     *         it back instead of walking the fills again, and orders without one are left out
+     */
+    private static Map<OrderResponse, Instant> moments(List<OrderResponse> orders) {
+        Map<OrderResponse, Instant> moments = new IdentityHashMap<>();
+        for (OrderResponse order : orders) {
+            Instant moment = moment(order);
+            if (moment != null) {
+                moments.put(order, moment);
+            }
+        }
+        return moments;
+    }
+
+    /**
+     * @param moment The order's moment, or {@code null} for an order that carries none
+     * @param range  The selected period
      * @return Whether the order did something in the period — it traded in it, or, while it has
      *         never traded, it was placed in it (and, once it is gone, cancelled or expired in it)
      */
-    private static boolean inPeriod(OrderResponse order, HistoryPeriods.Range range) {
-        Instant moment = moment(order);
+    private static boolean inPeriod(Instant moment, HistoryPeriods.Range range) {
         return moment != null && moment.toEpochMilli() >= range.fromMillis()
                 && moment.toEpochMilli() <= range.toMillis();
     }
@@ -606,7 +625,7 @@ public class LedgerService {
     // ---- the view ---------------------------------------------------------------------------
 
     private OrderRowView row(OrderResponse order, int number, Map<String, Balance> balances,
-                             String selectedMarket, double result) {
+                             String selectedMarket, double result, Instant moment) {
         String market = marketOf(order, selectedMarket);
         Balance balance = balances.getOrDefault(base(market), new Balance(0, new TreeMap<>()));
         boolean buy = isBuy(order);
@@ -617,25 +636,25 @@ public class LedgerService {
         // carries is named under its status instead.
         String avgPrice = amount > 0 ? euro(quoteAmount / amount) : DASH;
         double netCash = buy ? -(quoteAmount + cashFee) : quoteAmount - cashFee;
-        Instant moment = moment(order);
+        long momentMillis = moment.toEpochMilli();
         return new OrderRowView(number,
-                moment == null ? DASH : display.minuteYear(moment),
+                display.minuteYear(moment),
                 dateNote(order, moment),
                 buy ? "BUY" : "SELL", buy ? "side-buy" : "side-sell",
                 order.getOrderType() == null ? DASH : order.getOrderType(),
                 order.getMarket() == null ? market : order.getMarket(),
                 order.getAmount() == null ? amountText(order.getAmountQuote(), market) : amount8(number(order.getAmount())),
                 avgPrice, statusLabel(order.getStatus()), statusClass(order.getStatus()),
-                triggerText(order), balance.after(order), fee(order, market),
+                triggerText(order), balance.after(order, momentMillis), fee(order, market),
                 amount > 0 || quoteAmount > 0 ? signed(netCash) : DASH,
                 amount > 0 || quoteAmount > 0 ? signClass(netCash) : "",
                 order.getFills() == null ? 0 : order.getFills().size(),
                 Double.isNaN(result) ? DASH : signed(result),
                 Double.isNaN(result) ? "" : signClass(result),
-                fills(order, market), filledText(order, market));
+                fills(order, market, moment), filledText(order, market));
     }
 
-    private List<FillRowView> fills(OrderResponse order, String market) {
+    private List<FillRowView> fills(OrderResponse order, String market, Instant moment) {
         if (order.getFills() == null) {
             return List.of();
         }
@@ -652,7 +671,7 @@ public class LedgerService {
             double cashFee = quote(market).equals(fee.currency()) ? fee.amount() : 0;
             double netCash = isBuy(order) ? -(amount * price + cashFee) : amount * price - cashFee;
             rows.add(new FillRowView(
-                    fillTime(order, fill),
+                    fillTime(moment, fill),
                     amount8(amount), euro(price), feeText(fee),
                     Boolean.TRUE.equals(fill.getTaker()) ? "taker" : "maker",
                     signed(netCash), signClass(netCash)));
@@ -661,17 +680,16 @@ public class LedgerService {
     }
 
     /**
-     * @param order The order the fill belongs to
-     * @param fill  The fill
-     * @return The fill's time of day, or its date and minute when it traded on another day than
+     * @param moment The moment the row is dated by
+     * @param fill   The fill
+     * @return The fill's time of day, or its date and second when it traded on another day than
      *         the row's own date — a fill that arrives days later must not read as that day's time
      */
-    private String fillTime(OrderResponse order, Fills fill) {
+    private String fillTime(Instant moment, Fills fill) {
         if (fill.getTimestamp() == null) {
             return DASH;
         }
-        Instant moment = moment(order);
-        return moment != null && !otherDay(moment, fill.getTimestamp())
+        return !otherDay(moment, fill.getTimestamp())
                 ? display.clockSecond(fill.getTimestamp())
                 : display.secondYear(fill.getTimestamp());
     }
@@ -830,10 +848,14 @@ public class LedgerService {
     private List<OrderResponse> sorted(List<OrderResponse> orders, LedgerRequest request,
                                        Map<String, Balance> balances, String selectedMarket,
                                        Map<OrderResponse, Double> results,
-                                       Map<OrderResponse, Double> euroFees) {
+                                       Map<OrderResponse, Double> euroFees,
+                                       Map<OrderResponse, Instant> moments) {
         String sort = sortKey(request.getSort());
         boolean ascending = "asc".equalsIgnoreCase(request.getDir());
-        Comparator<OrderResponse> tie = Comparator.comparingLong(LedgerService::momentMillis).reversed();
+        // Every order here has its moment, so the comparator reads the map instead of walking the
+        // fills on each comparison.
+        Comparator<OrderResponse> tie = Comparator.comparingLong(
+                (OrderResponse order) -> moments.get(order).toEpochMilli()).reversed();
         if (isTextSort(sort)) {
             Map<OrderResponse, String> keys = new IdentityHashMap<>();
             for (OrderResponse order : orders) {
@@ -846,7 +868,8 @@ public class LedgerService {
         }
         Map<OrderResponse, Double> keys = new IdentityHashMap<>();
         for (OrderResponse order : orders) {
-            keys.put(order, numberKey(sort, order, balances, selectedMarket, results, euroFees));
+            keys.put(order, numberKey(sort, order, balances, selectedMarket, results, euroFees,
+                    moments));
         }
         Comparator<Double> order = ascending ? Comparator.naturalOrder() : Comparator.reverseOrder();
         Comparator<OrderResponse> comparator = Comparator.comparing(
@@ -871,16 +894,17 @@ public class LedgerService {
     private Double numberKey(String sort, OrderResponse order,
                                     Map<String, Balance> balances, String selectedMarket,
                                     Map<OrderResponse, Double> results,
-                                    Map<OrderResponse, Double> euroFees) {
+                                    Map<OrderResponse, Double> euroFees,
+                                    Map<OrderResponse, Instant> moments) {
         double value = switch (sort) {
             case "amount" -> amountValue(order);
             case "price" -> averagePrice(order);
-            case "balance" -> balanceAfter(order, balances, selectedMarket);
+            case "balance" -> balanceAfter(order, balances, selectedMarket, moments);
             case "fee" -> euroFees.getOrDefault(order, 0.0);
             case "netCash" -> netCashValue(order, selectedMarket);
             case "fills" -> order.getFills() == null ? 0 : order.getFills().size();
             case "pnl" -> results.getOrDefault(order, Double.NaN);
-            default -> momentMillis(order);
+            default -> moments.get(order).toEpochMilli();
         };
         return Double.isFinite(value) ? value : null;
     }
@@ -898,9 +922,11 @@ public class LedgerService {
     }
 
     private static double balanceAfter(OrderResponse order, Map<String, Balance> balances,
-                                       String selectedMarket) {
+                                       String selectedMarket,
+                                       Map<OrderResponse, Instant> moments) {
         Balance balance = balances.get(base(marketOf(order, selectedMarket)));
-        return balance == null ? Double.NaN : balance.afterValue(order);
+        return balance == null ? Double.NaN
+                : balance.afterValue(order, moments.get(order).toEpochMilli());
     }
 
     private double netCashValue(OrderResponse order, String selectedMarket) {
@@ -1182,22 +1208,23 @@ public class LedgerService {
     private record Balance(double current, NavigableMap<Long, Double> afterByFill) {
 
         /**
-         * @param order  The order
-         * @param market The market
+         * @param order        The order
+         * @param momentMillis When the order did something, in milliseconds
          * @return The balance after the order's fills, or after the fills that preceded it
          */
-        String after(OrderResponse order) {
-            return plain(afterValue(order));
+        String after(OrderResponse order, long momentMillis) {
+            return plain(afterValue(order, momentMillis));
         }
 
         /**
-         * @param order The order
+         * @param order        The order
+         * @param momentMillis When the order did something, in milliseconds
          * @return The base-currency balance after the order's fills (or after the fills that
          *         preceded it), or today's balance when nothing preceded it
          */
-        double afterValue(OrderResponse order) {
+        double afterValue(OrderResponse order, long momentMillis) {
             Map.Entry<Long, Double> entry = order.getFills() == null || order.getFills().isEmpty()
-                    ? afterByFill.floorEntry(momentMillis(order))
+                    ? afterByFill.floorEntry(momentMillis)
                     : lastFillAfter(order);
             return entry == null ? current : entry.getValue();
         }
@@ -1330,22 +1357,13 @@ public class LedgerService {
         if (traded != null) {
             return traded;
         }
-        boolean gone = "canceled".equalsIgnoreCase(order.getStatus())
-                || "expired".equalsIgnoreCase(order.getStatus());
+        // Bitvavo also reports canceledAon (all-or-none), so every cancellation counts as gone.
+        String status = order.getStatus() == null ? "" : order.getStatus().toLowerCase(Locale.ENGLISH);
+        boolean gone = status.startsWith("canceled") || status.startsWith("expired");
         if (gone && order.getUpdated() != null) {
             return Instant.ofEpochMilli(order.getUpdated());
         }
         return order.getCreated() == null ? null : Instant.ofEpochMilli(order.getCreated());
-    }
-
-    /**
-     * @param order The order
-     * @return The moment as milliseconds, or {@code 0} when the order carries none, so that a sort
-     *         can order it with the rest
-     */
-    private static long momentMillis(OrderResponse order) {
-        Instant moment = moment(order);
-        return moment == null ? 0 : moment.toEpochMilli();
     }
 
     /**
@@ -1496,8 +1514,9 @@ public class LedgerService {
     /**
      * @param order The order
      * @return For a resting or trigger-waiting order: its trigger price and, when the order type
-     *         carries one, its limit price; for a conditional order that has already traded, the
-     *         same pair, so that a wait of days can be read off the row; empty otherwise
+     *         carries one, its limit price; for a conditional order the same pair in any state, so
+     *         a wait of days, a partial fill or a cancellation can be read off the row; empty
+     *         otherwise
      */
     private static String triggerText(OrderResponse order) {
         boolean waiting = "awaitingtrigger".equalsIgnoreCase(order.getStatus())
@@ -1505,7 +1524,7 @@ public class LedgerService {
         String type = order.getOrderType() == null ? ""
                 : order.getOrderType().toLowerCase(Locale.ENGLISH);
         boolean conditional = type.startsWith("stoploss") || type.startsWith("takeprofit");
-        if (!waiting && !(conditional && "filled".equalsIgnoreCase(order.getStatus()))) {
+        if (!waiting && !conditional) {
             return "";
         }
         boolean hasTrigger = order.getTriggerPrice() != null && order.getTriggerPrice().signum() != 0;
