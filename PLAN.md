@@ -282,6 +282,15 @@ next: the small live-run trial of the engine.
     carries the same awaiting-reconciliation marker, so a timeout cannot hide an accepted order;
     a terminal non-fill, or a complete history proving the exchange never accepted it, settles as
     `FAILED` with the exchange status in the error (PR #59)
+31. ✅ Ledger periods follow the order's own moment: the orders tab read and dated every order by
+    when it was placed — the field Bitvavo's order query filters on — so a take-profit armed on
+    9 Oct and filled on 21 Oct appeared under 9 Oct *and* was missing from the 21 Oct range
+    entirely, while that day's summary showed nothing even though the money moved. The read is now
+    bounded at the period's end only and each order is filtered on its last fill (or, while it has
+    never traded, its placement — its cancellation or expiry once it is gone); the row dates by
+    that moment with the placement underneath when the two days differ, the date sort follows it,
+    and the summary counts it there. An order that fills in pieces lands in the period of its last
+    fill, and a read that hits the exchange's 1000-order limit says so in the summary (PR #60)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
