@@ -186,6 +186,7 @@ class HistoryUiControllerRenderTest {
                 .andExpect(content().string(containsString(">Amount</a>")))
                 .andExpect(content().string(containsString("Totals by pair")))
                 .andExpect(content().string(containsString("€110,00")))
+                .andExpect(content().string(containsString("placed 13 Oct 2026 09:00")))
                 .andExpect(content().string(not(containsString("Current price of"))));
     }
 
@@ -224,7 +225,7 @@ class HistoryUiControllerRenderTest {
     private static LedgerView ledgerView(String unrealisedHint, String unrealisedText) {
         LedgerView.FillRowView fill = new LedgerView.FillRowView("09:00:00", "0.00050000", "€76.000,00",
                 "€0,0800", "taker", "+€37,92", "pos");
-        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00", "SELL", "side-sell",
+        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00", "", "SELL", "side-sell",
                 "takeProfitLimit", "BTC-EUR", "0.00050000", "€76.000,00", "awaiting trigger", "",
                 "trigger €73.162,00 · limit €75.364,00", "0.0015", "€0,08",
                 "+€37,92", "pos", 1, "+€0,60", "pos", List.of(fill), "");
@@ -246,7 +247,8 @@ class HistoryUiControllerRenderTest {
 
 
     private static LedgerView allPairsLedgerView() {
-        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00", "SELL", "side-sell",
+        LedgerView.OrderRowView row = new LedgerView.OrderRowView(1, "14 Oct 2026 09:00",
+                "placed 13 Oct 2026 09:00", "SELL", "side-sell",
                 "market", "BTC-EUR", "0.00050000", "€76.000,00", "filled", "ok", "", "0.0015",
                 "€0,08", "+€37,92", "pos", 1, "+€0,60", "pos", List.of(), "");
         LedgerView.FiltersView filters = new LedgerView.FiltersView("", "all", "Amount",
