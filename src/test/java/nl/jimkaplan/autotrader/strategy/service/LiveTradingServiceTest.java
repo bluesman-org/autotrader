@@ -84,6 +84,8 @@ class LiveTradingServiceTest {
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("MACD_BULLISH_CROSSOVER"));
         verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
+        verify(liveOrderRepository)
+                .existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED");
         verify(liveOrderRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
@@ -95,6 +97,8 @@ class LiveTradingServiceTest {
         assertNull(liveTradingService.decide(strategy, rising(60)));
 
         verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
+        verify(liveOrderRepository)
+                .existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED");
         verify(liveOrderRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
@@ -103,6 +107,18 @@ class LiveTradingServiceTest {
     void decide_returnsNullWhileARealOrderIsPending() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         when(liveOrderRepository.existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING")).thenReturn(true);
+
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
+
+        verify(livePositionRepository, never()).findByStrategyIdAndStatus(any(), any());
+    }
+
+    @Test
+    void decide_returnsNullWhileAFailedOrderWasNeverAnswered() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(liveOrderRepository.existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED"))
+                .thenReturn(true);
 
         assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
 
@@ -130,6 +146,8 @@ class LiveTradingServiceTest {
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("PRICE_ABOVE_SAR"));
         verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
+        verify(liveOrderRepository)
+                .existsByStrategyIdAndStatusAndOrderIdIsNull(STRATEGY_ID, "FAILED");
         verify(liveOrderRepository, never()).save(any());
     }
 

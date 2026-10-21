@@ -42,10 +42,11 @@ import java.util.stream.Collectors;
  *
  * <p>The history is bounded to the strategy's lifetime ({@code start} = the strategy's creation
  * time) and read with the exchange's maximum page size, so fills that predate it are never
- * considered, and only {@code filled} entries are acted on: an order still {@code open},
- * {@code partiallyFilled}, {@code canceled} or {@code expired} is warned and left for a later boot
- * (v1 does not reconcile partial or abandoned orders). A real {@code FAILED} row recorded before
- * the engine sent a client order ID cannot be attributed and is warned for a manual check. The
+ * considered. A {@code filled} entry is booked; a terminal non-fill ({@code canceled*},
+ * {@code expired}, {@code rejected}) settles the row as {@code FAILED} with the exchange status in
+ * its error, noting any partial fill v1 cannot book; an order that can still fill is warned and left
+ * for a later boot. A real {@code FAILED} row recorded before the engine sent a client order ID
+ * cannot be attributed and is warned for a manual check. The
  * service is idempotent — once a row is settled it is no longer {@code PENDING} or {@code FAILED},
  * so a second run writes nothing — and it never throws. It returns the ids of the strategies it
  * could not reconcile, so the caller can hold them back instead of letting them trade on stale
@@ -310,6 +311,15 @@ public class LiveOrderReconciliationService {
             return;
         }
         if (!"filled".equalsIgnoreCase(order.getStatus())) {
+            if (LiveOrderStatus.isTerminalNonFill(order.getStatus())) {
+                String note = LiveOrderStatus.partialFillNote(order.getFilledAmountQuote());
+                row.setStatus("FAILED");
+                row.setErrorMessage("exchange order status: " + order.getStatus() + note);
+                liveOrderRepository.save(row);
+                log.warn("Exchange order {} for strategy {} is {}; settled row {} as FAILED{}",
+                        order.getOrderId(), strategy.getId(), order.getStatus(), row.getId(), note);
+                return;
+            }
             log.warn("Exchange order {} for strategy {} is {} (not filled); row {} is left alone",
                     order.getOrderId(), strategy.getId(), order.getStatus(), row.getId());
             return;

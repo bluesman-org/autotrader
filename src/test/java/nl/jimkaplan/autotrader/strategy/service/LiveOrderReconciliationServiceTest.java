@@ -297,6 +297,44 @@ class LiveOrderReconciliationServiceTest {
     }
 
     @Test
+    void aPendingRowWhoseExchangeOrderTurnedTerminalIsSettledAsFailed() {
+        stubStrategyAndAccount();
+        UUID clientOrderId = UUID.randomUUID();
+        LiveOrder pending = pendingRow("BUY", clientOrderId, Instant.ofEpochMilli(START + MINUTE));
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of(pending));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy",
+                        "canceledMarketProtection", START + MINUTE, clientOrderId,
+                        null, "50.00", null)});
+
+        assertTrue(service.reconcileAll().isEmpty());
+
+        assertEquals("FAILED", pending.getStatus());
+        assertTrue(pending.getErrorMessage().contains("canceledMarketProtection"));
+        assertTrue(pending.getErrorMessage().contains("partial fill"));
+        verify(liveOrderRepository).save(pending);
+    }
+
+    @Test
+    void aPendingRowWhoseExchangeOrderCanStillFillIsLeftPending() {
+        stubStrategyAndAccount();
+        UUID clientOrderId = UUID.randomUUID();
+        LiveOrder pending = pendingRow("BUY", clientOrderId, Instant.ofEpochMilli(START + MINUTE));
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of(pending));
+        when(bitvavoApiClient.get(ordersEndpoint(MARKET), OrderResponse[].class, KEY, SECRET))
+                .thenReturn(new OrderResponse[]{order(UUID.randomUUID(), "buy",
+                        "partiallyFilled", START + MINUTE, clientOrderId,
+                        "0.0005", "50.00", null)});
+
+        assertTrue(service.reconcileAll().isEmpty());
+
+        assertEquals("PENDING", pending.getStatus());
+        verify(liveOrderRepository, never()).save(any());
+    }
+
+    @Test
     void aNullHistoryLeavesThePendingRowPending() {
         stubStrategyAndAccount();
         LiveOrder pending = pendingRow("BUY", UUID.randomUUID(), Instant.ofEpochMilli(START + MINUTE));

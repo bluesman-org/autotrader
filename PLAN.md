@@ -278,8 +278,9 @@ next: the small live-run trial of the engine.
     or `canceled*` response would open or close the position at the estimated size and the boot
     reconciliation (which revisits only `PENDING`/`FAILED` rows) would never correct it. Only a
     `filled` status settles the row; a status that can still fill (or one Bitvavo adds later)
-    leaves it `PENDING` and blocks further decisions until reconciliation, while a terminal
-    non-fill becomes `FAILED` with the exchange status in the error (PR #59)
+    leaves it `PENDING` and blocks further decisions until reconciliation, as does an ambiguous
+    `FAILED` row with a client order ID but no exchange order ID, while a terminal non-fill becomes
+    `FAILED` with the exchange status in the error and reconciliation settles the same way (PR #59)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

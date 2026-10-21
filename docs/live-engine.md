@@ -73,7 +73,9 @@ candle channel of its market and interval. Our own policies:
   `expired`, `rejected`). A status that can still fill (`new`, `partiallyFilled`, `awaitingTrigger`,
   or one Bitvavo adds later) leaves the row `PENDING` and the caller does not move a position. A
   terminal partial fill is warned and noted in the error because v1 cannot book it. While a real
-  `PENDING` row exists, `decide` stands down, so a slow fill cannot trigger a second real order.
+  `PENDING` row exists — or a `FAILED` row with a client order ID but no exchange order ID, the
+  trace of a timeout that may have hidden an accepted order — `decide` stands down, so a slow or
+  ambiguous fill cannot trigger a second real order; the stand-down is logged at warn once.
   An order rejected before it is sent (no API key, insufficient balance, below the market minimum,
   an exchange error before the pre-write) is recorded as `REJECTED` with no client order ID;
   dry-run rows carry none either.
@@ -139,11 +141,12 @@ which holds them back rather than let them trade on stale state.
   complete (the limit was reached, the response was null, or an entry with a client order ID could
   not be read) such a row is left `PENDING` and retried at the next boot, since "not in this page"
   is not "never accepted". A `FAILED` row the exchange does not know is left as it is either way.
-- **Filled only**: only `filled` entries are acted on. An order still `open`, `partiallyFilled`,
-  `canceled` or `expired` is logged and left alone by the normal resolution (v1 does not reconcile
-  partial or abandoned orders); in the restore recovery below, a matched order that can still fill
-  is instead recorded as `PENDING` so it settles once it fills, and a terminal match is skipped
-  with a warning. An entry without a client order ID (the legacy webhook path, the exchange UI) cannot be
+- **Filled or terminal**: a `filled` entry is booked; a terminal non-fill (`canceled*`, `expired`,
+  `rejected`) settles the row as `FAILED` with the exchange status in its error and a note when a
+  partial fill cannot be booked (v1 does not book partial fills); an order that can still fill is
+  logged and left alone. In the restore recovery below, a matched order that can still fill is
+  recorded as `PENDING` so it settles once it fills, and a terminal match is skipped with a
+  warning. An entry without a client order ID (the legacy webhook path, the exchange UI) cannot be
   the row being searched and is skipped at debug without affecting completeness; an entry that has a
   client order ID but is missing its order ID, creation time or side is warned and marks the page
   incomplete.

@@ -43,6 +43,18 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     boolean existsByStrategyIdAndStatus(String strategyId, String status);
 
     /**
+     * Whether the strategy has an order in the given status that never received an exchange order
+     * ID. A {@code FAILED} row like this is an ambiguous submission: the request may have reached
+     * the exchange before the timeout. The engine must stand down until reconciliation settles it,
+     * just as it does for a {@code PENDING} row.
+     *
+     * @param strategyId The strategy ID
+     * @param status     The order status, e.g. {@code FAILED}
+     * @return Whether such an order exists
+     */
+    boolean existsByStrategyIdAndStatusAndOrderIdIsNull(String strategyId, String status);
+
+    /**
      * Orders whose decision candle falls in the given range, for the history page's order
      * references: a round trip's buy carries the position's entry signal time, its sell the exit
      * signal time. Explicit {@code @Query} for the same reason as
