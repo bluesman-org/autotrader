@@ -73,9 +73,9 @@ candle channel of its market and interval. Our own policies:
   `expired`, `rejected`). A status that can still fill (`new`, `partiallyFilled`, `awaitingTrigger`,
   or one Bitvavo adds later) leaves the row `PENDING` and the caller does not move a position. A
   terminal partial fill is warned and noted in the error because v1 cannot book it. While a real
-  `PENDING` row exists — or a `FAILED` row with a client order ID but no exchange order ID, the
-  trace of a timeout that may have hidden an accepted order — `decide` stands down, so a slow or
-  ambiguous fill cannot trigger a second real order; the stand-down is logged at warn once.
+  order is marked awaiting reconciliation — a pre-write, or a timeout that may have hidden an
+  accepted order — `decide` stands down, so a slow or ambiguous fill cannot trigger a second real
+  order; the stand-down is logged at warn once.
   An order rejected before it is sent (no API key, insufficient balance, below the market minimum,
   an exchange error before the pre-write) is recorded as `REJECTED` with no client order ID;
   dry-run rows carry none either.

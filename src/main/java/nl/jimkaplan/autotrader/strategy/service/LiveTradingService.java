@@ -50,9 +50,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * sent, and that same row is updated in place to {@code FILLED}, or to {@code FAILED} when the
  * exchange reports a terminal non-fill. A response that can still fill — or one whose status this
  * version does not know — leaves the row {@code PENDING}, and no new decision is taken until the
- * next boot's reconciliation settles it. The same stand-down applies to an ambiguous submission
- * recorded as {@code FAILED} with a client order ID but no exchange order ID: the timeout may have
- * hidden an accepted order, so the engine must not send a second one. The client order ID is sent to
+ * next boot's reconciliation settles it. An ambiguous submission is marked awaiting reconciliation
+ * as well: the timeout may have hidden an accepted order, so the engine must not send a second one.
+ * The client order ID is sent to
  * the exchange, so a crash or an ambiguous timeout between the write and the response leaves a row
  * the next boot can reconcile against the exchange's order history (see
  * {@link LiveOrderReconciliationService}) instead of a lost or duplicated order.</p>
