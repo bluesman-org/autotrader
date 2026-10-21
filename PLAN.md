@@ -277,8 +277,9 @@ next: the small live-run trial of the engine.
     accepted `POST /order` response `FILLED` without reading its `status`, so a `partiallyFilled`
     or `canceled*` response would open or close the position at the estimated size and the boot
     reconciliation (which revisits only `PENDING`/`FAILED` rows) would never correct it. Only a
-    `filled` status now settles the row; any other status, including one Bitvavo adds later, leaves
-    it `PENDING` and the caller does not move the position (PR #59)
+    `filled` status settles the row; a status that can still fill (or one Bitvavo adds later)
+    leaves it `PENDING` and blocks further decisions until reconciliation, while a terminal
+    non-fill becomes `FAILED` with the exchange status in the error (PR #59)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

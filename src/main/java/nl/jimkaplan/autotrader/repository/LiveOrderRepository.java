@@ -32,6 +32,17 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     List<LiveOrder> findTop8ByStrategyIdOrderByCreatedTimeDesc(String strategyId);
 
     /**
+     * Whether the strategy has an order in the given status. The engine uses this to stand down
+     * while a real order is still `PENDING`: a slow or partial fill must not trigger a second real
+     * order before the boot reconciliation settles it.
+     *
+     * @param strategyId The strategy ID
+     * @param status     The order status, e.g. {@code PENDING}
+     * @return Whether such an order exists
+     */
+    boolean existsByStrategyIdAndStatus(String strategyId, String status);
+
+    /**
      * Orders whose decision candle falls in the given range, for the history page's order
      * references: a round trip's buy carries the position's entry signal time, its sell the exit
      * signal time. Explicit {@code @Query} for the same reason as

@@ -83,7 +83,9 @@ class LiveTradingServiceTest {
         assertEquals("BUY", decision.side());
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("MACD_BULLISH_CROSSOVER"));
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, credentialsService);
+        verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
+        verify(liveOrderRepository, never()).save(any());
+        verifyNoInteractions(bitvavoApiClient, credentialsService);
     }
 
     @Test
@@ -92,7 +94,19 @@ class LiveTradingServiceTest {
 
         assertNull(liveTradingService.decide(strategy, rising(60)));
 
-        verifyNoInteractions(liveOrderRepository, bitvavoApiClient, credentialsService);
+        verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
+        verify(liveOrderRepository, never()).save(any());
+        verifyNoInteractions(bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void decide_returnsNullWhileARealOrderIsPending() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(liveOrderRepository.existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING")).thenReturn(true);
+
+        assertNull(liveTradingService.decide(strategy, vUpToCrossover()));
+
+        verify(livePositionRepository, never()).findByStrategyIdAndStatus(any(), any());
     }
 
     @Test
@@ -115,7 +129,8 @@ class LiveTradingServiceTest {
         assertEquals("SELL", decision.side());
         assertEquals(series.get(series.size() - 1).getOpenTime(), decision.signalOpenTime());
         assertTrue(decision.reason().contains("PRICE_ABOVE_SAR"));
-        verifyNoInteractions(liveOrderRepository);
+        verify(liveOrderRepository).existsByStrategyIdAndStatus(STRATEGY_ID, "PENDING");
+        verify(liveOrderRepository, never()).save(any());
     }
 
     @Test
@@ -325,6 +340,58 @@ class LiveTradingServiceTest {
         assertEquals(2, saves.size());
         assertEquals("PENDING", saves.get(1).getStatus());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveBuyWithATerminalResponseRecordsFailedAndOpensNoPosition() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("canceledMarketProtection");
+        response.setFilledAmountQuote(new BigDecimal("50.00"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals(2, saves.size());
+        assertEquals("FAILED", saves.get(1).getStatus());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        assertTrue(saves.get(1).getErrorMessage().contains("canceledMarketProtection"));
+        assertTrue(saves.get(1).getErrorMessage().contains("partial fill"));
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveBuyWithAnUnknownStatusLeavesTheRowPending() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/balance?symbol=EUR", GetAccountBalanceResponse[].class, KEY, SECRET))
+                .thenReturn(new GetAccountBalanceResponse[]{balance("EUR", 1000.0)});
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("someFutureStatus");
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("BUY"), 62.0);
+
+        assertEquals("PENDING", saves.get(1).getStatus());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         verify(livePositionRepository, never()).save(any());
     }
 
@@ -467,7 +534,7 @@ class LiveTradingServiceTest {
     }
 
     @Test
-    void fill_liveSellWithACanceledResponseLeavesTheRowPendingAndKeepsThePositionOpen() {
+    void fill_liveSellWithATerminalResponseRecordsFailedAndKeepsThePositionOpen() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         LivePosition position = openPosition(0.001, 100000.0, 0.2);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
@@ -486,8 +553,37 @@ class LiveTradingServiceTest {
         liveTradingService.fill(strategy, decision("SELL"), 160.0);
 
         assertEquals(2, saves.size());
+        assertEquals("FAILED", saves.get(1).getStatus());
+        assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
+        assertTrue(saves.get(1).getErrorMessage().contains("canceledMarketProtection"));
+        verify(livePositionRepository, never()).save(any());
+    }
+
+    @Test
+    void fill_liveSellWithAPartiallyFilledResponseLeavesTheRowPendingAndKeepsThePositionOpen() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("partiallyFilled");
+        response.setFilledAmountQuote(new BigDecimal("50.00"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        List<LiveOrder> saves = recordSaves();
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        assertEquals(2, saves.size());
         assertEquals("PENDING", saves.get(1).getStatus());
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
+        assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         verify(livePositionRepository, never()).save(any());
     }
 

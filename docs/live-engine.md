@@ -69,14 +69,16 @@ candle channel of its market and interval. Our own policies:
   reuse. The persisted sequence is advanced (a monotonic update — it can never move backwards)
   before the pre-write, so a crash can skip a number but never let a later order reuse one.
   The same row is then updated in place — to `FILLED` with the exchange's amounts, price and fee when
-  the response's status is `filled`, or to `FAILED` with the error. Any other status (`new`,
-  `partiallyFilled`, a `canceled*` one, or a status Bitvavo adds later) leaves the row `PENDING` and
-  the caller does not open or close a position, so an ambiguous or partial response stays
-  reconcilable at the next boot (see "Reconciliation on startup"). An order rejected before it is
-  sent (no API key, insufficient balance, below the market minimum, an exchange error before the
-  pre-write) is recorded as `REJECTED` with no client order ID; dry-run rows carry none either.
-- One position at a time: entry signals are ignored while a position is open, exit signals while
-  flat.
+  the response's status is `filled`, or to `FAILED` with the error or a terminal non-fill (`canceled*`,
+  `expired`, `rejected`). A status that can still fill (`new`, `partiallyFilled`, `awaitingTrigger`,
+  or one Bitvavo adds later) leaves the row `PENDING` and the caller does not move a position. A
+  terminal partial fill is warned and noted in the error because v1 cannot book it. While a real
+  `PENDING` row exists, `decide` stands down, so a slow fill cannot trigger a second real order.
+  An order rejected before it is sent (no API key, insufficient balance, below the market minimum,
+  an exchange error before the pre-write) is recorded as `REJECTED` with no client order ID;
+  dry-run rows carry none either.
+- One position at a time: entry signals are ignored while a position is open or a real order is
+  awaiting reconciliation, exit signals while flat.
 - **Sizing**: a fixed EUR amount per buy (`amountPerBuy`, default 100, minimum 5 EUR), rounded down
   to the market's notional decimals for live orders; sells round the position quantity down to the
   market's quantity decimals. Only EUR-quoted markets are accepted, since the sizing, the balance
@@ -93,7 +95,7 @@ candle channel of its market and interval. Our own policies:
   placed, so a crash costs a trade instead of duplicating one, and evaluation is idempotent across
   restarts.
 - `live_orders` — every intended or executed order: `PENDING` (written before a real order is sent,
-  and kept when the response was not `filled` so the next boot can settle it), `DRY_RUN`,
+  and kept when the response can still fill so the next boot can settle it), `DRY_RUN`,
   `REJECTED` (a local, pre-flight rejection that never reached the exchange), `FILLED` or `FAILED`,
   with the signal's candle open time, the rule set that fired, amounts, the fill or estimated price,
   the fee, the exchange order ID for live fills and the client order ID the pre-write sent. A

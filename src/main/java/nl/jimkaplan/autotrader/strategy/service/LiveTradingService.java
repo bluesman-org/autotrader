@@ -33,6 +33,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -45,10 +46,13 @@ import java.util.UUID;
  * point. Live fills use what the exchange reports; dry-run fills use that open.</p>
  *
  * <p>A real order is written as a {@code PENDING} row with a generated client order ID before it is
- * sent, and that same row is updated in place to {@code FILLED} or {@code FAILED} afterwards. The
- * client order ID is sent to the exchange, so a crash or an ambiguous timeout between the write and
- * the response leaves a row the next boot can reconcile against the exchange's order history
- * (see {@link LiveOrderReconciliationService}) instead of a lost or duplicated order.</p>
+ * sent, and that same row is updated in place to {@code FILLED}, or to {@code FAILED} when the
+ * exchange reports a terminal non-fill. A response that can still fill — or one whose status this
+ * version does not know — leaves the row {@code PENDING}, and no new decision is taken until the
+ * next boot's reconciliation settles it. The client order ID is sent to the exchange, so a crash or
+ * an ambiguous timeout between the write and the response leaves a row the next boot can reconcile
+ * against the exchange's order history (see {@link LiveOrderReconciliationService}) instead of a
+ * lost or duplicated order.</p>
  *
  * <p>One position at a time: entry signals are only decided while flat, exit signals only while a
  * position is open. Live orders are priced and rounded from the exchange's market metadata; a
@@ -72,7 +76,8 @@ public class LiveTradingService {
      *
      * @param strategy The live strategy
      * @param series   The strategy's candle window, oldest first, ending in the closed candle
-     * @return The decision to fill at the next candle's open, or null when no signal fired
+     * @return The decision to fill at the next candle's open, or null when no signal fired or a
+     *         real order is still awaiting reconciliation
      */
     public LiveDecision decide(LiveStrategy strategy, List<Candle> series) {
         if (series.isEmpty()) {
@@ -85,6 +90,11 @@ public class LiveTradingService {
         if (index < strategy.getWarmUpCandles()) {
             log.debug("{} has {} bars; still inside the {}-candle warm-up",
                     strategy.getId(), candleSeries.length(), strategy.getWarmUpCandles());
+            return null;
+        }
+        if (liveOrderRepository.existsByStrategyIdAndStatus(strategy.getId(), "PENDING")) {
+            log.debug("{} has a real order awaiting reconciliation; no new decision on this candle",
+                    strategy.getId());
             return null;
         }
         Candle candle = series.get(series.size() - 1);
@@ -351,11 +361,20 @@ public class LiveTradingService {
      * @return Whether the order filled, so the caller may move the position
      */
     private boolean applyFill(LiveOrder order, CreateOrderResponse response) {
-        if (!"filled".equalsIgnoreCase(response.getStatus())) {
+        String status = response.getStatus();
+        if (!"filled".equalsIgnoreCase(status)) {
             order.setOrderId(String.valueOf(response.getOrderId()));
-            liveOrderRepository.save(order);
-            log.warn("Order {} of strategy {} came back {}; left PENDING for reconciliation",
-                    response.getOrderId(), order.getStrategyId(), response.getStatus());
+            if (isTerminalNonFill(status)) {
+                order.setStatus("FAILED");
+                order.setErrorMessage("exchange order status: " + status + partialFillNote(response));
+                liveOrderRepository.save(order);
+                log.warn("Order {} of strategy {} came back {}; recorded FAILED{}",
+                        response.getOrderId(), order.getStrategyId(), status, partialFillNote(response));
+            } else {
+                liveOrderRepository.save(order);
+                log.warn("Order {} of strategy {} came back {}; left PENDING for reconciliation",
+                        response.getOrderId(), order.getStrategyId(), status);
+            }
             return false;
         }
         double quantity = TradeMath.filled(
@@ -371,6 +390,31 @@ public class LiveTradingService {
         order.setStatus("FILLED");
         liveOrderRepository.save(order);
         return true;
+    }
+
+    /**
+     * @param status The exchange's status for the order
+     * @return Whether the order is terminally not filled, so the row can be settled as FAILED
+     */
+    private static boolean isTerminalNonFill(String status) {
+        if (status == null) {
+            return false;
+        }
+        String normalized = status.toLowerCase(Locale.ROOT);
+        return normalized.startsWith("canceled") || normalized.equals("expired")
+                || normalized.equals("rejected");
+    }
+
+    /**
+     * @param response The exchange's order response
+     * @return A note about a partial fill the terminal-status path cannot book, or an empty string
+     */
+    private static String partialFillNote(CreateOrderResponse response) {
+        if (response.getFilledAmountQuote() == null || response.getFilledAmountQuote().signum() <= 0) {
+            return "";
+        }
+        return " (partial fill of " + response.getFilledAmountQuote().toPlainString()
+                + " quote not booked)";
     }
 
     /**

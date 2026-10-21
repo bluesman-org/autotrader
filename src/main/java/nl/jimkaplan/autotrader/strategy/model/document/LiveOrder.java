@@ -38,9 +38,10 @@ public class LiveOrder extends BaseDocument {
 
     /**
      * "PENDING", "DRY_RUN", "REJECTED", "FILLED", "FAILED" or "SKIPPED". A real order is written as
-     * {@code PENDING} before it is sent (so an ambiguous failure stays reconcilable), updated to
-     * {@code FILLED} or {@code FAILED} afterwards; {@code REJECTED} is a local, pre-flight
-     * rejection that never reached the exchange.
+     * {@code PENDING} before it is sent (so an ambiguous failure stays reconcilable), then updated
+     * to {@code FILLED}; to {@code FAILED} for an error or a terminal non-filled exchange status;
+     * or left {@code PENDING} when the exchange says it can still fill. {@code REJECTED} is a
+     * local, pre-flight rejection that never reached the exchange.
      */
     @Field("status")
     private String status;
