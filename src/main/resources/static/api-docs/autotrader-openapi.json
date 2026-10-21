@@ -11,10 +11,19 @@
       "description": "Generated server url"
     }
   ],
+  "security": [
+    {
+      "basicAuth": [ ]
+    }
+  ],
   "tags": [
     {
       "name": "Live strategies",
       "description": "API for running strategies live on closed candles"
+    },
+    {
+      "name": "Bitvavo credentials",
+      "description": "The system-wide Bitvavo API key the engine and the ledger use"
     },
     {
       "name": "TradingView Webhook",
@@ -31,9 +40,145 @@
     {
       "name": "Transaction History",
       "description": "API for viewing Bitvavo transaction history"
+    },
+    {
+      "name": "Mail settings",
+      "description": "The SMTP server the recovery mails go out through"
+    },
+    {
+      "name": "Password recovery",
+      "description": "Ask for a password-recovery mail"
+    },
+    {
+      "name": "Markets",
+      "description": "The trading-pair catalogue the forms and the ledger read"
     }
   ],
   "paths": {
+    "/api/mail-settings": {
+      "get": {
+        "tags": [
+          "Mail settings"
+        ],
+        "summary": "Read the SMTP settings (no password)",
+        "description": "Returns the host, port, sign-in name, from-address and STARTTLS flag; the password is never returned.",
+        "operationId": "current",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Mail settings"
+        ],
+        "summary": "Store or replace the SMTP settings",
+        "description": "Stores the password encrypted. A blank password keeps the stored one, so the host can be corrected without re-typing it.",
+        "operationId": "store",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The settings were stored",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The host, from-address or first password was missing",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bitvavo-credentials": {
+      "get": {
+        "tags": [
+          "Bitvavo credentials"
+        ],
+        "summary": "Read the system-wide Bitvavo API key (masked)",
+        "description": "Returns whether a key is configured, a hint that identifies it and the operator id. The key and the secret are never returned.",
+        "operationId": "get",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BitvavoCredentialsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Bitvavo credentials"
+        ],
+        "summary": "Store or replace the system-wide Bitvavo API key",
+        "description": "Stores the key encrypted; it is used by the live engine and the ledger.",
+        "operationId": "replace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BitvavoCredentialsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The key was stored",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/BitvavoCredentialsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The key or the secret was missing",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/webhook/tradingview": {
       "post": {
         "tags": [
@@ -105,6 +250,191 @@
               }
             }
           }
+        },
+        "security": [ ]
+      }
+    },
+    "/api/password-recovery": {
+      "post": {
+        "tags": [
+          "Password recovery"
+        ],
+        "summary": "Ask for a password-recovery mail",
+        "description": "Always answers the same way, whether or not the address belongs to the account; when it does, a single-use link is mailed to it.",
+        "operationId": "request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/markets": {
+      "get": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "List the trading pairs",
+        "operationId": "listMarkets",
+        "responses": {
+          "200": {
+            "description": "Pairs returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Market"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Add a trading pair",
+        "description": "Validates the pair against Bitvavo's public market list first: it must exist, be EUR-quoted and be trading.",
+        "operationId": "addMarket",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Pair added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Market"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid, unknown or duplicate pair"
+          }
+        }
+      }
+    },
+    "/api/markets/{market}/enable": {
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Enable a trading pair",
+        "operationId": "enableMarket",
+        "parameters": [
+          {
+            "name": "market",
+            "in": "path",
+            "description": "Market in Bitvavo format",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pair enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Market"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such pair"
+          }
+        }
+      }
+    },
+    "/api/markets/{market}/disable": {
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Disable a trading pair",
+        "operationId": "disableMarket",
+        "parameters": [
+          {
+            "name": "market",
+            "in": "path",
+            "description": "Market in Bitvavo format",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pair disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Market"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such pair"
+          }
+        }
+      }
+    },
+    "/api/markets/discover": {
+      "post": {
+        "tags": [
+          "Markets"
+        ],
+        "summary": "Discover the account's traded pairs",
+        "description": "Reads the account history with the system-wide key and adds or refreshes every EUR pair the account traded. Disabled pairs stay disabled; nothing is deleted.",
+        "operationId": "discoverMarkets",
+        "responses": {
+          "200": {
+            "description": "Discovery completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No Bitvavo API key is configured"
+          }
         }
       }
     },
@@ -114,7 +444,20 @@
           "Live strategies"
         ],
         "summary": "List live strategies",
+        "description": "Returns the strategies that have not been archived. Set `includeArchived=true` to include archived strategies, whose history is kept for the account history page.",
         "operationId": "all",
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "description": "Include archived strategies",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Strategies returned",
@@ -129,7 +472,7 @@
           "Live strategies"
         ],
         "summary": "Create a live strategy",
-        "description": "Creates a strategy from the same rules, parameters and sizing a backtest uses. Dry-run defaults to true; live orders need an active bot configuration's credentials and operator ID.",
+        "description": "Creates a strategy from the same rules, parameters and sizing a backtest uses. The name, market and interval are required. Dry-run defaults to true; live orders need the system-wide Bitvavo API key, including its operator ID, stored on the settings page.",
         "operationId": "create",
         "requestBody": {
           "content": {
@@ -469,6 +812,90 @@
             "description": "No strategy with that ID"
           }
         }
+      },
+      "put": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "Update a live strategy",
+        "description": "Updates a stopped strategy. The pair and interval can only change before the first start; dry-run is fixed at creation, so a real strategy is created as a separate copy.",
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the live strategy",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveStrategyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Strategy updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStrategy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or running strategy"
+          },
+          "404": {
+            "description": "No strategy with that ID"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Live strategies"
+        ],
+        "summary": "Delete or archive a live strategy",
+        "description": "A strategy that never started is deleted. One that has run is archived instead: it disappears from the live page and the forms, but its orders and positions stay for the account history page. An open position must be closed before archiving.",
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID of the live strategy",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strategy deleted or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveStrategyDeletion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strategy is running or has an open position"
+          },
+          "404": {
+            "description": "No strategy with that ID"
+          }
+        }
       }
     },
     "/api/live-strategies/{id}/orders": {
@@ -752,6 +1179,114 @@
   },
   "components": {
     "schemas": {
+      "MailSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "fromAddress": {
+            "type": "string"
+          },
+          "startTls": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "MailSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "username": {
+            "type": "string"
+          },
+          "fromAddress": {
+            "type": "string"
+          },
+          "startTls": {
+            "type": "boolean"
+          },
+          "updatedTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BitvavoCredentialsRequest": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          },
+          "apiSecret": {
+            "type": "string"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BitvavoCredentialsResponse": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "apiKeyHint": {
+            "type": "string"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updatedTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "TradingViewAlertRequest": {
         "type": "object",
         "description": "Alert details from TradingView",
@@ -773,13 +1308,110 @@
           }
         }
       },
+      "EmailRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "MarketRequest": {
+        "type": "object",
+        "properties": {
+          "market": {
+            "type": "string",
+            "description": "Market in Bitvavo format",
+            "example": "ETH-EUR"
+          }
+        }
+      },
+      "Market": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "market": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "firstTradedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastTradedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tradeCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "addedTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Discovery": {
+        "type": "object",
+        "properties": {
+          "markets": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "added": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "LiveStrategyRequest": {
         "type": "object",
         "properties": {
-          "botId": {
+          "name": {
             "type": "string",
-            "description": "Bot configuration whose credentials and operator ID are used when dry-run is off; required then",
-            "example": "abc123"
+            "description": "Operator-facing strategy name; required when creating",
+            "example": "BTC 2h breakout"
           },
           "market": {
             "type": "string",
@@ -916,7 +1548,7 @@
             "type": "string",
             "format": "date-time"
           },
-          "botId": {
+          "name": {
             "type": "string"
           },
           "market": {
@@ -975,6 +1607,9 @@
             "type": "boolean"
           },
           "enabled": {
+            "type": "boolean"
+          },
+          "archived": {
             "type": "boolean"
           },
           "lastEvaluatedOpenTime": {
@@ -1508,6 +2143,24 @@
             ]
           }
         }
+      },
+      "LiveStrategyDeletion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "basicAuth": {
+        "type": "http",
+        "description": "The installation's account: HTTP Basic, the same credentials the sign-in page takes.",
+        "scheme": "basic"
       }
     }
   }

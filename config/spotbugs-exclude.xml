@@ -11,7 +11,9 @@
          arrays would allocate per bar in the hot path. The two service-shaped classes hold
          framework collaborators (RestTemplate, the candle stream), which Spring manages. The
          records that carry a stored run (RunSummaryView, BacktestEntryTrades) do so for display,
-         and the run is already published through the API as-is. -->
+         and the run is already published through the API as-is. The auth and settings controllers
+         hold Spring-managed service collaborators for the same reason the two service-shaped
+         classes do, as do the live page's controller and view service. -->
     <Match>
         <Or>
             <Class name="nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades"/>
@@ -26,6 +28,11 @@
             <Class name="nl.jimkaplan.autotrader.strategy.rule.CandleSeries"/>
             <Class name="nl.jimkaplan.autotrader.strategy.rule.IndicatorSeries"/>
             <Class name="nl.jimkaplan.autotrader.strategy.rule.StrategySignals"/>
+            <Class name="nl.jimkaplan.autotrader.controller.AuthController"/>
+            <Class name="nl.jimkaplan.autotrader.controller.HomeController"/>
+            <Class name="nl.jimkaplan.autotrader.controller.SettingsUiController"/>
+            <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveUiController"/>
+            <Class name="nl.jimkaplan.autotrader.strategy.service.LiveViewService"/>
             <Class name="nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient"/>
             <Class name="nl.jimkaplan.autotrader.strategy.live.BitvavoCandleStream"/>
         </Or>
@@ -42,16 +49,21 @@
             <Class name="nl.jimkaplan.autotrader.bitvavo.controller.TransactionHistoryController"/>
             <Class name="nl.jimkaplan.autotrader.bitvavo.service.TransactionHistoryService"/>
             <Class name="nl.jimkaplan.autotrader.controller.BotConfigurationController"/>
+            <Class name="nl.jimkaplan.autotrader.service.MarketService"/>
             <Class name="nl.jimkaplan.autotrader.strategy.service.LiveStrategyService"/>
+            <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveStrategyController"/>
+            <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveUiController"/>
         </Or>
         <Bug pattern="CRLF_INJECTION_LOGS"/>
     </Match>
 
-    <!-- These APIs return the stored backtest-run and live-strategy documents by design, which is
-         the contract the UI consumes. Neither holds credentials: a live strategy references a bot
-         by id, and bot configuration credentials are transient, never serialized. -->
+    <!-- These APIs return the stored backtest-run, live-strategy and trading-pair documents by
+         design, which is the contract the UI consumes. None holds credentials: a live strategy
+         references a bot by id, bot configuration credentials are transient, never serialized, and
+         a market document carries only the pair's facts. -->
     <Match>
         <Or>
+            <Class name="nl.jimkaplan.autotrader.controller.MarketController"/>
             <Class name="nl.jimkaplan.autotrader.strategy.controller.BacktestController"/>
             <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveStrategyController"/>
         </Or>

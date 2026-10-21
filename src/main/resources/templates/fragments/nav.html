@@ -1,10 +1,20 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="en">
 <body>
 <nav class="nav" th:fragment="nav">
     <a class="brand" th:href="@{/}">📈 Autotrader</a>
     <a th:href="@{/ui/backtests}">Backtests</a>
+    <a th:href="@{/ui/live}">Live</a>
+    <a th:href="@{/ui/history}">History</a>
+    <a th:href="@{/ui/settings}">Settings</a>
     <a th:href="@{/swagger-ui.html}">API docs</a>
+    <span class="nav-account" sec:authorize="isAuthenticated()">
+        <span class="who" sec:authentication="name">user</span>
+        <form th:action="@{/logout}" method="post">
+            <button class="secondary small" type="submit">Log out</button>
+        </form>
+    </span>
 </nav>
 </body>
 </html>

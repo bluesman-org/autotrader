@@ -28,10 +28,26 @@ body {
 
 .nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 18px;
     align-items: center;
     padding: 12px 22px;
     background: var(--nav);
+}
+
+.nav-account {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.nav-account .who {
+    color: #d5dbdb;
+}
+
+.nav-account form {
+    margin: 0;
 }
 
 .nav a {
@@ -175,6 +191,12 @@ button.primary:hover {
     border: 1px solid #f7dc6f;
 }
 
+.banner.ok {
+    background: #eafaf1;
+    color: #1e8449;
+    border: 1px solid #abebc6;
+}
+
 .table-wrap {
     overflow-x: auto;
     background: var(--card);
@@ -243,4 +265,368 @@ thead th.group-validate {
     display: block;
     font-size: 1.02rem;
     color: var(--nav);
+}
+
+/* Live engine page: the cards, badges and position block its in-place refresh swaps in. */
+.card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.card-head .spacer {
+    margin-left: auto;
+}
+
+.card-head h2 {
+    margin: 0;
+}
+
+.card-meta {
+    margin: 8px 0 0;
+}
+
+.card-meta.tight {
+    margin-top: 2px;
+}
+
+.badge {
+    display: inline-block;
+    border-radius: 10px;
+    padding: 1px 9px;
+    font-size: 0.78rem;
+    margin-right: 5px;
+    background: #eef1f4;
+    color: #566573;
+}
+
+.badge.ok {
+    background: #eafaf1;
+    color: #1e8449;
+}
+
+.badge.warn {
+    background: #fef9e7;
+    color: #9a7d0a;
+}
+
+.badge.dry {
+    background: #eaf4fb;
+    color: #21618c;
+}
+
+.badge.real {
+    background: #fdecea;
+    color: #b03a2e;
+}
+
+button.secondary {
+    background: #eef1f4;
+    color: #566573;
+    border: 0;
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+button.primary.small {
+    padding: 9px 18px;
+    font-size: 0.95rem;
+}
+
+.position {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 12px 0;
+}
+
+.pos-line {
+    display: flex;
+    gap: 26px;
+    flex-wrap: wrap;
+}
+
+.kv {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.kv b {
+    display: block;
+    font-size: 1.0rem;
+    color: var(--nav);
+}
+
+.pos {
+    color: #1e8449;
+}
+
+.neg {
+    color: #b03a2e;
+}
+
+table.orders {
+    font-size: 0.85rem;
+}
+
+table.orders td, table.orders th {
+    padding: 5px 9px;
+}
+
+/* A number that changed since the previous refresh flashes briefly. */
+@keyframes flash {
+    0% {
+        background-color: #fff3bf;
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+.flash {
+    animation: flash 1s ease-out;
+}
+
+/* The account history page: tabs, filters, paging, strategy colours and expandable rows. */
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 0;
+}
+
+.tabs a {
+    padding: 8px 18px;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: 6px 6px 0 0;
+    background: #eef1f4;
+    color: #566573;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.tabs a.active {
+    background: #ffffff;
+    color: var(--nav);
+    font-weight: 600;
+}
+
+.filters {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: end;
+}
+
+.filters .f {
+    min-width: 150px;
+}
+
+.filters label {
+    font-size: 0.82rem;
+}
+
+.pager {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.pager a {
+    text-decoration: none;
+}
+
+.pager .disabled {
+    color: #b6c2cb;
+}
+
+.table-scroll {
+    max-height: 62vh;
+    overflow-y: auto;
+    /* A wide table scrolls inside its own box instead of pushing the page sideways on narrow
+       viewports. */
+    overflow-x: auto;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.totals {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+th a {
+    color: inherit;
+    text-decoration: none;
+}
+
+th a.sorted {
+    text-decoration: underline;
+}
+
+th .arrow {
+    color: var(--accent);
+    font-size: 0.8rem;
+}
+
+.schip {
+    display: inline-block;
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.hue-0 { background: #eaf4fb; color: #21618c; }
+.hue-1 { background: #f5eef8; color: #6c3483; }
+.hue-2 { background: #eafaf1; color: #1e8449; }
+.hue-3 { background: #fef5e7; color: #9c640c; }
+.hue-4 { background: #e8f6f3; color: #117864; }
+.hue-5 { background: #eef1f4; color: #566573; }
+
+tr.hue-0 td:first-child { border-left: 8px solid #5dade2; }
+tr.hue-1 td:first-child { border-left: 8px solid #bb8fce; }
+tr.hue-2 td:first-child { border-left: 8px solid #58d68d; }
+tr.hue-3 td:first-child { border-left: 8px solid #f0b27a; }
+tr.hue-4 td:first-child { border-left: 8px solid #48c9b0; }
+tr.hue-5 td:first-child { border-left: 8px solid #aab7c4; }
+
+tr.detail td {
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border);
+    padding: 4px 10px;
+    text-align: left;
+}
+
+tr.detail summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+tr.detail details[open] summary {
+    color: var(--nav);
+}
+
+.detail-grid {
+    display: flex;
+    gap: 34px;
+    flex-wrap: wrap;
+    padding: 6px 0 10px;
+}
+
+/* The live page's refresh pulse is decorative; honour a request for less motion. */
+@media (prefers-reduced-motion: reduce) {
+    .flash {
+        animation: none;
+    }
+}
+
+/* ---- the ledger tab ---- */
+
+/* Sides: a buy came in green, a sell went out red — the same reading as the live page. */
+.schip.side-buy {
+    background: #eafaf1;
+    color: #1e8449;
+}
+
+.schip.side-sell {
+    background: #fdecea;
+    color: #b03a2e;
+}
+
+.badge.bad {
+    background: #f2f3f5;
+    color: #7f8c8d;
+}
+
+.price-now {
+    display: flex;
+    gap: 26px;
+    flex-wrap: wrap;
+    align-items: baseline;
+}
+
+.pn-label {
+    color: #566573;
+}
+
+.pn-value {
+    font-weight: 600;
+}
+
+.pn-buy {
+    color: #1e8449;
+}
+
+.pn-sell {
+    color: #b03a2e;
+}
+
+/* The fills of an expanded order sit inside its row, one size down. */
+.fills-table {
+    table-layout: fixed;
+    width: 760px;
+    font-size: 0.85rem;
+    border-collapse: collapse;
+}
+
+.fills-table th {
+    text-align: right;
+    padding: 5px 9px;
+    background: #f0f4f7;
+    color: #2c3e50;
+    font-weight: 600;
+    cursor: default;
+}
+
+.fills-table th.left,
+.fills-table td.left {
+    text-align: left;
+}
+
+.fills-table td {
+    padding: 5px 9px;
+    text-align: right;
+    border-bottom: 1px solid #e3e7ea;
+}
+
+/* The rows-per-page select keeps its own width: it sits in a row of pager text and links, and the
+   global select rule would stretch it across the line. */
+.pager select {
+    width: 80px;
+    flex: 0 0 auto;
+}
+
+/* A multi-value filter group: compact chips that wrap inside the filter bar. The group may shrink
+   below its preferred width on a narrow viewport; the chips wrap instead. */
+.filters .f-checks {
+    min-width: 0;
+    flex: 1 1 320px;
+}
+
+.filters .checks-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 8px;
+}
+
+/* The chip labels set their own size: the filter bar's label rule is smaller. */
+.filters .checks-inline label {
+    font-size: 0.9rem;
 }

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account history · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<script>
+    // Both tabs of the history page share these helpers, so filters, dates and paging behave the
+    // same everywhere.
+
+    // The custom range's fields, declared once: the Time select follows typing in them, and choosing
+    // a preset clears them.
+    var CUSTOM_RANGE_FIELDS = ['fromDate', 'fromTime', 'toDate', 'toTime'];
+
+    // Editing a date or time field means the custom range — but only while the form actually carries
+    // a date, because the server honours the custom fields only then. Without the gate, editing a
+    // time alone would leave the select claiming "Custom range" while Apply resolved a preset.
+    document.addEventListener('input', function (event) {
+        var field = event.target;
+        if (!field || !field.name || CUSTOM_RANGE_FIELDS.indexOf(field.name) === -1) {
+            return;
+        }
+        var form = field.form;
+        var period = form && form.querySelector('select[name="period"]');
+        var fromDate = form && form.querySelector('input[name="fromDate"]');
+        var toDate = form && form.querySelector('input[name="toDate"]');
+        var hasDate = (fromDate && String(fromDate.value).trim() !== '')
+            || (toDate && String(toDate.value).trim() !== '');
+        if (!period) {
+            return;
+        }
+        if (hasDate) {
+            period.value = '';
+            return;
+        }
+        // No date left. A non-empty select is the user's own choice (Apply sends it, and the server
+        // honours any known preset), so it is left alone; only a blank select reads stale, and then
+        // it shows what Apply will resolve — the preset in the address bar, otherwise the default.
+        if (String(period.value).trim() !== '') {
+            return;
+        }
+        var fromUrl = new URLSearchParams(window.location.search).get('period') || '';
+        var fallback = period.getAttribute('data-default-period') || '';
+        period.value = fromUrl && period.querySelector('option[value="' + fromUrl + '"]') ? fromUrl : fallback;
+    });
+
+    // The Today button beside the end date sets the range's end to now — the date to today, the time
+    // to the current clock — and applies it through the form's own submit path, so the ledger's timed
+    // refresh cannot rebuild these fields from the URL before Apply: one click is a range that ends
+    // today, which is what the unrealised figure in the summary needs. The clock it reads is the
+    // reader's; the page assumes the reader is in the display zone the server renders with.
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('button[data-today]');
+        if (!button || !button.form) {
+            return;
+        }
+        event.preventDefault();
+        var form = button.form;
+        var two = function (value) { return (value < 10 ? '0' : '') + value; };
+        var now = new Date();
+        var date = form.querySelector('input[name="toDate"]');
+        var time = form.querySelector('input[name="toTime"]');
+        var period = form.querySelector('select[name="period"]');
+        if (date) {
+            date.value = now.getFullYear() + '-' + two(now.getMonth() + 1) + '-' + two(now.getDate());
+        }
+        if (time) {
+            time.value = two(now.getHours()) + ':' + two(now.getMinutes());
+        }
+        if (period) {
+            period.value = '';
+        }
+        // The delegated submit handler swaps the tab in place, as Apply does.
+        if (form.requestSubmit) {
+            form.requestSubmit();
+        } else {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
+    });
+
+    // A chosen preset replaces a custom range the form still carries: the date fields leave both the
+    // request and the form, so the page shows the range it applies.
+    function dropLingeringDates(form, params) {
+        var period = form.querySelector('select[name="period"]');
+        if (!period || String(period.value).trim() === '') {
+            return;
+        }
+        CUSTOM_RANGE_FIELDS.forEach(function (name) {
+            params.delete(name);
+            var field = form.querySelector('[name="' + name + '"]');
+            if (field) {
+                field.value = '';
+            }
+        });
+    }
+
+    // Fetches a tab's content and swaps it in place: the address bar keeps the whole state, and a
+    // failed fetch shows the last state. The tab's own fragment name rides along. `keepScroll` is for
+    // the timed refresh: a table scrolled halfway down stays where it was, while a user action
+    // (filters, paging, sorting) starts the new content at its top.
+    function swapContent(content, url, fragment, keepScroll) {
+        fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'fragment=' + fragment,
+                { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (response) { return response.ok ? response.text() : null; })
+            .then(function (html) {
+                if (html === null) {
+                    return;
+                }
+                // Captured at swap time, so a refresh never fights a scroll that just happened. Both
+                // axes are carried; a scroll box without a data-scroll-key falls back to its order.
+                var scrolled = keepScroll ? Array.prototype.map.call(
+                        content.querySelectorAll('.table-scroll'),
+                        function (box, index) {
+                            return {
+                                key: box.getAttribute('data-scroll-key') || String(index),
+                                top: box.scrollTop,
+                                left: box.scrollLeft
+                            };
+                        }) : null;
+                // A reader's open fills panel survives the swap too: it is reopened by position, and
+                // before the scroll is restored, because an open panel changes the layout.
+                var openDetails = keepScroll ? Array.prototype.map.call(
+                        content.querySelectorAll('details'),
+                        function (details, index) { return details.open ? index : -1; })
+                        .filter(function (index) { return index >= 0; }) : null;
+                var pageScroll = keepScroll ? { top: window.scrollY, left: window.scrollX } : null;
+                content.innerHTML = html;
+                if (keepScroll) {
+                    if (openDetails) {
+                        var details = content.querySelectorAll('details');
+                        openDetails.forEach(function (index) {
+                            if (index < details.length) {
+                                details[index].open = true;
+                            }
+                        });
+                    }
+                    if (scrolled) {
+                        Array.prototype.forEach.call(content.querySelectorAll('.table-scroll'),
+                                function (box, index) {
+                                    var wanted = scrolled.filter(function (entry) {
+                                        return entry.key === (box.getAttribute('data-scroll-key')
+                                                || String(index));
+                                    })[0];
+                                    if (wanted) {
+                                        box.scrollTop = wanted.top;
+                                        box.scrollLeft = wanted.left;
+                                    }
+                                });
+                    }
+                    if (pageScroll) {
+                        window.scrollTo(pageScroll.left, pageScroll.top);
+                    }
+                }
+                window.history.replaceState(null, '', url);
+            })
+            .catch(function () { /* keep the last state */ });
+    }
+
+    // Applies a submitted filter form: the state the form does not own (sort, direction, page size,
+    // view) is kept, a cleared field removes its filter, multi-value fields keep every choice, and a
+    // chosen preset replaces a lingering custom range.
+    function swapWithForm(content, form, fragment) {
+        var params = new URLSearchParams(window.location.search);
+        var values = {};
+        new FormData(form).forEach(function (value, key) {
+            (values[key] = values[key] || []).push(String(value).trim());
+        });
+        // A multiple select or an unchecked checkbox group sends no entry at all: those keys have
+        // to be cleared too, or a value from the address bar survives an Apply meant to drop it.
+        Array.prototype.forEach.call(
+                form.querySelectorAll('select[multiple][name], input[type="checkbox"][name]'),
+                function (field) {
+                    values[field.name] = values[field.name] || [];
+                });
+        Object.keys(values).forEach(function (key) {
+            params.delete(key);
+            values[key].forEach(function (value) {
+                if (value !== '') {
+                    params.append(key, value);
+                }
+            });
+        });
+        dropLingeringDates(form, params);
+        swapContent(content, form.getAttribute('action') + '?' + params.toString(), fragment);
+    }
+
+    // Wires a tab: link clicks, the rows-per-page select, the filter form, and — when the tab has one
+    // — a refresh that stands still while the page is hidden or the form is in use.
+    function wireHistoryContent(fragment, refreshSeconds) {
+        var content = document.getElementById('history-content');
+        if (!content) {
+            return;
+        }
+
+        content.addEventListener('click', function (event) {
+            var link = event.target.closest('a');
+            if (!link) {
+                return;
+            }
+            event.preventDefault();
+            swapContent(content, link.getAttribute('href'), fragment);
+        });
+
+        content.addEventListener('change', function (event) {
+            if (event.target.matches('select[data-history-size]')) {
+                swapContent(content, event.target.value, fragment);
+            }
+        });
+
+        content.addEventListener('submit', function (event) {
+            if (!event.target.matches('form')) {
+                return;
+            }
+            event.preventDefault();
+            swapWithForm(content, event.target, fragment);
+        });
+
+        if (refreshSeconds > 0) {
+            setInterval(function () {
+                if (document.hidden || content.contains(document.activeElement)) {
+                    return;
+                }
+                swapContent(content, window.location.href, fragment, true);
+            }, refreshSeconds * 1000);
+        }
+    }
+</script>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1>Account history</h1>
+    <p class="muted" th:if="${ledgerTab}"
+       th:text="|Times are local time (${timeZoneLabel}). Prices and P&amp;L values refresh every 10 seconds.|">
+        Times are local time (CEST). Prices and P&amp;L values refresh every 10 seconds.
+    </p>
+    <p class="muted" th:unless="${ledgerTab}"
+       th:text="|Times are local time (${timeZoneLabel}). Click a column header to sort; click it again to flip the direction.|">
+        Times are local time (CEST). Click a column header to sort; click it again to flip the
+        direction.
+    </p>
+
+    <div class="tabs">
+        <a th:classappend="${ledgerTab} ? '' : 'active'" th:href="@{/ui/history}">Engine trades</a>
+        <a th:classappend="${ledgerTab} ? 'active'" th:href="@{/ui/history?tab=ledger}">Bitvavo ledger</a>
+    </div>
+
+    <th:block th:if="${ledgerTab}">
+        <div id="history-content" th:insert="~{history/ledger :: ledger}"></div>
+        <script>wireHistoryContent('ledger', 10);</script>
+    </th:block>
+
+    <th:block th:unless="${ledgerTab}">
+        <div id="history-content" th:insert="~{history/trades :: trades}"></div>
+        <script>wireHistoryContent('1', 0);</script>
+    </th:block>
+</main>
+</body>
+</html>

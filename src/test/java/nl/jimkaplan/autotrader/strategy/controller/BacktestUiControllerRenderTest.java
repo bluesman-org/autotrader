@@ -10,9 +10,11 @@ import nl.jimkaplan.autotrader.strategy.backtest.SkippedSignal;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunMetrics;
+import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * The property overrides stand in for the environment variables the application.yml placeholders
  * expect, which a test run does not have.
  */
+@AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(controllers = BacktestUiController.class, properties = {
         "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-test",
         "bitvavo.api.url=http://localhost:9999",
@@ -45,16 +48,20 @@ class BacktestUiControllerRenderTest {
 
     @MockitoBean
     private BacktestService backtestService;
+    @MockitoBean
+    private MarketService marketService;
 
     @Test
     void formPageRendersTheDefaultsAndTheOptions() throws Exception {
         when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
 
         mockMvc.perform(get("/ui/backtests"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Strategy backtests")))
                 .andExpect(content().string(containsString("name=\"market\"")))
                 .andExpect(content().string(containsString("value=\"BTC-EUR\"")))
+                .andExpect(content().string(containsString("ETH-EUR")))
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 .andExpect(content().string(containsString("SAR BEARISH CROSSOVER")))
                 .andExpect(content().string(containsString("Run sweep")))
@@ -65,6 +72,17 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("id=\"feeRate\"")))
                 .andExpect(content().string(containsString("data-default-fee-rate")))
                 .andExpect(content().string(containsString("INSUFFICIENT_BALANCE")));
+    }
+
+    @Test
+    void formStillOffersTheDefaultPairWhenTheCatalogueIsEmpty() throws Exception {
+        when(backtestService.recent(BacktestUiController.RECENT_LIMIT)).thenReturn(List.of());
+        when(marketService.selectable()).thenReturn(List.of());
+
+        mockMvc.perform(get("/ui/backtests"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("name=\"market\"")))
+                .andExpect(content().string(containsString("value=\"BTC-EUR\"")));
     }
 
     @Test
@@ -80,7 +98,12 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 // A profit factor with no losses prints as the infinity symbol, not a broken cell
                 .andExpect(content().string(containsString("∞")))
-                .andExpect(content().string(containsString("0.64")))
+                // The percentages follow the page's number style: a comma decimal, and the grouped
+                // initial capital proves the thousands separator is not the en_US one.
+                .andExpect(content().string(containsString("0,64")))
+                .andExpect(content().string(containsString("1.000 EUR")))
+                // The SAR parameter readout follows it too, without rounding a non-standard step.
+                .andExpect(content().string(containsString("0,02/0,2")))
                 // The skipped column renders the stored count, and the em dash when it is absent
                 .andExpect(content().string(containsString("<th>Skipped</th>")))
                 .andExpect(content().string(containsString("<td>2</td>")))

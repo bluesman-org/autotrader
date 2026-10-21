@@ -30,6 +30,12 @@ public class GetMarketResponse {
     private String quote;
 
     /**
+     * The market's status on the exchange, e.g. {@code trading}, {@code halted} or
+     * {@code delisted}.
+     */
+    private String status;
+
+    /**
      * The smallest unit in which you can trade the base asset (e.g., 0.00000001).
      */
     private BigDecimal minOrderInBaseAsset;

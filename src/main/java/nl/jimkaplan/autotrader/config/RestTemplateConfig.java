@@ -1,9 +1,13 @@
 package nl.jimkaplan.autotrader.config;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.interceptor.CurlLoggingInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
@@ -39,6 +43,7 @@ public class RestTemplateConfig {
     public RestTemplate restTemplate() {
         RestTemplate restTemplate = new RestTemplate();
         restTemplate.setInterceptors(Collections.singletonList(curlLoggingInterceptor));
+        configureJackson(restTemplate);
         return restTemplate;
     }
 
@@ -56,6 +61,25 @@ public class RestTemplateConfig {
 
         RestTemplate restTemplate = new RestTemplate(requestFactory);
         restTemplate.setInterceptors(Collections.singletonList(curlLoggingInterceptor));
+        configureJackson(restTemplate);
         return restTemplate;
+    }
+
+    /**
+     * Bitvavo writes every timestamp as Unix milliseconds. Jackson reads a number on an
+     * {@code Instant} as seconds with a nanosecond fraction by default, which turns a millisecond
+     * value into a year in the far future, so the feature is switched off for both clients — here,
+     * not on the application's own mapper, which serves the REST API and the OpenAPI export.
+     *
+     * @param restTemplate The client whose Jackson converter reads Bitvavo responses
+     */
+    private static void configureJackson(RestTemplate restTemplate) {
+        ObjectMapper mapper = Jackson2ObjectMapperBuilder.json()
+                .featuresToDisable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
+                .build();
+        restTemplate.getMessageConverters().stream()
+                .filter(MappingJackson2HttpMessageConverter.class::isInstance)
+                .map(MappingJackson2HttpMessageConverter.class::cast)
+                .forEach(converter -> converter.setObjectMapper(mapper));
     }
 }

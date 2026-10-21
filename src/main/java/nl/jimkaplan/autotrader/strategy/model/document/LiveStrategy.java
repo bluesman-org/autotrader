@@ -14,8 +14,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * A live strategy: the same rules, parameters and sizing a backtest would use, tied to the
- * exchange credentials of a {@code BotConfiguration}, with dry-run on by default.
+ * A live strategy: the same rules, parameters and sizing a backtest would use, signed with the
+ * system-wide Bitvavo credential, with dry-run on by default.
  *
  * <p>Maps to the {@code live_strategies} collection.</p>
  */
@@ -28,10 +28,11 @@ import java.util.List;
 public class LiveStrategy extends BaseDocument {
 
     /**
-     * The bot configuration whose API key, secret and operator ID are used when not in dry-run.
+     * The operator-facing name. Required for new strategies; the startup initializer names the
+     * documents that predate the field.
      */
-    @Field("bot_id")
-    private String botId;
+    @Field("name")
+    private String name;
 
     /**
      * Market in Bitvavo format, e.g. "BTC-EUR".
@@ -103,6 +104,13 @@ public class LiveStrategy extends BaseDocument {
     private boolean enabled;
 
     /**
+     * Whether the strategy is archived: hidden from the live page and the forms, but kept with its
+     * orders and positions so the history tab can still report what it did.
+     */
+    @Field("archived")
+    private boolean archived;
+
+    /**
      * Open time of the last candle this strategy evaluated; 0 when it never has.
      */
     @Field("last_evaluated_open_time")
@@ -130,8 +138,26 @@ public class LiveStrategy extends BaseDocument {
     private long seriesStartTime;
 
     /**
+     * When the current run started, written on every start so the live page can say how long the
+     * strategy has been running. Engine bookkeeping only: kept out of the API.
+     */
+    @JsonIgnore
+    @Field("last_started_time")
+    private Instant lastStartedTime;
+
+    /**
      * When the strategy was created.
      */
     @Field("created_time")
     private Instant createdTime;
+
+    /**
+     * @return Whether the strategy has ever run. The pair and interval lock on this, Delete turns
+     *         into Archive, and the live page's edit form uses it to disable them; keeping the
+     *         definition here stops those four callers from drifting apart.
+     */
+    @JsonIgnore
+    public boolean hasStarted() {
+        return lastStartedTime != null || seriesStartTime > 0;
+    }
 }

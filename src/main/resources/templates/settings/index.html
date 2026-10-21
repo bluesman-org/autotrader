@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1>Settings</h1>
+    <p class="muted">The Bitvavo API key the live engine trades with and the account-history ledger
+        reads the account with, the trading pairs the strategy forms and the ledger offer, the SMTP
+        server the recovery mails go out through, and the account's password. Secrets are stored
+        encrypted where they can be (AES-256-GCM) and never shown back.
+        Times are local time (<span th:text="${zoneLabel}">CEST</span>).</p>
+
+    <div class="banner" th:if="${message}" th:text="${message}">stored</div>
+    <div class="banner error" th:if="${error}" th:text="${error}">error</div>
+
+    <div class="card" style="padding:18px 22px">
+        <h2 style="margin-top:0">Bitvavo key</h2>
+        <p th:if="${credentials.configured}">
+            <span class="badge ok">configured</span>
+            <span th:if="${credentials.apiKeyHint != null}" th:text="|hint ${credentials.apiKeyHint}|">hint …f3a1</span>
+            <span th:if="${credentials.operatorId != null}" th:text="|· operator id ${credentials.operatorId}|">· operator id 543462</span>
+            <span th:if="${updatedText != null}" th:text="|· stored ${updatedText}|">· stored 16 Oct 2026 08:31 (CEST)</span>
+        </p>
+        <p class="muted" th:unless="${credentials.configured}">No key is configured yet.</p>
+
+        <p class="muted">The key is used as-is and never shown again — replacing it overwrites the
+            stored one. Use a key that may trade, because the engine places real orders with it.</p>
+        <form method="post" th:action="@{/ui/settings}" autocomplete="off">
+            <div class="filters">
+                <div class="f">
+                    <label>API key</label>
+                    <input type="password" name="apiKey" value="" autocomplete="new-password"
+                           style="width:320px" required>
+                </div>
+                <div class="f">
+                    <label>API secret</label>
+                    <input type="password" name="apiSecret" value="" autocomplete="new-password"
+                           style="width:320px" required>
+                </div>
+                <div class="f">
+                    <label>Operator id (optional)</label>
+                    <input type="text" name="operatorId" th:value="${form.operatorId}"
+                           style="width:160px">
+                </div>
+                <div>
+                    <button class="primary small" type="submit">Store the key</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card" style="padding:18px 22px">
+        <h2 style="margin-top:0">Trading pairs</h2>
+        <p class="muted">The pairs the strategy forms and the account ledger offer. The catalogue is
+            filled from what the account itself traded on Bitvavo; add a pair by hand for an asset
+            that arrived another way, such as a deposit. A disabled pair stays here with its
+            history, and a live strategy that trades it keeps it visible anyway.</p>
+        <p class="muted" th:if="${#lists.isEmpty(markets)}">No pairs yet — refresh from Bitvavo, or
+            add one below.</p>
+        <div class="table-wrap" style="box-shadow:none;background:transparent;padding:0"
+             th:unless="${#lists.isEmpty(markets)}">
+            <table>
+                <thead>
+                <tr>
+                    <th class="left">Pair</th>
+                    <th class="left">Offered</th>
+                    <th class="left">Status</th>
+                    <th>Trades</th>
+                    <th>First trade</th>
+                    <th>Last trade</th>
+                    <th class="left">Source</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="row : ${markets}">
+                    <td class="left"><b th:text="${row.market}">BTC-EUR</b></td>
+                    <td class="left">
+                        <span class="badge ok" th:if="${row.enabled}">enabled</span>
+                        <span class="badge" th:unless="${row.enabled}">disabled</span>
+                    </td>
+                    <td class="left">
+                        <span class="badge ok" th:if="${row.status == 'trading'}"
+                              th:text="${row.status}">trading</span>
+                        <span class="badge warn" th:unless="${row.status == 'trading'}"
+                              th:text="${row.status}">delisted</span>
+                    </td>
+                    <td th:text="${row.trades > 0 ? row.trades : '—'}">165</td>
+                    <td th:text="${row.firstText}">24 Sep 2021</td>
+                    <td th:text="${row.lastText}">9 Oct 2026</td>
+                    <td class="left" th:text="${row.source}">discovered</td>
+                    <td>
+                        <form th:if="${row.enabled}" method="post"
+                              th:action="@{/ui/settings/markets/{m}/disable(m=${row.market})}">
+                            <button class="secondary small" type="submit">Disable</button>
+                        </form>
+                        <form th:unless="${row.enabled}" method="post"
+                              th:action="@{/ui/settings/markets/{m}/enable(m=${row.market})}">
+                            <button class="secondary small" type="submit">Enable</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="filters" style="margin-top:14px">
+            <form method="post" th:action="@{/ui/settings/markets}"
+                  style="display:flex;gap:8px;align-items:end">
+                <label style="display:flex;flex-direction:column;gap:4px">Add a pair
+                    <input type="text" name="market" placeholder="ETH-EUR" style="width:160px"
+                           required>
+                </label>
+                <button class="primary small" type="submit">Add</button>
+            </form>
+            <form method="post" th:action="@{/ui/settings/markets/discover}">
+                <button class="secondary small" type="submit">Refresh from Bitvavo</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card" style="padding:18px 22px">
+        <h2 style="margin-top:0">Mail (password recovery)</h2>
+        <p th:if="${mail.configured}">
+            <span class="badge ok">configured</span>
+            <span th:text="|${mail.host}:${mail.port}|">smtp.example.com:587</span>
+            <span th:text="|· from ${mail.fromAddress}|">· from autotrader@example.com</span>
+            <span th:if="${mail.startTls}">· STARTTLS</span>
+            <span th:if="${mail.updatedTime != null}"
+                  th:text="|· stored ${#temporals.format(mail.updatedTime, 'dd MMM yyyy HH:mm')}|">· stored</span>
+        </p>
+        <p class="muted" th:unless="${mail.configured}">No SMTP server is configured yet, so a
+            forgotten password cannot be recovered by mail yet.</p>
+
+        <p class="muted">The recovery mail is sent through this server. The password is needed only
+            when the server asks for a username; it is written once, never shown again, and leaving
+            it blank keeps the stored one.</p>
+        <form method="post" th:action="@{/ui/settings/mail}" th:object="${mailForm}" autocomplete="off">
+            <div class="filters">
+                <div class="f">
+                    <label>SMTP host</label>
+                    <input type="text" th:field="*{host}" placeholder="smtp.example.com"
+                           style="width:240px" required>
+                </div>
+                <div class="f">
+                    <label>Port</label>
+                    <input type="number" th:field="*{port}" placeholder="587" style="width:110px">
+                </div>
+                <div class="f">
+                    <label>Username (optional)</label>
+                    <input type="text" th:field="*{username}" style="width:200px">
+                </div>
+                <div class="f">
+                    <label>Password</label>
+                    <input type="password" th:field="*{password}" autocomplete="new-password"
+                           style="width:200px">
+                </div>
+                <div class="f">
+                    <label>From address</label>
+                    <input type="email" th:field="*{fromAddress}" placeholder="autotrader@example.com"
+                           style="width:240px" required>
+                </div>
+                <div class="f">
+                    <label>STARTTLS</label>
+                    <label class="checks-inline" style="display:flex;gap:6px;align-items:center">
+                        <input type="checkbox" th:field="*{startTls}"> <span>use STARTTLS</span>
+                    </label>
+                </div>
+                <div>
+                    <button class="primary small" type="submit">Store the mail settings</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card" style="padding:18px 22px">
+        <h2 style="margin-top:0">Account</h2>
+        <p>
+            <span class="badge ok">signed in</span>
+            <span th:text="${account != null ? account.username : ''}">jim</span>
+            <span th:if="${account != null and account.email != null}"
+                  th:text="|· ${account.email}|">· jim@example.com</span>
+            <span th:if="${lastLoginText != null}" th:text="|· last signed in ${lastLoginText}|">· last signed in</span>
+        </p>
+        <p class="muted">Changing the password keeps this session signed in; other sessions keep
+            running until they are used again.</p>
+        <form method="post" th:action="@{/ui/settings/password}" autocomplete="off">
+            <div class="filters">
+                <div class="f">
+                    <label>Current password</label>
+                    <input type="password" name="current" autocomplete="current-password" required
+                           style="width:200px">
+                </div>
+                <div class="f">
+                    <label>New password (at least 10 characters)</label>
+                    <input type="password" name="password" autocomplete="new-password" required
+                           style="width:240px">
+                </div>
+                <div class="f">
+                    <label>New password again</label>
+                    <input type="password" name="confirm" autocomplete="new-password" required
+                           style="width:200px">
+                </div>
+                <div>
+                    <button class="primary small" type="submit">Change the password</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</main>
+</body>
+</html>

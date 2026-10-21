@@ -25,7 +25,10 @@
             <legend>Data</legend>
             <div class="grid">
                 <label>Market
-                    <input type="text" th:field="*{market}" required>
+                    <select th:field="*{market}" required>
+                        <option th:each="pair : ${markets}" th:value="${pair}"
+                                th:text="${pair}">BTC-EUR</option>
+                    </select>
                 </label>
                 <label>Interval
                     <select th:field="*{interval}">
@@ -39,6 +42,8 @@
                     <input type="date" th:field="*{toDate}" required>
                 </label>
             </div>
+            <p class="muted">The pairs come from Settings → Trading pairs, plus the markets your live
+                strategies trade.</p>
         </fieldset>
 
         <fieldset>
@@ -176,9 +181,10 @@
             var short = capitalValue < needed;
             hint.hidden = !short;
             if (short) {
+                // The warning is prose, so it reads in the page's own number style (a comma decimal).
                 hint.textContent = 'Every entry signal would be skipped as INSUFFICIENT_BALANCE: a buy '
-                    + 'needs at least ' + needed.toFixed(2) + ' EUR (the amount per buy plus its fee), '
-                    + 'but the initial capital is ' + capitalValue.toFixed(2) + ' EUR.';
+                    + 'needs at least ' + needed.toFixed(2).replace('.', ',') + ' EUR (the amount per buy plus its fee), '
+                    + 'but the initial capital is ' + capitalValue.toFixed(2).replace('.', ',') + ' EUR.';
             }
         }
         [capital, amount, feeRate].forEach(function (field) {
