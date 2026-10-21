@@ -172,7 +172,9 @@ class LedgerServiceTest {
         paged.setPage(1);
         when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
                 .thenReturn(new OrderResponse[]{openOrder(), sellOrder(), buyOrder(),
-                        olderOrder(1), olderOrder(2), olderOrder(3)});
+                        canceledOrderAt("2026-10-09T08:00:00Z"),
+                        canceledOrderAt("2026-10-10T08:00:00Z"),
+                        canceledOrderAt("2026-10-11T08:00:00Z")});
         LedgerView first = service.view(paged);
         assertEquals(5, first.rows().size());
         assertEquals(2, first.pager().pages());
@@ -564,8 +566,9 @@ class LedgerServiceTest {
         assertEquals("23:59", view.filters().toTime());
         ArgumentCaptor<String> orders = ArgumentCaptor.forClass(String.class);
         verify(client).get(orders.capture(), eq(OrderResponse[].class), anyString(), anyString());
-        assertEquals(String.valueOf(Instant.parse("2026-10-10T00:00:00Z").toEpochMilli()),
-                queryParam(orders.getValue(), "start"));
+        // The read is bounded at the end only: the period itself follows when an order acted, which
+        // the exchange cannot filter on, so the start of the range is applied here.
+        assertEquals(null, queryParam(orders.getValue(), "start"));
         assertEquals(String.valueOf(Instant.parse("2026-10-15T23:59:59.999Z").toEpochMilli()),
                 queryParam(orders.getValue(), "end"));
     }
@@ -585,8 +588,8 @@ class LedgerServiceTest {
         assertEquals("ytd", view.filters().period());
         ArgumentCaptor<String> orders = ArgumentCaptor.forClass(String.class);
         verify(client).get(orders.capture(), eq(OrderResponse[].class), anyString(), anyString());
-        assertEquals(String.valueOf(Instant.parse("2026-01-01T00:00:00Z").toEpochMilli()),
-                queryParam(orders.getValue(), "start"));
+        assertEquals(String.valueOf(Instant.parse("2026-10-15T12:00:00Z").toEpochMilli()),
+                queryParam(orders.getValue(), "end"));
     }
 
     @Test
@@ -599,7 +602,7 @@ class LedgerServiceTest {
 
         ArgumentCaptor<String> orders = ArgumentCaptor.forClass(String.class);
         verify(client).get(orders.capture(), eq(OrderResponse[].class), anyString(), anyString());
-        assertEquals("0", queryParam(orders.getValue(), "start"));
+        assertEquals(null, queryParam(orders.getValue(), "start"));
         assertEquals(String.valueOf(Instant.parse("2026-10-14T23:59:59.999Z").toEpochMilli()),
                 queryParam(orders.getValue(), "end"));
         assertTrue(view.totals().periodText().startsWith("the start →"));
@@ -1140,7 +1143,7 @@ class LedgerServiceTest {
     }
 
     @Test
-    void aFillOnAnotherDayIsShownUnderTheOrderDate() {
+    void anOrderIsDatedByWhenItTradedAndSaysWhenItWasPlaced() {
         OrderResponse armed = baseOrder("2026-10-08T14:20:00Z", "sell", "takeProfitLimit");
         armed.setStatus("filled");
         armed.setTriggerPrice(new BigDecimal("75300"));
@@ -1153,10 +1156,12 @@ class LedgerServiceTest {
 
         LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
 
-        assertEquals("8 Oct 2026 14:20", row.dateText());
-        assertEquals("filled 14 Oct 2026 16:52", row.dateNote());
-        // The fills panel carries the day too; a bare 16:52:03 would read as the placement day's.
-        assertEquals("14 Oct 2026 16:52:03", row.fills().get(0).timeText());
+        assertEquals("14 Oct 2026 16:52", row.dateText());
+        assertEquals("placed 8 Oct 2026 14:20", row.dateNote());
+        // The fill that gives the row its date keeps a time of day; one from another day carries
+        // its own date, so it cannot read as the row's.
+        assertEquals("16:52:03", row.fills().get(0).timeText());
+        // A conditional order that has already traded keeps what it was waiting for.
         assertEquals("trigger €75.300,00 · limit €75.364,00", row.triggerText());
     }
 
@@ -1172,7 +1177,7 @@ class LedgerServiceTest {
     }
 
     @Test
-    void anOrderStillFillingOnAnotherDayReadsAsItsLastFill() {
+    void aPartiallyFilledOrderIsDatedByItsLastFill() {
         OrderResponse partial = baseOrder("2026-10-08T09:00:00Z", "buy", "limit");
         partial.setStatus("partiallyFilled");
         partial.setAmount(new BigDecimal("0.002"));
@@ -1184,11 +1189,12 @@ class LedgerServiceTest {
 
         LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
 
-        assertEquals("last fill 14 Oct 2026 18:00", row.dateNote());
+        assertEquals("14 Oct 2026 18:00", row.dateText());
+        assertEquals("placed 8 Oct 2026 09:00", row.dateNote());
     }
 
     @Test
-    void aFillWithoutATimestampCarriesNoSecondDate() {
+    void aFillWithoutATimestampLeavesTheOrderOnItsPlacement() {
         OrderResponse sell = baseOrder("2026-10-08T14:20:00Z", "sell", "market");
         sell.setStatus("filled");
         sell.setAmount(new BigDecimal("0.001"));
@@ -1201,12 +1207,32 @@ class LedgerServiceTest {
 
         LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
 
+        assertEquals("8 Oct 2026 14:20", row.dateText());
         assertEquals("", row.dateNote());
         assertEquals("—", row.fills().get(0).timeText());
     }
 
     @Test
-    void theSecondDateFollowsTheDisplayZone() {
+    void fillsOnAnotherDayThanTheOrderKeepTheirDate() {
+        OrderResponse sell = baseOrder("2026-10-08T09:00:00Z", "sell", "market");
+        sell.setStatus("filled");
+        sell.setAmount(new BigDecimal("0.001"));
+        sell.setFilledAmount(new BigDecimal("0.001"));
+        sell.setFilledAmountQuote(new BigDecimal("75.20"));
+        sell.setFills(List.of(fill("2026-10-08T22:50:00Z", "0.0005", "75200", "0.08"),
+                fill("2026-10-09T00:10:00Z", "0.0005", "75200", "0.08")));
+        accountWith(sell);
+
+        LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
+
+        assertEquals("9 Oct 2026 00:10", row.dateText());
+        assertEquals("placed 8 Oct 2026 09:00", row.dateNote());
+        assertEquals("8 Oct 2026 22:50:00", row.fills().get(0).timeText());
+        assertEquals("00:10:00", row.fills().get(1).timeText());
+    }
+
+    @Test
+    void theRowDateAndItsPlacementNoteFollowTheDisplayZone() {
         // 23:50 CEST on 8 Oct and 00:10 CEST on 9 Oct are the same day in UTC and different days in
         // the zone the page shows.
         OrderResponse sell = baseOrder("2026-10-08T21:50:00Z", "sell", "market");
@@ -1222,10 +1248,101 @@ class LedgerServiceTest {
         LedgerView.OrderRowView utc = service.view(new LedgerRequest()).rows().get(0);
         LedgerView.OrderRowView cest = amsterdam.view(new LedgerRequest()).rows().get(0);
 
+        assertEquals("8 Oct 2026 22:10", utc.dateText());
         assertEquals("", utc.dateNote());
         assertEquals("22:10:00", utc.fills().get(0).timeText());
-        assertEquals("filled 9 Oct 2026 00:10", cest.dateNote());
-        assertEquals("9 Oct 2026 00:10:00", cest.fills().get(0).timeText());
+        assertEquals("9 Oct 2026 00:10", cest.dateText());
+        assertEquals("placed 8 Oct 2026 23:50", cest.dateNote());
+        assertEquals("00:10:00", cest.fills().get(0).timeText());
+    }
+
+    @Test
+    void anOrderIsInThePeriodItTradedInNotTheOneItWasPlacedIn() {
+        // Armed before the seven-day window, filled inside it: the period is when the money moved.
+        OrderResponse armed = baseOrder("2026-10-01T09:00:00Z", "sell", "takeProfitLimit");
+        armed.setStatus("filled");
+        armed.setAmount(new BigDecimal("0.001"));
+        armed.setFilledAmount(new BigDecimal("0.001"));
+        armed.setFilledAmountQuote(new BigDecimal("75.20"));
+        armed.setFills(List.of(fill("2026-10-14T16:52:03Z", "0.001", "75200", "0.15")));
+        // Placed inside it and never traded: nothing happened in the period, so no row.
+        OrderResponse waiting = baseOrder("2026-10-02T09:00:00Z", "buy", "limit");
+        waiting.setStatus("awaitingTrigger");
+        waiting.setAmount(new BigDecimal("0.001"));
+        waiting.setPrice(new BigDecimal("70000"));
+        waiting.setFills(List.of());
+        accountWith(armed, waiting);
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals(1, view.rows().size());
+        assertEquals("14 Oct 2026 16:52", view.rows().get(0).dateText());
+        assertEquals("placed 1 Oct 2026 09:00", view.rows().get(0).dateNote());
+        assertEquals(1, view.totals().orders());
+    }
+
+    @Test
+    void anOrderThatTradedAfterThePeriodIsNotInIt() {
+        OrderResponse later = baseOrder("2026-10-14T09:00:00Z", "sell", "takeProfitLimit");
+        later.setStatus("filled");
+        later.setAmount(new BigDecimal("0.001"));
+        later.setFilledAmount(new BigDecimal("0.001"));
+        later.setFilledAmountQuote(new BigDecimal("75.20"));
+        later.setFills(List.of(fill("2026-11-02T16:52:03Z", "0.001", "75200", "0.15")));
+        accountWith(later);
+
+        assertEquals(0, service.view(new LedgerRequest()).rows().size());
+    }
+
+    @Test
+    void aCancelledOrderIsInThePeriodItWasCancelledIn() {
+        OrderResponse gone = baseOrder("2026-10-01T09:00:00Z", "buy", "limit");
+        gone.setStatus("canceled");
+        gone.setUpdated(Instant.parse("2026-10-14T10:00:00Z").toEpochMilli());
+        gone.setAmount(new BigDecimal("0.001"));
+        gone.setPrice(new BigDecimal("70000"));
+        gone.setFills(List.of());
+        accountWith(gone);
+
+        LedgerView.OrderRowView row = service.view(new LedgerRequest()).rows().get(0);
+
+        assertEquals("14 Oct 2026 10:00", row.dateText());
+        assertEquals("placed 1 Oct 2026 09:00", row.dateNote());
+    }
+
+    @Test
+    void theDateSortFollowsTheTradingMoment() {
+        OrderResponse armed = baseOrder("2026-10-01T09:00:00Z", "sell", "takeProfitLimit");
+        armed.setStatus("filled");
+        armed.setAmount(new BigDecimal("0.001"));
+        armed.setFilledAmount(new BigDecimal("0.001"));
+        armed.setFilledAmountQuote(new BigDecimal("75.20"));
+        armed.setFills(List.of(fill("2026-10-14T09:00:00Z", "0.001", "75200", "0.15")));
+        OrderResponse placedLater = baseOrder("2026-10-13T10:00:00Z", "buy", "market");
+        placedLater.setStatus("filled");
+        placedLater.setAmount(new BigDecimal("0.001"));
+        placedLater.setFilledAmount(new BigDecimal("0.001"));
+        placedLater.setFilledAmountQuote(new BigDecimal("75.00"));
+        placedLater.setFills(List.of(fill("2026-10-13T10:00:00Z", "0.001", "75000", "0.15")));
+        accountWith(armed, placedLater);
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertEquals("SELL", view.rows().get(0).side());
+        assertEquals("BUY", view.rows().get(1).side());
+    }
+
+    @Test
+    void anOrderReadAtTheExchangeLimitIsCalledOut() {
+        OrderResponse[] many = new OrderResponse[1000];
+        for (int i = 0; i < many.length; i++) {
+            many[i] = canceledOrderAt("2026-10-10T08:00:00Z");
+        }
+        accountWith(many);
+
+        LedgerView view = service.view(new LedgerRequest());
+
+        assertTrue(view.totals().note().contains("1000-order limit"));
     }
 
     // ---- fixtures ---------------------------------------------------------------------------
@@ -1374,14 +1491,9 @@ class LedgerServiceTest {
         return order;
     }
 
-    private static OrderResponse olderOrder(int daysAgo) {
-        OrderResponse order = new OrderResponse();
-        order.setOrderId(java.util.UUID.randomUUID());
-        order.setMarket("BTC-EUR");
-        order.setCreated(Instant.parse("2026-10-10T08:00:00Z").minusSeconds(daysAgo * 86400L).toEpochMilli());
+    private static OrderResponse canceledOrderAt(String when) {
+        OrderResponse order = baseOrder(when, "buy", "limit");
         order.setStatus("canceled");
-        order.setSide("buy");
-        order.setOrderType("limit");
         order.setAmount(new BigDecimal("0.001"));
         order.setPrice(new BigDecimal("70000"));
         order.setFills(List.of());

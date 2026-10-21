@@ -127,8 +127,9 @@ public record LedgerView(String message, PriceView price, FiltersView filters,
      * One order of the period.
      *
      * @param number           The row number in the current view (continues across pages)
-     * @param dateText         When the order was placed
-     * @param dateNote         When the order traded, shown under the date when that is another day
+     * @param dateText         When the order did something: its last fill, or its placement while
+     *                         it has not traded (its cancellation once it is gone)
+     * @param dateNote         When it was placed, shown under the date when that is another day
      * @param side             {@code BUY} or {@code SELL}
      * @param sideClass        The side chip's colour class, or empty for a neutral side
      * @param typeText         The order type

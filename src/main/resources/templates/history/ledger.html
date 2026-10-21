@@ -110,10 +110,12 @@
                 orders and margin trades are not exposed by the Exchange API this page uses, so
                 they cannot appear here; Bitvavo's app shows its own margin ledger.</li>
             <li>"Balance after" counts only filled orders.</li>
-            <li>"Order date" is when the order was placed, which is what the range and the sort
-                follow — Bitvavo's order query filters on it. When the order traded on another day,
-                the row says so underneath: a take-profit armed days before it triggers keeps its
-                placement date.</li>
+            <li>"Order date" is when the order did something: when it traded — its last fill — or,
+                for an order that never traded, when it was placed (once it is gone, when it was
+                cancelled or expired). An order that filled in pieces lands in the period of its
+                last fill. An order that acted on another day than it was placed says so
+                underneath — a take-profit armed last week and filled today is in today's period,
+                not last week's.</li>
             <li>Sells show what they realised, at the average cost of the coins they sold — the math
                 looks back before the period to know what those coins cost. A buy shows no result of
                 its own: the sell that closes it carries it.</li>

@@ -222,7 +222,13 @@ public class LedgerService {
                               BitvavoCredentials credentials) {
         List<String> markets = all ? ledgerMarkets() : List.of(market);
         List<String> skipped = new ArrayList<>();
-        List<OrderResponse> periodOrders = orders(credentials, markets, range, skipped);
+        List<String> capped = new ArrayList<>();
+        // The period is when the orders did something, which the exchange cannot filter on: it
+        // filters by placement, and a conditional order can trade days after it was armed. So the
+        // read is bounded at the end only and the period filter runs here, on each order's moment.
+        List<OrderResponse> periodOrders = orders(credentials, markets, range, skipped, capped).stream()
+                .filter(order -> inPeriod(order, range))
+                .toList();
         Map<String, List<Transaction>> fills = fillsByBase(credentials,
                 clock.instant().toEpochMilli());
         Map<String, Balance> balances = balances(credentials, fills);
@@ -266,7 +272,8 @@ public class LedgerService {
 
         return new LedgerView(null, price, viewFilters,
                 headers(request, sortKey, ascending, viewFilters.amountHeader(), pageSize),
-                totals(filtered, bases, results, balances, books, market, all, range, skipped),
+                totals(filtered, bases, results, balances, books, market, all, range, skipped,
+                        capped),
                 rows, pager(request, sorted.size(), page, pages, sortKey,
                         ascending ? "asc" : "desc"), raw,
                 rawRows, pager(request, rawFiltered.size(), rawPage, rawPages, null, null),
@@ -330,15 +337,25 @@ public class LedgerService {
 
     // ---- reads ------------------------------------------------------------------------------
 
+    /**
+     * @param credentials The account
+     * @param markets     The markets to read
+     * @param range       The period, whose end bounds every read
+     * @param skipped     Collects the markets the exchange refused
+     * @param capped      Collects the markets whose read hit the exchange's order limit, where a
+     *                    fill inside the period may be out of reach
+     * @return Every order the account has up to the end of the period, unfiltered
+     */
     private List<OrderResponse> orders(BitvavoCredentials credentials, List<String> markets,
-                                       HistoryPeriods.Range range, List<String> skipped) {
+                                       HistoryPeriods.Range range, List<String> skipped,
+                                       List<String> capped) {
         // The exchange has no all-markets order read — it requires one market per call — so the
         // all-pairs view merges the catalogue's markets and whatever a live strategy trades. A
         // pair the exchange refuses is left out with a note instead of taking the page down.
         List<OrderResponse> all = new ArrayList<>();
         for (String market : markets) {
             try {
-                all.addAll(ordersFor(credentials, market, range));
+                all.addAll(ordersFor(credentials, market, range, capped));
             } catch (RestClientException e) {
                 if (markets.size() == 1) {
                     // One market is the page's whole read: keep the fatal message the page shows
@@ -353,16 +370,40 @@ public class LedgerService {
     }
 
     private List<OrderResponse> ordersFor(BitvavoCredentials credentials, String market,
-                                          HistoryPeriods.Range range) {
+                                          HistoryPeriods.Range range, List<String> capped) {
+        // No start: the exchange filters orders by when they were placed, and the period is when
+        // they did something. Bounding only the end and filtering here is what keeps a conditional
+        // order that was armed before the period and traded inside it in the period it traded in.
         String endpoint = UriComponentsBuilder.fromPath("/orders")
                 .queryParam("market", market)
-                .queryParam("start", range.fromMillis())
                 .queryParam("end", range.toMillis())
                 .queryParam("limit", ORDER_LIMIT)
                 .build().encode().toUriString();
         OrderResponse[] response = bitvavoApiClient.get(endpoint, OrderResponse[].class,
                 credentials.getApiKey(), credentials.getApiSecret());
-        return response == null ? List.of() : List.of(response);
+        if (response == null) {
+            return List.of();
+        }
+        if (response.length >= ORDER_LIMIT) {
+            // The exchange returns the latest orders up to the end, capped: anything older than
+            // this window is out of reach, so a fill in the period may be missing from the page.
+            log.warn("The {} order read returned the {}-order limit; older orders are not read",
+                    market, ORDER_LIMIT);
+            capped.add(market);
+        }
+        return List.of(response);
+    }
+
+    /**
+     * @param order The order
+     * @param range The selected period
+     * @return Whether the order did something in the period — it traded in it, or, while it has
+     *         never traded, it was placed in it (and, once it is gone, cancelled or expired in it)
+     */
+    private static boolean inPeriod(OrderResponse order, HistoryPeriods.Range range) {
+        Instant moment = moment(order);
+        return moment != null && moment.toEpochMilli() >= range.fromMillis()
+                && moment.toEpochMilli() <= range.toMillis();
     }
 
     /**
@@ -792,7 +833,7 @@ public class LedgerService {
                                        Map<OrderResponse, Double> euroFees) {
         String sort = sortKey(request.getSort());
         boolean ascending = "asc".equalsIgnoreCase(request.getDir());
-        Comparator<OrderResponse> tie = Comparator.comparingLong(LedgerService::created).reversed();
+        Comparator<OrderResponse> tie = Comparator.comparingLong(LedgerService::momentMillis).reversed();
         if (isTextSort(sort)) {
             Map<OrderResponse, String> keys = new IdentityHashMap<>();
             for (OrderResponse order : orders) {
@@ -839,7 +880,7 @@ public class LedgerService {
             case "netCash" -> netCashValue(order, selectedMarket);
             case "fills" -> order.getFills() == null ? 0 : order.getFills().size();
             case "pnl" -> results.getOrDefault(order, Double.NaN);
-            default -> created(order);
+            default -> momentMillis(order);
         };
         return Double.isFinite(value) ? value : null;
     }
@@ -977,7 +1018,7 @@ public class LedgerService {
                               Map<OrderResponse, Double> results,
                               Map<String, Balance> balances, Map<String, GetBookResponse> books,
                               String market, boolean all, HistoryPeriods.Range range,
-                              List<String> skipped) {
+                              List<String> skipped, List<String> capped) {
         String feesText = feesText(orders, market);
         double realised = orders.stream()
                 .mapToDouble(order -> results.getOrDefault(order, Double.NaN))
@@ -993,6 +1034,12 @@ public class LedgerService {
         String note = skipped.isEmpty() ? ""
                 : "Could not read the orders of " + String.join(", ", skipped)
                         + "; the totals leave them out.";
+        if (!capped.isEmpty()) {
+            note = (note.isEmpty() ? "" : note + " ")
+                    + "The order read of " + String.join(", ", capped) + " stopped at the exchange's "
+                    + ORDER_LIMIT + "-order limit, so an order placed earlier that traded in this "
+                    + "period may be missing.";
+        }
         return new TotalsView(range.label(), orders.size(), feesText,
                 signed(realised), signClass(realised),
                 Double.isNaN(unrealised) ? DASH : signed(unrealised),
@@ -1150,7 +1197,7 @@ public class LedgerService {
          */
         double afterValue(OrderResponse order) {
             Map.Entry<Long, Double> entry = order.getFills() == null || order.getFills().isEmpty()
-                    ? afterByFill.floorEntry(created(order))
+                    ? afterByFill.floorEntry(momentMillis(order))
                     : lastFillAfter(order);
             return entry == null ? current : entry.getValue();
         }
@@ -1270,18 +1317,35 @@ public class LedgerService {
         return "buy".equalsIgnoreCase(order.getSide());
     }
 
-    private static long created(OrderResponse order) {
-        return order.getCreated() == null ? 0 : order.getCreated();
+    /**
+     * @param order The order
+     * @return The moment the row is dated by and the period counts it in: when it last traded; or,
+     *         while it has never traded, when it was placed — and, once it is gone, when the
+     *         exchange cancelled or expired it, so that the day it went away is the day it shows.
+     *         The exchange filters its order query by placement, so the period filter runs on this
+     *         moment locally instead.
+     */
+    private static Instant moment(OrderResponse order) {
+        Instant traded = lastFill(order);
+        if (traded != null) {
+            return traded;
+        }
+        boolean gone = "canceled".equalsIgnoreCase(order.getStatus())
+                || "expired".equalsIgnoreCase(order.getStatus());
+        if (gone && order.getUpdated() != null) {
+            return Instant.ofEpochMilli(order.getUpdated());
+        }
+        return order.getCreated() == null ? null : Instant.ofEpochMilli(order.getCreated());
     }
 
     /**
      * @param order The order
-     * @return The moment the row is dated by: when the order was placed. Its trading moment is
-     *         reported beside that date, because the exchange's own order query — and so the
-     *         period these rows come from — filters on the placement too
+     * @return The moment as milliseconds, or {@code 0} when the order carries none, so that a sort
+     *         can order it with the rest
      */
-    private static Instant moment(OrderResponse order) {
-        return order.getCreated() == null ? null : Instant.ofEpochMilli(order.getCreated());
+    private static long momentMillis(OrderResponse order) {
+        Instant moment = moment(order);
+        return moment == null ? 0 : moment.toEpochMilli();
     }
 
     /**
@@ -1304,17 +1368,16 @@ public class LedgerService {
     /**
      * @param order  The order
      * @param moment The moment the row is dated by
-     * @return When the order traded, shown under the date when that is another day — a conditional
-     *         order armed days before it triggers would otherwise read as a trade on its placement
-     *         day; empty when it is the same day, since the fills panel already shows the times
+     * @return When the order was placed, shown under the date when the order did something on
+     *         another day than that — a conditional order armed days before it triggers would
+     *         otherwise look placed then; empty when it is the same day
      */
     private String dateNote(OrderResponse order, Instant moment) {
-        Instant traded = lastFill(order);
-        if (moment == null || traded == null || !otherDay(moment, traded)) {
+        Instant placed = order.getCreated() == null ? null : Instant.ofEpochMilli(order.getCreated());
+        if (moment == null || placed == null || !otherDay(moment, placed)) {
             return "";
         }
-        return ("filled".equalsIgnoreCase(order.getStatus()) ? "filled " : "last fill ")
-                + display.minuteYear(traded);
+        return "placed " + display.minuteYear(placed);
     }
 
     /**
