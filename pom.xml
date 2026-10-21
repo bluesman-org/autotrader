@@ -36,7 +36,7 @@
              -Ddocker.platforms=linux/arm64, which switches the plugin to buildx for that platform
              (a non-empty platform element is what enables buildx). -->
         <docker.platforms></docker.platforms>
-        <jacoco.maven.plugin.version>0.8.12</jacoco.maven.plugin.version>
+        <jacoco.maven.plugin.version>0.8.15</jacoco.maven.plugin.version>
         <spotbugs.maven.plugin.version>4.10.5.0</spotbugs.maven.plugin.version>
         <findsecbugs.plugin.version>1.14.0</findsecbugs.plugin.version>
         <docker.image.name>autotrader</docker.image.name>
