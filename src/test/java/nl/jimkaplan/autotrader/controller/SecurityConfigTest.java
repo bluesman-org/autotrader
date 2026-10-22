@@ -6,6 +6,7 @@ import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MailSettingsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.service.PasswordResetService;
+import nl.jimkaplan.autotrader.strategy.service.LiveAlertService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -54,6 +55,8 @@ class SecurityConfigTest {
     private MailSettingsService mailSettingsService;
     @MockitoBean
     private MarketService marketService;
+    @MockitoBean
+    private LiveAlertService alerts;
 
     private final PasswordEncoder encoder = new BCryptPasswordEncoder();
 

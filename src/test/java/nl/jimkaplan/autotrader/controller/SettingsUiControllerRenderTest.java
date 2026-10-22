@@ -5,6 +5,7 @@ import nl.jimkaplan.autotrader.service.AppUserService;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MailSettingsService;
 import nl.jimkaplan.autotrader.service.MarketService;
+import nl.jimkaplan.autotrader.strategy.service.LiveAlertService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,6 +56,8 @@ class SettingsUiControllerRenderTest {
     private MarketService marketService;
     @MockitoBean
     private AppUserService users;
+    @MockitoBean
+    private LiveAlertService alerts;
 
     @BeforeEach
     void setUp() {
@@ -112,8 +116,30 @@ class SettingsUiControllerRenderTest {
                 .andExpect(content().string(containsString("smtp.example.com:587")))
                 .andExpect(content().string(containsString("from autotrader@example.com")))
                 .andExpect(content().string(containsString("STARTTLS")))
+                .andExpect(content().string(containsString("Send test alert")))
                 // The stored password never travels back into the page.
                 .andExpect(content().string(not(containsString("smtp-password"))));
+    }
+
+    @Test
+    void postSendsATestAlert() throws Exception {
+        mockMvc.perform(post("/ui/settings/notifications/test"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"))
+                .andExpect(flash().attribute("message", containsString("test alert")));
+
+        verify(alerts).sendTest();
+    }
+
+    @Test
+    void postReportsATestAlertFailure() throws Exception {
+        doThrow(new IllegalStateException("No SMTP server is configured yet"))
+                .when(alerts).sendTest();
+
+        mockMvc.perform(post("/ui/settings/notifications/test"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"))
+                .andExpect(flash().attribute("error", containsString("No SMTP server")));
     }
 
     @Test

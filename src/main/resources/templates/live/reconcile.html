@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconcile manual close · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1>Reconcile a manual close</h1>
+    <p><a th:href="@{/ui/live}">← Back to the live page</a></p>
+
+    <div class="card" style="padding:18px 22px">
+        <div class="card-head">
+            <h2 th:text="${reconcile.name}">BTC-EUR 2h</h2>
+            <span class="muted" th:text="|${reconcile.market} · ${reconcile.interval}|">BTC-EUR · 2h</span>
+            <span class="badge real">REAL</span>
+        </div>
+
+        <p class="banner warn">
+            Only use this for a sell you made on Bitvavo's own app or website. The app verifies the
+            exchange order and records it; it does not guess which order closed the position.
+        </p>
+
+        <div class="position">
+            <div class="pos-line">
+                <div class="kv">Position<b th:text="${reconcile.quantityText}">LONG 0,00136090 BTC</b></div>
+                <div class="kv">Bought<b th:text="${reconcile.entryText}">20 Oct 2026 18:00 · €73.481,00</b></div>
+                <div class="kv">Entry fee<b th:text="${reconcile.entryFeeText}">€0,20</b></div>
+            </div>
+        </div>
+
+        <p class="muted" th:if="${reconcile.note != null}" th:text="${reconcile.note}">note</p>
+
+        <div class="table-wrap" th:unless="${#lists.isEmpty(reconcile.candidates)}">
+            <table class="orders">
+                <thead>
+                <tr>
+                    <th class="left">Filled</th>
+                    <th>Quantity</th>
+                    <th>Average price</th>
+                    <th>Fee</th>
+                    <th>Proceeds</th>
+                    <th class="left">Covers</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="candidate : ${reconcile.candidates}">
+                    <td class="left" th:text="${candidate.timeText}">21 Oct 2026 14:00 (CEST)</td>
+                    <td th:text="${candidate.quantityText}">0,00136090</td>
+                    <td th:text="${candidate.priceText}">€73.400,00</td>
+                    <td th:text="${candidate.feeText}">€0,20</td>
+                    <td th:text="${candidate.proceedsText}">€99,84</td>
+                    <td class="left" th:text="${candidate.coverText}">covers the position</td>
+                    <td>
+                        <form th:if="${candidate.coversPosition}" method="post"
+                              th:action="@{/ui/live/{id}/reconcile(id=${reconcile.strategyId})}"
+                              onsubmit="return confirm('Attach this exchange sell to the strategy and close the position?')">
+                            <input type="hidden" name="orderId" th:value="${candidate.orderId}">
+                            <button class="primary small" type="submit">Use this sell</button>
+                        </form>
+                        <span class="muted" th:unless="${candidate.coversPosition}">
+                            Sell the remainder first
+                        </span>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="muted" style="margin-top:18px">
+            The app records the position at the exchange's average fill and prorates the fee if the
+            sell was larger than the position. The extra is outside the strategy. A sell that covers
+            only part of the position cannot be attached; sell the remainder first.
+        </p>
+    </div>
+</main>
+</body>
+</html>

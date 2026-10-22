@@ -89,6 +89,7 @@ public class LiveOrderReconciliationService {
     private final LiveOrderRepository liveOrderRepository;
     private final LivePositionRepository livePositionRepository;
     private final LiveStrategyRepository liveStrategyRepository;
+    private final LiveAlertService alerts;
 
     /**
      * Reconcile every non-dry-run strategy against the exchange, when the account key is set.
@@ -196,7 +197,10 @@ public class LiveOrderReconciliationService {
             if (!"filled".equalsIgnoreCase(order.getStatus())) {
                 if (LiveOrderStatus.isTerminalNonFill(order.getStatus())) {
                     // Terminal: the engine has no row to settle, so keep the skip and warn —
-                    // including about any part the exchange did fill.
+                    // including about any part the exchange did fill. A real order the engine
+                    // placed still failed, so the operator is alerted even though there is no row.
+                    LiveOrder failedRow = recoveredFailureRow(strategy, order, candidate);
+                    alerts.reconciledFailure(strategy, failedRow);
                     log.warn("Recoverable exchange order {} of strategy {} is {}; left alone{}",
                             order.getOrderId(), strategy.getId(), order.getStatus(),
                             LiveOrderStatus.partialFillNote(order.getFilledAmountQuote()));
@@ -205,13 +209,15 @@ public class LiveOrderReconciliationService {
                 // Persist it as PENDING exactly as the pre-write would have: the normal resolution
                 // then settles it once it fills, which a plain skip could never do once the
                 // sequence has advanced past it.
-                liveOrderRepository.save(recoveredPendingRow(strategy, order, candidate));
+                LiveOrder pendingRow = liveOrderRepository.save(recoveredPendingRow(strategy, order, candidate));
+                alerts.realPending(strategy, pendingRow);
                 recovered = true;
                 log.info("Recovered unfilled live order {} of strategy {} from the exchange's history",
                         order.getOrderId(), strategy.getId());
                 continue;
             }
-            liveOrderRepository.save(recoveredRow(strategy, order, candidate));
+            LiveOrder filledRow = liveOrderRepository.save(recoveredRow(strategy, order, candidate));
+            alerts.reconciledFill(strategy, filledRow);
             recovered = true;
             log.info("Recovered live order {} of strategy {} from the exchange's history",
                     order.getOrderId(), strategy.getId());
@@ -248,6 +254,36 @@ public class LiveOrderReconciliationService {
                 .fee(order.getFeePaid() == null ? null : order.getFeePaid().doubleValue())
                 .orderId(String.valueOf(order.getOrderId()))
                 .clientOrderId(clientOrderId)
+                .createdTime(Instant.ofEpochMilli(order.getCreated()))
+                .build();
+    }
+
+    /**
+     * One transient {@code FAILED} row for a matched exchange order that came back terminal after
+     * its record was lost. It is not stored; the alert is the operator's record of the failure.
+     */
+    private static LiveOrder recoveredFailureRow(LiveStrategy strategy, OrderResponse order,
+                                                 String clientOrderId) {
+        Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
+        Double quantity = TradeMath.amount(order.getFilledAmount(), order.getAmount());
+        Double price = TradeMath.price(order.getFilledAmount(), order.getFilledAmountQuote());
+        String note = LiveOrderStatus.partialFillNote(order.getFilledAmountQuote());
+        return LiveOrder.builder()
+                .strategyId(strategy.getId())
+                .market(strategy.getMarket())
+                .side(order.getSide().toUpperCase(Locale.ROOT))
+                .status("FAILED")
+                .dryRun(false)
+                .awaitingReconciliation(false)
+                .signalOpenTime(0)
+                .reason("recovered after a restore: the exchange reports " + order.getStatus())
+                .amountQuote(amountQuote)
+                .quantity(quantity)
+                .price(price)
+                .fee(order.getFeePaid() == null ? null : order.getFeePaid().doubleValue())
+                .orderId(String.valueOf(order.getOrderId()))
+                .clientOrderId(clientOrderId)
+                .errorMessage("exchange order status: " + order.getStatus() + note)
                 .createdTime(Instant.ofEpochMilli(order.getCreated()))
                 .build();
     }
@@ -299,7 +335,7 @@ public class LiveOrderReconciliationService {
         OrderResponse order = history.byClientOrderId().get(row.getClientOrderId());
         if (order == null) {
             if (history.complete()) {
-                notAccepted(row);
+                notAccepted(strategy, row);
             } else {
                 markAwaiting(row);
                 log.info("Live order {} of strategy {} was not found in an incomplete page of the "
@@ -316,6 +352,7 @@ public class LiveOrderReconciliationService {
                 row.setAwaitingReconciliation(false);
                 row.setErrorMessage("exchange order status: " + order.getStatus() + note);
                 liveOrderRepository.save(row);
+                alerts.reconciledFailure(strategy, row);
                 log.warn("Exchange order {} for strategy {} is {}; settled row {} as FAILED{}",
                         order.getOrderId(), strategy.getId(), order.getStatus(), row.getId(), note);
                 return;
@@ -341,15 +378,17 @@ public class LiveOrderReconciliationService {
             row.setReason(appendReconciled(row.getReason()));
         }
         liveOrderRepository.save(row);
+        alerts.reconciledFill(strategy, row);
         log.info("Reconciled live order {} of strategy {} as {}", row.getId(), strategy.getId(),
                 order.getOrderId());
     }
 
-    private void notAccepted(LiveOrder row) {
+    private void notAccepted(LiveStrategy strategy, LiveOrder row) {
         row.setStatus("FAILED");
         row.setAwaitingReconciliation(false);
         row.setErrorMessage(NOT_ACCEPTED_MESSAGE);
         liveOrderRepository.save(row);
+        alerts.reconciledFailure(strategy, row);
         log.warn("Live order {} was not found in the exchange's order history; "
                 + "treated as never accepted", row.getId());
     }

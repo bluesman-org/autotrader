@@ -102,9 +102,12 @@ candle channel of its market and interval. Our own policies:
   with the signal's candle open time, the rule set that fired, amounts, the fill or estimated price,
   the fee, the exchange order ID for live fills and the client order ID the pre-write sent. A
   boundary whose candle could not be resolved is recorded as `SKIPPED`, so a missed signal window
-  is visible through the API.
+  is visible through the API. An operator-reconciled manual close is a `FILLED` row with
+  `external: true`, no client order ID and the exchange order ID; the boot reconciliation leaves it
+  alone, while the position sync sees it as a filled sell.
 - `live_positions` — the position, closed in place (`OPEN` → `CLOSED`) with the realised profit
-  after fees.
+  after fees. A real sell records the exchange's fill price as the exit price; the estimate is only
+  a fallback when the fill omits it.
 
 On boot, every strategy with `enabled: true` is started again (`LiveStrategyStarter`), after
 reconciliation has run. A strategy whose reconciliation failed is held back — `startEnabled` logs
@@ -163,6 +166,14 @@ which holds them back rather than let them trade on stale state.
   opens, a sell closes — and the stored open position is brought in line: a position that should be
   closed is closed in place with the last sell's price, time and realised profit, and a position
   that should be open is created from the last buy. When they already agree, nothing is written.
+- **Manual closes**: a sell made on Bitvavo's own app or website has no client order ID, so the
+  boot reconciliation cannot attribute it. The live page's **Reconcile manual close** action asks
+  the operator to pick the filled sell from the strategy's own history; the app verifies the
+  market, side, filled status, whole-position coverage and fee, then records an external `FILLED`
+  row (`external: true`, no client order ID) and closes the position at the exchange's average
+  fill. A sell that covers only part of the position is refused; a larger sell is prorated. The app
+  never guesses by balance or time, and the boot reconciliation still only matches client order
+  IDs — an external row is not touched by it, but the position sync sees it as a filled sell.
 - **Idempotent**: once a row is settled it is no longer `PENDING` or `FAILED`, so a second run
   writes nothing.
 
@@ -178,10 +189,11 @@ brings the two back together:
   exchange's figures: a match that can still fill is recorded as `PENDING`, so the normal
   resolution settles it once it fills, and a terminal one (`canceled`/`expired`) is skipped with a
   warning. The position sync closes or reopens the position accordingly.
-- What it cannot see: orders pushed beyond the 1000-order history page, and anything not placed by
-  the engine (manual trades, the legacy webhook) — those stay the operator's business. After a
-  restore, check the recovery log lines and the exchange's balance view; decrypting restored bot
-  configurations needs the `ENCRYPTION_MASTER_KEY` from Bitwarden.
+- What it cannot see: orders pushed beyond the 1000-order history page, and manual trades other
+  than an operator-reconciled external close (manual buys, transfers, the legacy webhook) — those
+  stay the operator's business. A manual sell can be attached after the restore with **Reconcile
+  manual close**. After a restore, check the recovery log lines and the exchange's balance view;
+  decrypting restored bot configurations needs the `ENCRYPTION_MASTER_KEY` from Bitwarden.
 
 ## API
 
@@ -195,9 +207,16 @@ brings the two back together:
 | `POST /api/live-strategies/{id}/start` | Seed the history, subscribe, evaluate closed candles |
 | `POST /api/live-strategies/{id}/stop` | Disconnect and clear `enabled` |
 | `GET /api/live-strategies/{id}/orders` | The strategy's orders, newest first |
+| `GET /api/live-strategies/{id}/close-preview` | The open position, current bid and estimated result after fees |
+| `POST /api/live-strategies/{id}/close` | Close the position: a simulated sell for a dry run, a market sell for a real one |
+| `GET /api/live-strategies/{id}/external-closes` | The filled exchange sells that could be attached to an open real position |
+| `POST /api/live-strategies/{id}/reconcile-close` | Attach a manual exchange sell and close the position at its average fill |
+| `POST /api/notifications/test` | Send one test alert to the account's email address |
 | `GET /ui/live` | The live page: one card per strategy, refreshed in place every 10 seconds |
 | `GET /ui/live/new` | The create form, optionally prefilled from a copy or a ranked backtest entry |
 | `GET /ui/live/{id}/edit` | The edit form; the pair and interval stay fixed after the first start |
+| `GET /ui/live/{id}/close` | The close confirmation: the position, the estimate and the warning |
+| `GET /ui/live/{id}/reconcile` | Pick the exchange sell that manually closed a real position |
 Every `/ui/**` and `/api/**` endpoint below needs a signed-in account; the TradingView webhook is
 the exception, because it authenticates itself with its own webhook key (see `docs/security.md`).
 
@@ -222,13 +241,40 @@ and creation minute (e.g. `BTC-EUR 1h · 12 Oct 21:04`).
 - **Going real:** create a copy from a dry-run strategy with **Create real copy**. The form pre-fills
   the same rules with dry-run off and the name suffixed `-REAL`; the new strategy starts its own
   anchor, so its live record is separate from the trial's.
+- **Closing a position:** a stopped strategy with an open position has **Close position**. Stop and
+  close are separate actions, and both ask before acting. The close is serialized with the
+  strategy's trading path, so a fill that started just before the stop finishes first and the close
+  then sees the closed position instead of placing a second sell. The confirmation shows the current
+  bid, the estimated sell fee and the estimated result after both fees. A dry-run close records a
+  simulated sell at the bid; a real close sends a market sell and closes the position only when the
+  exchange reports it filled. If a real sell is left `PENDING`, the position stays open and the
+  strategy stands down until the next boot reconciles it. If the exchange fills the sell but saving
+  the position fails, the page says the fill was not recorded and further closes are refused until
+  the next boot reconciles the position from the fill.
+- **Reconciling a manual close:** a real position can also be sold on Bitvavo's own app or website.
+  **Reconcile manual close** lists the filled sells without a client order ID from the strategy's
+  market and lets the operator pick the one that closed the position. The app verifies it and
+  records an external `FILLED` sell at the exchange's average fill; a sell that covers only part of
+  the position is refused, and a larger one is prorated. This is the only way an exchange trade the
+  engine did not place enters its records.
 - **Delete or archive:** a strategy that never started is deleted. One that has run is archived:
   it leaves the live page and the forms, but its orders and positions stay, and the history tab
   keeps showing it (labelled `(archived)` in the strategy filter). An open position blocks
-  archiving — close it first — so a real position can never be hidden behind an archived strategy.
+  archiving — close it in the app, or reconcile the manual sell that closed it, before archiving —
+  so a real position can never be hidden behind an archived strategy.
 - **From a backtest:** each ranked row on a stored run has a **Use live** link that opens the create
   form with the market, interval, parameters, rules and amount filled in. It saves dry-run unless
   the form's dry-run checkbox is cleared.
+
+## Alerts
+
+The engine emails the account's recovery address on real money events: a real buy or sell that
+filled, a real order that was rejected or failed, an order left `PENDING` for reconciliation, and a
+strategy held back because reconciliation failed. Dry-run activity never alerts. Sending runs on a
+bounded daemon executor and a mail failure is logged and swallowed, so SMTP can never delay a
+decision or change an order. The settings page's **Send test alert** button (and
+`POST /api/notifications/test`) proves the channel before real money moves. There is no daily
+heartbeat; monitoring stays manual plus these event alerts.
 
 ## The Bitvavo key
 
@@ -321,4 +367,8 @@ deposits, so coins that arrived without a buy have no cost to compare against.
   left alone — except a lost match the recovery recorded as `PENDING`, which settles when it fills
   (see "Restoring from a backup").
 - Partial fills are recorded as the order response reports them (`filledAmount`,
-  `filledAmountQuote`, `feePaid`), and the position uses those figures.
+  `filledAmountQuote`, `feePaid`), and the position uses those figures. The external reconcile
+  attaches only a filled exchange sell that covers the whole position; a partially filled manual
+  sell must be completed on the exchange first.
+- Manual buys and other exchange trades the engine did not place are not attributed to a strategy.
+  The external reconcile covers a manual sell that closes the strategy's own open position.

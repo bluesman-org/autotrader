@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -68,6 +69,9 @@ class LiveTradingServiceTest {
 
     @Mock
     private LiveStrategyRepository liveStrategyRepository;
+
+    @Mock
+    private LiveAlertService alerts;
 
     @InjectMocks
     private LiveTradingService liveTradingService;
@@ -177,7 +181,7 @@ class LiveTradingServiceTest {
         assertEquals("OPEN", position.getStatus());
         assertEquals(62.0, position.getEntryPrice(), 1e-9);
         assertEquals(decision.signalOpenTime(), position.getEntryTime());
-        verifyNoInteractions(bitvavoApiClient, credentialsService);
+        verifyNoInteractions(bitvavoApiClient, credentialsService, alerts);
     }
 
     @Test
@@ -209,6 +213,7 @@ class LiveTradingServiceTest {
         assertEquals(160.0, position.getExitPrice(), 1e-9);
         assertEquals(decision.signalOpenTime(), position.getExitTime());
         assertEquals(profit, position.getProfit(), 1e-9);
+        verifyNoInteractions(alerts);
     }
 
     @Test
@@ -240,6 +245,7 @@ class LiveTradingServiceTest {
         assertTrue(order.getErrorMessage().contains("No Bitvavo API key is configured"));
         verify(livePositionRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient);
+        verify(alerts).realFailure(eq(strategy), any(LiveOrder.class), eq("rejected"));
     }
 
     @Test
@@ -319,6 +325,7 @@ class LiveTradingServiceTest {
         assertEquals(100000.0, position.getEntryPrice(), 1e-9);
         assertEquals(0.2, position.getEntryFee(), 1e-9);
         assertEquals(decision.signalOpenTime(), position.getEntryTime());
+        verify(alerts).realFill(eq(strategy), any(LiveOrder.class), eq(position));
     }
 
     @Test
@@ -347,6 +354,7 @@ class LiveTradingServiceTest {
         assertEquals(orderId.toString(), saves.get(1).getOrderId());
         assertEquals(saves.get(0).getClientOrderId(), saves.get(1).getClientOrderId());
         verify(livePositionRepository, never()).save(any());
+        verify(alerts).realPending(eq(strategy), any(LiveOrder.class));
     }
 
     @Test
@@ -538,8 +546,10 @@ class LiveTradingServiceTest {
         verify(livePositionRepository).save(positionCaptor.capture());
         LivePosition closed = positionCaptor.getValue();
         assertEquals("CLOSED", closed.getStatus());
+        assertEquals(110000.0, closed.getExitPrice(), 1e-9);
         assertEquals(110.0 - 100.0 - 0.22 - 0.2, closed.getProfit(), 1e-9);
         assertEquals(decision.signalOpenTime(), closed.getExitTime());
+        verify(alerts).realFill(eq(strategy), any(LiveOrder.class), eq(closed));
     }
 
     @Test
@@ -643,6 +653,7 @@ class LiveTradingServiceTest {
         assertEquals("read timed out", failed.getErrorMessage());
         assertEquals(pending.getClientOrderId(), failed.getClientOrderId());
         verify(livePositionRepository, never()).save(any());
+        verify(alerts).realFailure(eq(strategy), any(LiveOrder.class), eq("failed"));
     }
 
     @Test
@@ -747,6 +758,167 @@ class LiveTradingServiceTest {
 
         verify(liveOrderRepository, never()).save(any());
         verifyNoInteractions(bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void fill_liveSellWithoutAnApiKey_recordsARejection() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(openPosition(0.001, 100000.0, 0.2)));
+        when(credentialsService.get()).thenReturn(Optional.empty());
+
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        LiveOrder order = captureSingleOrder();
+        assertEquals("SELL", order.getSide());
+        assertEquals("REJECTED", order.getStatus());
+        assertTrue(order.getErrorMessage().contains("No Bitvavo API key is configured"));
+        verify(livePositionRepository, never()).save(any());
+        verify(alerts).realFailure(eq(strategy), any(LiveOrder.class), eq("rejected"));
+    }
+
+    @Test
+    void fill_liveSellWhenTheMarketCallFails_recordsARejection() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(openPosition(0.001, 100000.0, 0.2)));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenThrow(new ResourceAccessException("market data down"));
+
+        liveTradingService.fill(strategy, decision("SELL"), 160.0);
+
+        LiveOrder order = captureSingleOrder();
+        assertEquals("SELL", order.getSide());
+        assertEquals("REJECTED", order.getStatus());
+        assertEquals("market data down", order.getErrorMessage());
+        verify(livePositionRepository, never()).save(any());
+        verify(alerts).realFailure(eq(strategy), any(LiveOrder.class), eq("rejected"));
+    }
+
+    @Test
+    void closeManually_withoutAnOpenPositionIsRejected() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveTradingService.closeManually(strategy, START + HOUR,
+                        "manual close in the app", 160.0));
+
+        assertEquals("there is no open position to close", error.getMessage());
+        verifyNoInteractions(alerts, bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void closeManually_refusesWhileAnOrderAwaitsReconciliation() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID))
+                .thenReturn(true);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveTradingService.closeManually(strategy, START + HOUR,
+                        "manual close in the app", 160.0));
+
+        assertTrue(error.getMessage().contains("awaiting reconciliation"));
+        verifyNoInteractions(alerts, bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void closeManually_refusesAFilledSellThePositionDidNotRecord() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(liveOrderRepository
+                .existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+                        STRATEGY_ID, "SELL", "FILLED", position.getEntryTime()))
+                .thenReturn(true);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveTradingService.closeManually(strategy, START + HOUR,
+                        "manual close in the app", 160.0));
+
+        assertTrue(error.getMessage().contains("position record is not updated"));
+        verifyNoInteractions(alerts, bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void closeManually_dryRunClosesAtTheBidAndRecordsTheReason() {
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.5, 200.0, 0.1);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        long exit = START + HOUR;
+
+        LiveOrder order = liveTradingService.closeManually(strategy, exit,
+                "manual close in the app", 160.0);
+
+        assertEquals("SELL", order.getSide());
+        assertEquals("DRY_RUN", order.getStatus());
+        assertEquals("manual close in the app", order.getReason());
+        assertEquals(exit, order.getSignalOpenTime());
+        assertEquals("CLOSED", position.getStatus());
+        assertEquals(160.0, position.getExitPrice(), 1e-9);
+        assertEquals(exit, position.getExitTime());
+        verifyNoInteractions(alerts, bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void closeManually_realFillUsesTheExchangePriceAndAlerts() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        UUID orderId = UUID.randomUUID();
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(orderId);
+        response.setStatus("filled");
+        response.setFilledAmount(new BigDecimal("0.001"));
+        response.setFilledAmountQuote(new BigDecimal("110.00"));
+        response.setFeePaid(new BigDecimal("0.22"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        LiveOrder order = liveTradingService.closeManually(strategy, START + HOUR,
+                "manual close in the app", 160.0);
+
+        assertEquals("FILLED", order.getStatus());
+        assertEquals(110000.0, order.getPrice(), 1e-9);
+        assertEquals("CLOSED", position.getStatus());
+        assertEquals(110000.0, position.getExitPrice(), 1e-9);
+        verify(alerts).realFill(eq(strategy), eq(order), eq(position));
+    }
+
+    @Test
+    void closeManually_realPendingLeavesThePositionOpenAndAlerts() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(credentialsService.get()).thenReturn(Optional.of(stored()));
+        when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
+                .thenReturn(market(5.0, 2, 8));
+        CreateOrderResponse response = new CreateOrderResponse();
+        response.setOrderId(UUID.randomUUID());
+        response.setStatus("partiallyFilled");
+        response.setFilledAmountQuote(new BigDecimal("50.00"));
+        when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
+                eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
+
+        LiveOrder order = liveTradingService.closeManually(strategy, START + HOUR,
+                "manual close in the app", 160.0);
+
+        assertEquals("PENDING", order.getStatus());
+        assertEquals("OPEN", position.getStatus());
+        verify(alerts).realPending(eq(strategy), eq(order));
+        verify(alerts, never()).realFill(any(), any(), any());
     }
 
     private static LiveDecision decision(String side) {

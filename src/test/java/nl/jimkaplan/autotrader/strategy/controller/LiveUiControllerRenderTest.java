@@ -140,6 +140,82 @@ class LiveUiControllerRenderTest {
     }
 
     @Test
+    void aStoppedPositionOffersCloseAndOnlyARealOneOffersReconcile() throws Exception {
+        when(liveViewService.zoneLabel()).thenReturn("UTC");
+        when(liveViewService.zoneId()).thenReturn("UTC");
+
+        when(liveViewService.cards()).thenReturn(List.of(stoppedCard(true, true)));
+        mockMvc.perform(get("/ui/live"))
+                .andExpect(content().string(containsString("Close position")))
+                .andExpect(content().string(not(containsString("Reconcile manual close"))));
+
+        when(liveViewService.cards()).thenReturn(List.of(stoppedCard(false, true)));
+        mockMvc.perform(get("/ui/live"))
+                .andExpect(content().string(containsString("Close position")))
+                .andExpect(content().string(containsString("Reconcile manual close")));
+
+        when(liveViewService.cards()).thenReturn(List.of(stoppedCard(false, false)));
+        mockMvc.perform(get("/ui/live"))
+                .andExpect(content().string(not(containsString("Close position"))))
+                .andExpect(content().string(not(containsString("Reconcile manual close"))));
+    }
+
+    @Test
+    void closePageRendersThePositionAndTheEstimate() throws Exception {
+        when(liveStrategyService.closePreview("strategy-1")).thenReturn(new LiveCloseView(
+                "strategy-1", "BTC 2h", "BTC-EUR", "2h", false, true,
+                "LONG 0,00100000 BTC", "20 Oct 2026 16:00 · €73.000,00", "€0,20",
+                "€73.400,00", "€73,40", "€0,15", "+€0,05", "pos",
+                "This places a real market sell of the position at market."));
+
+        mockMvc.perform(get("/ui/live/strategy-1/close"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Close position")))
+                .andExpect(content().string(containsString("Estimated result after fees")))
+                .andExpect(content().string(containsString("+€0,05")))
+                .andExpect(content().string(containsString("Sell at market and close")));
+    }
+
+    @Test
+    void reconcilePageRendersTheExchangeSells() throws Exception {
+        when(liveStrategyService.reconcileView("strategy-1")).thenReturn(new ReconcileView(
+                "strategy-1", "BTC 2h", "BTC-EUR", "2h", false,
+                "LONG 0,00100000 BTC", "20 Oct 2026 16:00 · €73.000,00", "€0,20",
+                List.of(new ExternalCloseView("order-1", "21 Oct 2026 14:00 (UTC)",
+                        "0,00100000", "€73.400,00", "€0,15", "€73,40", true,
+                        "covers the position")), null));
+
+        mockMvc.perform(get("/ui/live/strategy-1/reconcile"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Reconcile a manual close")))
+                .andExpect(content().string(containsString("Use this sell")))
+                .andExpect(content().string(containsString("21 Oct 2026 14:00 (UTC)")))
+                .andExpect(content().string(containsString("covers the position")));
+    }
+
+    @Test
+    void closePageRedirectsWhenTheServiceRefuses() throws Exception {
+        when(liveStrategyService.closePreview("strategy-1"))
+                .thenThrow(new IllegalArgumentException("stop the strategy before closing its position"));
+
+        mockMvc.perform(get("/ui/live/strategy-1/close"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/live"))
+                .andExpect(flash().attribute("error", "stop the strategy before closing its position"));
+    }
+
+    @Test
+    void reconcilePageRedirectsWhenBitvavoCannotBeRead() throws Exception {
+        when(liveStrategyService.reconcileView("strategy-1"))
+                .thenThrow(new org.springframework.web.client.RestClientException("connect timed out"));
+
+        mockMvc.perform(get("/ui/live/strategy-1/reconcile"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/live"))
+                .andExpect(flash().attribute("error", containsString("Bitvavo could not be reached")));
+    }
+
+    @Test
     void newFormRendersTheDefaults() throws Exception {
         when(marketService.selectable()).thenReturn(List.of("BTC-EUR", "ETH-EUR"));
 
@@ -307,6 +383,19 @@ class LiveUiControllerRenderTest {
                 .build();
         strategy.setId("strategy-1");
         return strategy;
+    }
+
+    private static LiveCardView stoppedCard(boolean dryRun, boolean withPosition) {
+        LiveCardView.PositionView position = withPosition
+                ? new LiveCardView.PositionView("LONG 0,00136090 BTC", "20 Oct 18:00 · €73.481,00",
+                "€73.500,00", "€73.400,00", "€99,84", "−€0,15", "neg", "€0,20")
+                : null;
+        return new LiveCardView("strategy-1", "BTC 2h", "BTC-EUR", "2h", true,
+                false, false, dryRun,
+                "MACD 12/26/9 · SAR 0,02/0,2 · entry: MACD bullish crossover · exit: SAR bearish "
+                        + "crossover · €100 per buy · warm-up 60 bars",
+                "Created 14 Oct 09:20 · Last evaluated 20 Oct 18:00:00 · Last error: —",
+                position, "No completed round trips yet.", List.of());
     }
 
     private static LiveCardView card(boolean running) {

@@ -317,6 +317,28 @@ class TradeHistoryServiceTest {
     }
 
     @Test
+    void view_detailsMarkAnExternalClose() {
+        LivePosition real = LivePosition.builder()
+                .strategyId(STRATEGY).market("BTC-EUR").status("CLOSED")
+                .quantity(0.00134403).entryPrice(74_403).entryFee(0.20)
+                .entryTime(NOW.minusSeconds(90 * 60).toEpochMilli())
+                .exitPrice(74_412.0).exitTime(NOW.minusSeconds(89 * 60).toEpochMilli())
+                .profit(0.12).dryRun(false).build();
+        LiveOrder sell = order("SELL", real.getExitTime(),
+                "c92b71a0-1111-2222-3333-444444444444", 0.20);
+        sell.setExternal(true);
+        stubPeriod(List.of(real));
+        when(orders.findBySignalOpenTimeRange(anyLong(), anyLong()))
+                .thenReturn(List.of(order("BUY", real.getEntryTime(),
+                        "8f14e2c7-aaaa-bbbb-cccc-dddddddddddd", 0.20), sell));
+
+        TradeHistoryView view = service.view(new TradeHistoryRequest());
+
+        assertEquals("buy 8f14e2c7… · sell c92b71a0… · external close",
+                view.rows().get(0).details().orderRefsText());
+    }
+
+    @Test
     void view_dailyShowsRealTradesOnlyWithCumulative() {
         stubPeriod(List.of(
                 position(STRATEGY, Instant.parse("2026-10-13T10:00:00Z").toEpochMilli(), -0.11, false),

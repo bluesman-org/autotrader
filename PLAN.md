@@ -26,9 +26,10 @@ SMTP settings stored on the settings page, and an HTTPS deployment on `https://a
 Caddy (PR #48). The trading-pair catalogue and the ledger reporting pass landed after that
 (PRs #50–#56), and the TradingView offset timestamps and the unused live-strategy `botId` went with
 PR #57. The live strategy management UI landed with PR #58, and the live order status guard with
-PR #59.
-TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
-next: the small live-run trial of the engine.
+PR #59. The live position close/reconcile and email alert path is implemented on
+`feature/live-close-and-reconcile` (the quality gate is green); merge and the dry close acceptance
+are pending. TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12;
+`docs/tradingview.md`); next: dry strategy exploration, with the live trial user-triggered.
 
 ## Objective
 
@@ -291,6 +292,15 @@ next: the small live-run trial of the engine.
     that moment with the placement underneath when the two days differ, the date sort follows it,
     and the summary counts it there. An order that fills in pieces lands in the period of its last
     fill, and a read that hits the exchange's 1000-order limit says so in the summary (PR #60)
+32. ⬜ Close a live position and reconcile a manual close: a stopped strategy can close its position
+    from the app — a simulated sell for a dry run, a market sell for a real one — with the current
+    bid and the estimated result after both fees, and a warning before the action. A manual sell
+    made on Bitvavo's own app can be attached by picking the verified exchange order; the app
+    records an external `FILLED` row, closes the position at the exchange's average fill and
+    prorates a larger sell, while refusing a partial one. Real fills, failures, orders left
+    `PENDING` and strategies held back by reconciliation email the account through a bounded daemon
+    executor, with a test button on the settings page. Implemented on
+    `feature/live-close-and-reconcile`; merge and the dry close acceptance are pending.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

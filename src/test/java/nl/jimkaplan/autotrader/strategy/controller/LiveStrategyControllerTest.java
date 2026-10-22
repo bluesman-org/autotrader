@@ -144,6 +144,49 @@ class LiveStrategyControllerTest {
         assertThrows(NoSuchElementException.class, () -> liveStrategyController.orders("missing"));
     }
 
+    @Test
+    void closePreviewAndCloseDelegate() {
+        LiveCloseView view = closeView();
+        LiveCloseResult result = new LiveCloseResult(true, "FILLED", "order-1", "closed");
+        when(liveStrategyService.closePreview("strategy-1")).thenReturn(view);
+        when(liveStrategyService.close("strategy-1")).thenReturn(result);
+
+        assertEquals(HttpStatus.OK, liveStrategyController.closePreview("strategy-1").getStatusCode());
+        assertEquals(view, liveStrategyController.closePreview("strategy-1").getBody());
+        assertEquals(result, liveStrategyController.close("strategy-1").getBody());
+    }
+
+    @Test
+    void externalClosesAndReconcileCloseDelegate() {
+        ReconcileView view = reconcileView();
+        LiveOrder row = LiveOrder.builder().strategyId("strategy-1").external(true).build();
+        when(liveStrategyService.reconcileView("strategy-1")).thenReturn(view);
+        when(liveStrategyService.reconcileExternalClose("strategy-1", "order-1")).thenReturn(row);
+
+        assertEquals(view, liveStrategyController.externalCloses("strategy-1").getBody());
+        assertEquals(row, liveStrategyController.reconcileClose("strategy-1",
+                new ExternalCloseRequest("order-1")).getBody());
+    }
+
+    @Test
+    void closeErrorsPropagateForTheGlobalHandler() {
+        when(liveStrategyService.close("strategy-1"))
+                .thenThrow(new IllegalArgumentException("stop the strategy before closing its position"));
+
+        assertThrows(IllegalArgumentException.class, () -> liveStrategyController.close("strategy-1"));
+    }
+
+    private static LiveCloseView closeView() {
+        return new LiveCloseView("strategy-1", "BTC 1h", "BTC-EUR", "1h", true, true,
+                "LONG 0,001 BTC", "entry", "fee", "bid", "proceeds", "fee", "profit", "pos",
+                "warning");
+    }
+
+    private static ReconcileView reconcileView() {
+        return new ReconcileView("strategy-1", "BTC 1h", "BTC-EUR", "1h", false,
+                "LONG 0,001 BTC", "entry", "fee", List.of(), null);
+    }
+
     private static LiveStrategy strategy() {
         LiveStrategy strategy = LiveStrategy.builder()
                 .name("BTC 1h")

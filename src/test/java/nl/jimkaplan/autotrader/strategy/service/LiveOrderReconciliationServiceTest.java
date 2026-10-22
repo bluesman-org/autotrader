@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -71,6 +72,9 @@ class LiveOrderReconciliationServiceTest {
 
     @Mock
     private LiveStrategyRepository liveStrategyRepository;
+
+    @Mock
+    private LiveAlertService alerts;
 
     @InjectMocks
     private LiveOrderReconciliationService service;
@@ -120,6 +124,7 @@ class LiveOrderReconciliationServiceTest {
         assertNull(pending.getErrorMessage());
         verify(liveOrderRepository).save(pending);
         verify(livePositionRepository, never()).save(any());
+        verify(alerts).reconciledFill(any(LiveStrategy.class), eq(pending));
     }
 
     @Test
@@ -136,6 +141,7 @@ class LiveOrderReconciliationServiceTest {
         assertEquals(LiveOrderReconciliationService.NOT_ACCEPTED_MESSAGE, pending.getErrorMessage());
         assertNotNull(pending.getClientOrderId());
         verify(livePositionRepository, never()).save(any());
+        verify(alerts).reconciledFailure(any(LiveStrategy.class), eq(pending));
     }
 
     @Test
@@ -624,6 +630,7 @@ class LiveOrderReconciliationServiceTest {
         assertEquals(lostClientOrderId.toString(), saved.getValue().getClientOrderId());
         assertTrue(saved.getValue().getReason().contains("recovered"));
         verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
+        verify(alerts).realPending(eq(strategy), eq(saved.getValue()));
     }
 
     @Test
@@ -644,6 +651,7 @@ class LiveOrderReconciliationServiceTest {
 
         verify(liveOrderRepository, never()).save(any());
         verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
+        verify(alerts).reconciledFailure(eq(strategy), any(LiveOrder.class));
     }
 
     @Test

@@ -112,6 +112,15 @@ public class LiveOrder extends BaseDocument {
     @Field("awaiting_reconciliation")
     private boolean awaitingReconciliation;
 
+    /**
+     * Whether this is a real fill the engine did not place: an operator-reconciled manual close
+     * made on the exchange, attached to the strategy's open position. Such a row has an exchange
+     * order id but no client order id, and is left alone by the boot reconciliation's client-order
+     * attribution. Absent on older rows, so it reads as false.
+     */
+    @Field("external")
+    private boolean external;
+
     @Field("error_message")
     private String errorMessage;
 

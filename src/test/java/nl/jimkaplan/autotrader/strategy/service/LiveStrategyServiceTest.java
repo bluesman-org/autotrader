@@ -6,8 +6,11 @@ import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
+import nl.jimkaplan.autotrader.strategy.controller.LiveCloseResult;
+import nl.jimkaplan.autotrader.strategy.controller.LiveCloseView;
 import nl.jimkaplan.autotrader.strategy.controller.LiveStrategyRequest;
 import nl.jimkaplan.autotrader.strategy.controller.MacdParametersRequest;
+import nl.jimkaplan.autotrader.strategy.controller.ReconcileView;
 import nl.jimkaplan.autotrader.strategy.controller.RuleSetRequest;
 import nl.jimkaplan.autotrader.strategy.controller.SarParametersRequest;
 import nl.jimkaplan.autotrader.strategy.live.BitvavoCandleStream;
@@ -61,6 +64,12 @@ class LiveStrategyServiceTest {
 
     @Mock
     private LiveTradingService liveTradingService;
+
+    @Mock
+    private LiveCloseService liveCloseService;
+
+    @Mock
+    private LiveAlertService alerts;
 
     @Mock
     private BitvavoCredentialsService credentialsService;
@@ -484,6 +493,77 @@ class LiveStrategyServiceTest {
     }
 
     @Test
+    void closePreviewAndCloseDelegateForAStoppedOpenPosition() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        LivePosition position = openPosition();
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.of(position));
+        LiveCloseView view = closeView();
+        LiveCloseResult result = new LiveCloseResult(true, "FILLED", "order-1", "closed");
+        when(liveCloseService.preview(strategy, position)).thenReturn(view);
+        when(liveCloseService.close(strategy)).thenReturn(result);
+
+        assertEquals(view, liveStrategyService.closePreview("strategy-1"));
+        assertEquals(result, liveStrategyService.close("strategy-1"));
+    }
+
+    @Test
+    void closeRejectsARunningArchivedAwaitingOrFlatStrategy() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        stubRunnerConstruction();
+        liveStrategyService.start("strategy-1");
+        IllegalArgumentException running = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.closePreview("strategy-1"));
+        assertEquals("stop the strategy before closing its position", running.getMessage());
+        liveStrategyService.stop("strategy-1");
+
+        strategy.setArchived(true);
+        IllegalArgumentException archived = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.close("strategy-1"));
+        assertEquals("the strategy is archived", archived.getMessage());
+        strategy.setArchived(false);
+
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue("strategy-1"))
+                .thenReturn(true);
+        IllegalArgumentException awaiting = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.close("strategy-1"));
+        assertTrue(awaiting.getMessage().contains("awaiting reconciliation"));
+
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue("strategy-1"))
+                .thenReturn(false);
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
+        IllegalArgumentException flat = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.close("strategy-1"));
+        assertEquals("there is no open position to close", flat.getMessage());
+    }
+
+    @Test
+    void reconcileRejectsADryRunPositionAndDelegatesForARealOne() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        LivePosition position = openPosition();
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.of(position));
+
+        IllegalArgumentException dry = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.reconcileView("strategy-1"));
+        assertTrue(dry.getMessage().contains("dry-run position"));
+
+        strategy.setDryRun(false);
+        ReconcileView view = new ReconcileView("strategy-1", "Strategy strategy-1", "BTC-EUR", "1h",
+                false, "LONG 0,001 BTC", "entry", "fee", List.of(), null);
+        LiveOrder row = LiveOrder.builder().strategyId("strategy-1").external(true).build();
+        when(liveCloseService.reconcileView(strategy, position)).thenReturn(view);
+        when(liveCloseService.reconcile(strategy, position, "order-1")).thenReturn(row);
+
+        assertEquals(view, liveStrategyService.reconcileView("strategy-1"));
+        assertEquals(row, liveStrategyService.reconcileExternalClose("strategy-1", "order-1"));
+    }
+
+    @Test
     void startEnabled_holdsBackStrategiesWhoseReconciliationFailed() {
         LiveStrategy good = stored("strategy-1", "BTC-EUR");
         LiveStrategy held = stored("strategy-2", "ETH-EUR");
@@ -498,6 +578,78 @@ class LiveStrategyServiceTest {
         verify(liveStrategyRepository).updateEnabled("strategy-1", true);
         verify(liveStrategyRepository, never()).findById("strategy-2");
         verify(liveStrategyRepository, never()).updateEnabled("strategy-2", true);
+        verify(alerts).reconciliationHeldBack(held);
+    }
+
+    @Test
+    void closeRefusesWhenAFilledSellWasNotRecordedInThePosition() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        strategy.setDryRun(false);
+        LivePosition position = openPosition();
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(liveOrderRepository
+                .existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+                        "strategy-1", "SELL", "FILLED", position.getEntryTime()))
+                .thenReturn(true);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.closePreview("strategy-1"));
+
+        assertTrue(error.getMessage().contains("position record is not updated"));
+    }
+
+    @Test
+    void reconcileExplainsRunningAwaitingAndFlat() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        stubRunnerConstruction();
+        liveStrategyService.start("strategy-1");
+        IllegalArgumentException running = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.reconcileView("strategy-1"));
+        assertEquals("stop the strategy before reconciling a close", running.getMessage());
+        liveStrategyService.stop("strategy-1");
+
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue("strategy-1"))
+                .thenReturn(true);
+        IllegalArgumentException awaiting = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.reconcileView("strategy-1"));
+        assertTrue(awaiting.getMessage().contains("before reconciling"));
+
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue("strategy-1"))
+                .thenReturn(false);
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
+        IllegalArgumentException flat = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.reconcileView("strategy-1"));
+        assertEquals("there is no open position to reconcile", flat.getMessage());
+    }
+
+    @Test
+    void closeAndReconcileRejectAnUnknownStrategy() {
+        when(liveStrategyRepository.findById("missing")).thenReturn(Optional.empty());
+
+        assertThrows(NoSuchElementException.class, () -> liveStrategyService.closePreview("missing"));
+        assertThrows(NoSuchElementException.class, () -> liveStrategyService.close("missing"));
+        assertThrows(NoSuchElementException.class, () -> liveStrategyService.reconcileView("missing"));
+        assertThrows(NoSuchElementException.class,
+                () -> liveStrategyService.reconcileExternalClose("missing", "order-1"));
+    }
+
+    private static LivePosition openPosition() {
+        return LivePosition.builder()
+                .strategyId("strategy-1").market("BTC-EUR").status("OPEN")
+                .quantity(0.001).entryPrice(73_000).entryFee(0.2)
+                .entryTime(Instant.parse("2026-10-20T14:00:00Z").toEpochMilli())
+                .dryRun(false)
+                .build();
+    }
+
+    private static LiveCloseView closeView() {
+        return new LiveCloseView("strategy-1", "Strategy strategy-1", "BTC-EUR", "1h", false, true,
+                "LONG 0,001 BTC", "entry", "fee", "bid", "proceeds", "fee", "profit", "pos",
+                "warning");
     }
 
     private void stubRunnerConstruction() {

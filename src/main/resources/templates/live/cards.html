@@ -21,6 +21,14 @@
                   th:action="@{/ui/live/{id}/edit(id=${card.id})}">
                 <button class="secondary small" type="submit">Edit</button>
             </form>
+            <form th:if="${!card.running and card.position != null}" method="get"
+                  th:action="@{/ui/live/{id}/close(id=${card.id})}">
+                <button class="secondary small" type="submit">Close position</button>
+            </form>
+            <form th:if="${!card.running and card.position != null and !card.dryRun}" method="get"
+                  th:action="@{/ui/live/{id}/reconcile(id=${card.id})}">
+                <button class="secondary small" type="submit">Reconcile manual close</button>
+            </form>
             <form method="get" th:action="@{/ui/live/new}">
                 <input type="hidden" name="copy" th:value="${card.id}">
                 <button class="secondary small" type="submit">Duplicate</button>
@@ -40,7 +48,8 @@
                   onsubmit="return confirm('This strategy has run. Archive it and keep its history?')">
                 <button class="secondary small" type="submit">Archive</button>
             </form>
-            <form th:if="${card.running}" th:action="@{/ui/live/{id}/stop(id=${card.id})}" method="post">
+            <form th:if="${card.running}" th:action="@{/ui/live/{id}/stop(id=${card.id})}" method="post"
+                  onsubmit="return confirm('Stop this strategy? No new decisions will be taken, and an open position stays open.')">
                 <button class="secondary" type="submit">Stop</button>
             </form>
             <form th:unless="${card.running}" th:action="@{/ui/live/{id}/start(id=${card.id})}" method="post">
