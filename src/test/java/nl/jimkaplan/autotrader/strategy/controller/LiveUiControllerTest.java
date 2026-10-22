@@ -3,6 +3,7 @@ package nl.jimkaplan.autotrader.strategy.controller;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.BacktestRunEntry;
+import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.service.BacktestService;
 import nl.jimkaplan.autotrader.strategy.service.LiveStrategyService;
@@ -13,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ui.ExtendedModelMap;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import java.time.Instant;
@@ -205,6 +207,131 @@ class LiveUiControllerTest {
 
         doThrow(new IllegalStateException("boom")).when(liveStrategyService).start("strategy-1");
         assertEquals("redirect:/ui/live", controller.start("strategy-1"));
+    }
+
+    @Test
+    void closePreviewRendersThePageAndRedirectsOnAStateError() {
+        LiveCloseView view = closeView();
+        when(liveStrategyService.closePreview("strategy-1")).thenReturn(view);
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        assertEquals("live/close", controller.closePreview("strategy-1", model,
+                new RedirectAttributesModelMap()));
+        assertEquals(view, model.getAttribute("preview"));
+
+        when(liveStrategyService.closePreview("strategy-2"))
+                .thenThrow(new IllegalArgumentException("stop the strategy before closing its position"));
+        RedirectAttributesModelMap attributes = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.closePreview("strategy-2",
+                new ExtendedModelMap(), attributes));
+        assertEquals("stop the strategy before closing its position",
+                attributes.getFlashAttributes().get("error"));
+    }
+
+    @Test
+    void closePostsTheResultAndRedirects() {
+        when(liveStrategyService.close("strategy-1"))
+                .thenReturn(new LiveCloseResult(true, "FILLED", "order-1", "The position was closed."));
+        RedirectAttributesModelMap attributes = new RedirectAttributesModelMap();
+
+        assertEquals("redirect:/ui/live", controller.close("strategy-1", attributes));
+        assertEquals("The position was closed.", attributes.getFlashAttributes().get("notice"));
+    }
+
+    @Test
+    void reconcileFormRendersTheCandidatesAndRedirectsOnAStateError() {
+        ReconcileView view = reconcileView();
+        when(liveStrategyService.reconcileView("strategy-1")).thenReturn(view);
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        assertEquals("live/reconcile", controller.reconcileForm("strategy-1", model,
+                new RedirectAttributesModelMap()));
+        assertEquals(view, model.getAttribute("reconcile"));
+
+        when(liveStrategyService.reconcileView("strategy-2"))
+                .thenThrow(new IllegalArgumentException("a dry-run position has no exchange order"));
+        RedirectAttributesModelMap attributes = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.reconcileForm("strategy-2",
+                new ExtendedModelMap(), attributes));
+        assertEquals("a dry-run position has no exchange order",
+                attributes.getFlashAttributes().get("error"));
+    }
+
+    @Test
+    void reconcilePostsTheChosenOrderAndReportsIt() {
+        when(liveStrategyService.reconcileExternalClose("strategy-1", "order-1"))
+                .thenReturn(LiveOrder.builder().strategyId("strategy-1").external(true).build());
+        RedirectAttributesModelMap attributes = new RedirectAttributesModelMap();
+
+        assertEquals("redirect:/ui/live", controller.reconcile("strategy-1", "order-1", attributes));
+        assertTrue(attributes.getFlashAttributes().get("notice").toString().contains("external sell"));
+    }
+
+    @Test
+    void closeReportsAPendingResultAndTheErrorPaths() {
+        when(liveStrategyService.close("strategy-1"))
+                .thenReturn(new LiveCloseResult(false, "PENDING", "order-1", "The sell is not filled yet."));
+        RedirectAttributesModelMap pending = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.close("strategy-1", pending));
+        assertEquals("The sell is not filled yet.", pending.getFlashAttributes().get("error"));
+
+        when(liveStrategyService.close("strategy-2"))
+                .thenThrow(new RestClientException("connect timed out"));
+        RedirectAttributesModelMap unreachable = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.close("strategy-2", unreachable));
+        assertTrue(unreachable.getFlashAttributes().get("error").toString()
+                .contains("Bitvavo could not be reached"));
+
+        when(liveStrategyService.close("strategy-3")).thenThrow(new RuntimeException("boom"));
+        RedirectAttributesModelMap failed = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.close("strategy-3", failed));
+        assertTrue(failed.getFlashAttributes().get("error").toString().contains("The close failed"));
+    }
+
+    @Test
+    void reconcileReportsItsErrorPaths() {
+        when(liveStrategyService.reconcileExternalClose("strategy-1", "order-1"))
+                .thenThrow(new IllegalArgumentException("That sell covers only part"));
+        RedirectAttributesModelMap invalid = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.reconcile("strategy-1", "order-1", invalid));
+        assertEquals("That sell covers only part", invalid.getFlashAttributes().get("error"));
+
+        when(liveStrategyService.reconcileExternalClose("strategy-2", "order-2"))
+                .thenThrow(new RestClientException("connect timed out"));
+        RedirectAttributesModelMap unreachable = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.reconcile("strategy-2", "order-2", unreachable));
+        assertTrue(unreachable.getFlashAttributes().get("error").toString()
+                .contains("Bitvavo could not be reached"));
+
+        when(liveStrategyService.reconcileExternalClose("strategy-3", "order-3"))
+                .thenThrow(new RuntimeException("boom"));
+        RedirectAttributesModelMap failed = new RedirectAttributesModelMap();
+        assertEquals("redirect:/ui/live", controller.reconcile("strategy-3", "order-3", failed));
+        assertTrue(failed.getFlashAttributes().get("error").toString()
+                .contains("The manual close could not be recorded"));
+    }
+
+    @Test
+    void reconcileFormReportsABitvavoFailure() {
+        when(liveStrategyService.reconcileView("strategy-1"))
+                .thenThrow(new RestClientException("connect timed out"));
+        RedirectAttributesModelMap attributes = new RedirectAttributesModelMap();
+
+        assertEquals("redirect:/ui/live", controller.reconcileForm("strategy-1",
+                new ExtendedModelMap(), attributes));
+        assertTrue(attributes.getFlashAttributes().get("error").toString()
+                .contains("Bitvavo could not be reached"));
+    }
+
+    private static LiveCloseView closeView() {
+        return new LiveCloseView("strategy-1", "BTC 2h", "BTC-EUR", "2h", false, true,
+                "LONG 0,001 BTC", "entry", "fee", "bid", "proceeds", "fee", "profit", "pos",
+                "warning");
+    }
+
+    private static ReconcileView reconcileView() {
+        return new ReconcileView("strategy-1", "BTC 2h", "BTC-EUR", "2h", false,
+                "LONG 0,001 BTC", "entry", "fee", List.of(), null);
     }
 
     private static LiveStrategyForm form(ExtendedModelMap model) {

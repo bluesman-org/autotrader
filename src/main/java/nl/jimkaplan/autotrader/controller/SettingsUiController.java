@@ -8,6 +8,7 @@ import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MailSettingsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.DisplayZone;
+import nl.jimkaplan.autotrader.strategy.service.LiveAlertService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -41,17 +42,20 @@ public class SettingsUiController {
     private final MailSettingsService mailSettingsService;
     private final MarketService marketService;
     private final AppUserService users;
+    private final LiveAlertService alerts;
     private final DisplayZone display;
 
     public SettingsUiController(BitvavoCredentialsService credentialsService,
                                 MailSettingsService mailSettingsService,
                                 MarketService marketService,
                                 AppUserService users,
+                                LiveAlertService alerts,
                                 @Value("${autotrader.ui.time-zone:}") String timeZone) {
         this.credentialsService = credentialsService;
         this.mailSettingsService = mailSettingsService;
         this.marketService = marketService;
         this.users = users;
+        this.alerts = alerts;
         this.display = new DisplayZone(timeZone);
     }
 
@@ -223,6 +227,26 @@ public class SettingsUiController {
             redirectAttributes.addFlashAttribute("message",
                     "The SMTP settings were stored; recovery mails go out through them from now on.");
         } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/ui/settings";
+    }
+
+    /**
+     * Send a test alert through the stored SMTP server, so the channel is proven before real money
+     * moves.
+     *
+     * @param redirectAttributes Carries the outcome back to the page
+     * @return A redirect to the page
+     */
+    @PostMapping("/notifications/test")
+    public String testNotification(RedirectAttributes redirectAttributes) {
+        try {
+            alerts.sendTest();
+            redirectAttributes.addFlashAttribute("message",
+                    "The test alert was sent to the account's email address.");
+        } catch (RuntimeException e) {
+            log.warn("Could not send a test alert: {}", e.getMessage());
             redirectAttributes.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/ui/settings";

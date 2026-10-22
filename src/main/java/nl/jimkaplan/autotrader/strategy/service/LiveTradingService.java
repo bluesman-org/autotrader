@@ -73,6 +73,7 @@ public class LiveTradingService {
     private final LiveOrderRepository liveOrderRepository;
     private final LivePositionRepository livePositionRepository;
     private final LiveStrategyRepository liveStrategyRepository;
+    private final LiveAlertService alerts;
 
     /**
      * Strategies already warned about standing down, so a long wait logs once instead of on every
@@ -221,10 +222,10 @@ public class LiveTradingService {
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
-            if (!applyFill(pending, response)) {
+            if (!applyFill(strategy, pending, response)) {
                 return;
             }
-            livePositionRepository.save(LivePosition.builder()
+            LivePosition position = LivePosition.builder()
                     .strategyId(strategy.getId())
                     .market(strategy.getMarket())
                     .status("OPEN")
@@ -234,7 +235,9 @@ public class LiveTradingService {
                     .entryTime(decision.signalOpenTime())
                     .dryRun(false)
                     .createdTime(Instant.now())
-                    .build());
+                    .build();
+            livePositionRepository.save(position);
+            alerts.realFill(strategy, pending, position);
             log.info("{} bought {} at {} for {} EUR (order {})", strategy.getMarket(), pending.getQuantity(),
                     pending.getPrice(), pending.getAmountQuote(), response.getOrderId());
         } catch (RuntimeException ex) {
@@ -244,7 +247,7 @@ public class LiveTradingService {
                 recordOrder(strategy, decision.signalOpenTime(), "BUY", "REJECTED", decision.reason(), null, null,
                         null, null, null, ex.getMessage());
             } else {
-                applyFailure(pending, ex.getMessage());
+                applyFailure(strategy, pending, ex.getMessage());
             }
         }
     }
@@ -256,24 +259,47 @@ public class LiveTradingService {
         if (position == null) {
             return;
         }
+        sellAt(strategy, position, decision.signalOpenTime(), decision.reason(), price);
+    }
+
+    /**
+     * Close an open position on the operator's instruction, reusing the signal sell path so the
+     * pre-write, the client order id, the fill handling and the reconciliation invariants stay one
+     * code path. The caller has already checked that the strategy is stopped and the position is
+     * open.
+     *
+     * @param strategy The stopped strategy
+     * @param position The open position to close
+     * @param exitTime The moment of the manual close, used as the order's signal open time and the
+     *                 position's exit time
+     * @param reason   Why the position is being closed
+     * @param price    The current bid, used for the dry-run fill and the real pre-write estimate
+     * @return The recorded order; the position is closed only when the fill is confirmed
+     */
+    public LiveOrder closeManually(LiveStrategy strategy, LivePosition position, long exitTime,
+                                   String reason, double price) {
+        return sellAt(strategy, position, exitTime, reason, price);
+    }
+
+    private LiveOrder sellAt(LiveStrategy strategy, LivePosition position, long exitTime, String reason,
+                             double price) {
         if (strategy.isDryRun()) {
             double proceeds = position.getQuantity() * price;
             double fee = proceeds * BacktestDefaults.FEE_RATE;
             double profit = TradeMath.closeProfit(proceeds, position.getQuantity(), position.getEntryPrice(),
                     position.getEntryFee(), fee);
-            recordOrder(strategy, decision.signalOpenTime(), "SELL", "DRY_RUN", decision.reason(), proceeds,
+            LiveOrder order = recordOrder(strategy, exitTime, "SELL", "DRY_RUN", reason, proceeds,
                     position.getQuantity(), price, fee, null, null);
-            closePosition(position, decision.signalOpenTime(), price, profit);
-            log.info("[dry-run] {} sold {} at {} (the arriving candle's open): profit {} EUR", strategy.getMarket(),
+            closePosition(position, exitTime, price, profit);
+            log.info("[dry-run] {} sold {} at {}: profit {} EUR", strategy.getMarket(),
                     position.getQuantity(), price, profit);
-            return;
+            return order;
         }
 
         BitvavoCredentials credentials = credentialsService.get().orElse(null);
         if (credentials == null) {
-            recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
+            return recordOrder(strategy, exitTime, "SELL", "REJECTED", reason, null, null,
                     null, null, null, "No Bitvavo API key is configured");
-            return;
         }
         LiveOrder pending = null;
         try {
@@ -283,15 +309,14 @@ public class LiveTradingService {
             BigDecimal amount = BigDecimal.valueOf(position.getQuantity())
                     .setScale(quantityDecimals, RoundingMode.DOWN);
             if (amount.signum() <= 0) {
-                recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
+                return recordOrder(strategy, exitTime, "SELL", "REJECTED", reason, null, null,
                         null, null, null,
                         "Position quantity rounds to zero at " + quantityDecimals + " decimals");
-                return;
             }
 
             UUID clientOrderId = nextClientOrderId(strategy);
             double estimatedProceeds = position.getQuantity() * price;
-            pending = preWrite(strategy, decision.signalOpenTime(), "SELL", decision.reason(), clientOrderId,
+            pending = preWrite(strategy, exitTime, "SELL", reason, clientOrderId,
                     estimatedProceeds, position.getQuantity(), price,
                     estimatedProceeds * BacktestDefaults.FEE_RATE);
 
@@ -305,24 +330,29 @@ public class LiveTradingService {
                     .build();
             CreateOrderResponse response = bitvavoApiClient.post("/order", request,
                     CreateOrderResponse.class, credentials.getApiKey(), credentials.getApiSecret());
-            if (!applyFill(pending, response)) {
-                return;
+            if (!applyFill(strategy, pending, response)) {
+                return pending;
             }
+            // The exchange's fill price is what the position must record; the pre-write estimate
+            // is only the fallback the response replaces.
+            double exitPrice = pending.getPrice();
             double profit = TradeMath.closeProfit(TradeMath.zeroIfNull(pending.getAmountQuote()),
                     position.getQuantity(), position.getEntryPrice(), position.getEntryFee(),
                     TradeMath.zeroIfNull(pending.getFee()));
-            closePosition(position, decision.signalOpenTime(), price, profit);
+            closePosition(position, exitTime, exitPrice, profit);
+            alerts.realFill(strategy, pending, position);
             log.info("{} sold {} at {}: profit {} EUR (order {})", strategy.getMarket(), pending.getQuantity(),
-                    price, profit, response.getOrderId());
+                    exitPrice, profit, response.getOrderId());
+            return pending;
         } catch (RuntimeException ex) {
             log.warn("Selling {} for strategy {} failed: {}", strategy.getMarket(), strategy.getId(),
                     ex.getMessage());
             if (pending == null) {
-                recordOrder(strategy, decision.signalOpenTime(), "SELL", "REJECTED", decision.reason(), null, null,
+                return recordOrder(strategy, exitTime, "SELL", "REJECTED", reason, null, null,
                         null, null, null, ex.getMessage());
-            } else {
-                applyFailure(pending, ex.getMessage());
             }
+            applyFailure(strategy, pending, ex.getMessage());
+            return pending;
         }
     }
 
@@ -374,7 +404,7 @@ public class LiveTradingService {
      *
      * @return Whether the order filled, so the caller may move the position
      */
-    private boolean applyFill(LiveOrder order, CreateOrderResponse response) {
+    private boolean applyFill(LiveStrategy strategy, LiveOrder order, CreateOrderResponse response) {
         String status = response.getStatus();
         if (!"filled".equalsIgnoreCase(status)) {
             order.setOrderId(String.valueOf(response.getOrderId()));
@@ -384,11 +414,13 @@ public class LiveTradingService {
                 order.setAwaitingReconciliation(false);
                 order.setErrorMessage("exchange order status: " + status + note);
                 liveOrderRepository.save(order);
+                alerts.realFailure(strategy, order, "failed");
                 log.warn("Order {} of strategy {} came back {}; recorded FAILED{}",
                         response.getOrderId(), order.getStrategyId(), status, note);
             } else {
                 order.setAwaitingReconciliation(true);
                 liveOrderRepository.save(order);
+                alerts.realPending(strategy, order);
                 log.warn("Order {} of strategy {} came back {}; left PENDING for reconciliation",
                         response.getOrderId(), order.getStrategyId(), status);
             }
@@ -416,7 +448,7 @@ public class LiveTradingService {
      * marked {@code FILLED} is never overwritten: the exchange holds the fill, and the failure here
      * happened after it.
      */
-    private void applyFailure(LiveOrder order, String message) {
+    private void applyFailure(LiveStrategy strategy, LiveOrder order, String message) {
         if ("FILLED".equals(order.getStatus())) {
             log.warn("Order {} of strategy {} filled at the exchange; not overwriting it as FAILED after {}",
                     order.getOrderId(), order.getStrategyId(), message);
@@ -426,6 +458,7 @@ public class LiveTradingService {
         order.setAwaitingReconciliation(true);
         order.setErrorMessage(message);
         liveOrderRepository.save(order);
+        alerts.realFailure(strategy, order, "failed");
     }
 
     private void closePosition(LivePosition position, long exitOpenTime, double price, double profit) {
@@ -450,10 +483,10 @@ public class LiveTradingService {
         return 0;
     }
 
-    private void recordOrder(LiveStrategy strategy, long signalOpenTime, String side, String status,
-                             String reason, Double amountQuote, Double quantity, Double price,
-                             Double fee, String orderId, String errorMessage) {
-        liveOrderRepository.save(LiveOrder.builder()
+    private LiveOrder recordOrder(LiveStrategy strategy, long signalOpenTime, String side, String status,
+                                  String reason, Double amountQuote, Double quantity, Double price,
+                                  Double fee, String orderId, String errorMessage) {
+        LiveOrder order = LiveOrder.builder()
                 .strategyId(strategy.getId())
                 .market(strategy.getMarket())
                 .side(side)
@@ -468,7 +501,12 @@ public class LiveTradingService {
                 .orderId(orderId)
                 .errorMessage(errorMessage)
                 .createdTime(Instant.now())
-                .build());
+                .build();
+        liveOrderRepository.save(order);
+        if (!strategy.isDryRun() && "REJECTED".equals(status)) {
+            alerts.realFailure(strategy, order, "rejected");
+        }
+        return order;
     }
 
     private static StrategyDefinition definition(LiveStrategy strategy) {

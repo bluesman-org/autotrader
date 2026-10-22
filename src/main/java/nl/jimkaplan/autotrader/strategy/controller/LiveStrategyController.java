@@ -222,6 +222,113 @@ public class LiveStrategyController {
         return ResponseEntity.ok(liveStrategyService.orders(id));
     }
 
+    /**
+     * The close preview: the position, the current bid and the estimated result after fees.
+     *
+     * @param id The strategy ID
+     * @return The preview
+     */
+    @Operation(summary = "Preview closing a position",
+            description = "Returns the open position, the current bid and the estimated result after "
+                          + "both fees. Only a stopped strategy with an open position and no order "
+                          + "awaiting reconciliation can be closed.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Preview returned",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = LiveCloseView.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "The strategy is running, archived, flat or awaiting reconciliation",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "No strategy with that ID", content = @Content)
+    })
+    @GetMapping("/{id}/close-preview")
+    public ResponseEntity<LiveCloseView> closePreview(
+            @Parameter(description = "ID of the live strategy", required = true) @PathVariable String id) {
+        return ResponseEntity.ok(liveStrategyService.closePreview(id));
+    }
+
+    /**
+     * Close the open position: a simulated sell for a dry-run strategy, a market sell for a real
+     * one.
+     *
+     * @param id The strategy ID
+     * @return What happened
+     */
+    @Operation(summary = "Close a live position",
+            description = "Closes a stopped strategy's open position. A dry-run strategy records a "
+                          + "simulated sell at the current bid; a real strategy sends a market sell "
+                          + "and leaves the position open unless the exchange reports it filled.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Close executed",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = LiveCloseResult.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "The strategy is running, archived, flat, awaiting reconciliation, "
+                                  + "or the current price is unavailable",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "No strategy with that ID", content = @Content)
+    })
+    @PostMapping("/{id}/close")
+    public ResponseEntity<LiveCloseResult> close(
+            @Parameter(description = "ID of the live strategy", required = true) @PathVariable String id) {
+        return ResponseEntity.ok(liveStrategyService.close(id));
+    }
+
+    /**
+     * The exchange sells that may have manually closed a real position.
+     *
+     * @param id The strategy ID
+     * @return The position and its candidates
+     */
+    @Operation(summary = "List external closes",
+            description = "Lists the filled exchange sells without a client order id that could have "
+                          + "closed the strategy's open position. Only a stopped real strategy with an "
+                          + "open position and no order awaiting reconciliation can be reconciled.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Candidates returned",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ReconcileView.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "The strategy is dry-run, running, archived, flat, awaiting "
+                                  + "reconciliation, or has no API key",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "No strategy with that ID", content = @Content)
+    })
+    @GetMapping("/{id}/external-closes")
+    public ResponseEntity<ReconcileView> externalCloses(
+            @Parameter(description = "ID of the live strategy", required = true) @PathVariable String id) {
+        return ResponseEntity.ok(liveStrategyService.reconcileView(id));
+    }
+
+    /**
+     * Attach a manual exchange sell to the open position and close it at the exchange's fill.
+     *
+     * @param id      The strategy ID
+     * @param request The exchange order id
+     * @return The recorded external row
+     */
+    @Operation(summary = "Reconcile a manual close",
+            description = "Attaches a filled exchange sell made outside the engine to the strategy's "
+                          + "open position, closes the position at the exchange's average fill and "
+                          + "records the sell as an external fill. The sell must cover the whole "
+                          + "position and must not already be attached.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "External close recorded",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = LiveOrder.class))),
+            @ApiResponse(responseCode = "400",
+                    description = "The sell is missing, already attached, does not cover the position "
+                                  + "or lacks the exchange's figures",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "No strategy with that ID", content = @Content)
+    })
+    @PostMapping("/{id}/reconcile-close")
+    public ResponseEntity<LiveOrder> reconcileClose(
+            @Parameter(description = "ID of the live strategy", required = true) @PathVariable String id,
+            @RequestBody ExternalCloseRequest request) {
+        return ResponseEntity.ok(liveStrategyService.reconcileExternalClose(id, request.orderId()));
+    }
+
     private LiveStrategyView view(String id) {
         LiveStrategy strategy = liveStrategyService.get(id)
                 .orElseThrow(() -> new NoSuchElementException("Live strategy not found: " + id));

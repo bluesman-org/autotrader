@@ -43,6 +43,15 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     boolean existsByStrategyIdAndAwaitingReconciliationTrue(String strategyId);
 
     /**
+     * Whether an exchange order is already attached to a live order row, so an operator-reconciled
+     * manual close cannot be recorded twice.
+     *
+     * @param orderId The exchange order id
+     * @return Whether a row carries it
+     */
+    boolean existsByOrderId(String orderId);
+
+    /**
      * Orders whose decision candle falls in the given range, for the history page's order
      * references: a round trip's buy carries the position's entry signal time, its sell the exit
      * signal time. Explicit {@code @Query} for the same reason as

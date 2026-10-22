@@ -8,12 +8,16 @@ import nl.jimkaplan.autotrader.repository.LivePositionRepository;
 import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
+import nl.jimkaplan.autotrader.strategy.controller.LiveCloseResult;
+import nl.jimkaplan.autotrader.strategy.controller.LiveCloseView;
 import nl.jimkaplan.autotrader.strategy.controller.LiveStrategyRequest;
+import nl.jimkaplan.autotrader.strategy.controller.ReconcileView;
 import nl.jimkaplan.autotrader.strategy.controller.RuleSetRequest;
 import nl.jimkaplan.autotrader.strategy.live.CandleStreamFactory;
 import nl.jimkaplan.autotrader.strategy.live.LiveStrategyRunner;
 import nl.jimkaplan.autotrader.strategy.model.CandleInterval;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
+import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.rule.LogicalOperator;
 import nl.jimkaplan.autotrader.strategy.rule.MacdParameters;
@@ -48,6 +52,8 @@ public class LiveStrategyService {
     private final LivePositionRepository livePositionRepository;
     private final CandleHistoryService candleHistoryService;
     private final LiveTradingService liveTradingService;
+    private final LiveCloseService liveCloseService;
+    private final LiveAlertService alerts;
     private final BitvavoCredentialsService credentialsService;
     private final CandleStreamFactory candleStreamFactory;
     private final ConcurrentMap<String, LiveStrategyRunner> runners = new ConcurrentHashMap<>();
@@ -261,6 +267,96 @@ public class LiveStrategyService {
     }
 
     /**
+     * The confirmation view for closing a stopped strategy's open position.
+     *
+     * @param id The strategy ID
+     * @return The close preview
+     * @throws IllegalArgumentException when the strategy is running, archived, has no open position
+     *                                  or has an order awaiting reconciliation
+     * @throws NoSuchElementException   if the strategy does not exist
+     */
+    public synchronized LiveCloseView closePreview(String id) {
+        LiveStrategy strategy = require(id);
+        LivePosition position = requireCloseable(strategy, "close");
+        return liveCloseService.preview(strategy, position);
+    }
+
+    /**
+     * Close a stopped strategy's open position: a simulated sell for a dry-run strategy, a market
+     * sell for a real one.
+     *
+     * @param id The strategy ID
+     * @return What happened
+     * @throws IllegalArgumentException when the strategy is running, archived, has no open position
+     *                                  or has an order awaiting reconciliation
+     * @throws NoSuchElementException   if the strategy does not exist
+     */
+    public synchronized LiveCloseResult close(String id) {
+        LiveStrategy strategy = require(id);
+        LivePosition position = requireCloseable(strategy, "close");
+        return liveCloseService.close(strategy, position);
+    }
+
+    /**
+     * The exchange sells that may have manually closed a real strategy's open position.
+     *
+     * @param id The strategy ID
+     * @return The position and its external-close candidates
+     * @throws IllegalArgumentException when the strategy is dry-run, running, archived, has no open
+     *                                  position or has an order awaiting reconciliation
+     * @throws NoSuchElementException   if the strategy does not exist
+     */
+    public synchronized ReconcileView reconcileView(String id) {
+        LiveStrategy strategy = require(id);
+        LivePosition position = requireCloseable(strategy, "reconcile");
+        requireRealPosition(strategy);
+        return liveCloseService.reconcileView(strategy, position);
+    }
+
+    /**
+     * Attach a manual exchange sell to a real strategy's open position and close the position at
+     * the exchange's fill.
+     *
+     * @param id      The strategy ID
+     * @param orderId The exchange order id
+     * @return The recorded external row
+     * @throws IllegalArgumentException when the strategy is dry-run, running, archived, has no open
+     *                                  position or has an order awaiting reconciliation, or when
+     *                                  the exchange sell does not fit
+     * @throws NoSuchElementException   if the strategy does not exist
+     */
+    public synchronized LiveOrder reconcileExternalClose(String id, String orderId) {
+        LiveStrategy strategy = require(id);
+        LivePosition position = requireCloseable(strategy, "reconcile");
+        requireRealPosition(strategy);
+        return liveCloseService.reconcile(strategy, position, orderId);
+    }
+
+    private LivePosition requireCloseable(LiveStrategy strategy, String action) {
+        if (strategy.isArchived()) {
+            throw new IllegalArgumentException("the strategy is archived");
+        }
+        if (runners.containsKey(strategy.getId())) {
+            throw new IllegalArgumentException("stop the strategy before "
+                    + ("close".equals(action) ? "closing its position" : "reconciling a close"));
+        }
+        if (liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(strategy.getId())) {
+            throw new IllegalArgumentException("a real order is awaiting reconciliation; restart the "
+                    + "application after it settles before "
+                    + ("close".equals(action) ? "closing" : "reconciling"));
+        }
+        return livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN")
+                .orElseThrow(() -> new IllegalArgumentException("there is no open position to " + action));
+    }
+
+    private static void requireRealPosition(LiveStrategy strategy) {
+        if (strategy.isDryRun()) {
+            throw new IllegalArgumentException(
+                    "a dry-run position has no exchange order to reconcile; close it in the app instead");
+        }
+    }
+
+    /**
      * Start (or keep) a strategy running. Lifecycle transitions are serialized: two concurrent
      * starts must never create two runners for one strategy, both of which would trade it. The
      * runner's start seeds the history with blocking I/O, so another strategy's start or stop waits
@@ -352,6 +448,7 @@ public class LiveStrategyService {
             if (failedReconciliation.contains(strategy.getId())) {
                 log.error("Live strategy {} not started: reconciliation failed; restart after fixing",
                         strategy.getId());
+                alerts.reconciliationHeldBack(strategy);
                 continue;
             }
             try {

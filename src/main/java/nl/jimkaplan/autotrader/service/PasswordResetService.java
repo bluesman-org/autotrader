@@ -6,6 +6,7 @@ import nl.jimkaplan.autotrader.model.document.PasswordResetToken;
 import nl.jimkaplan.autotrader.repository.AppUserRepository;
 import nl.jimkaplan.autotrader.repository.PasswordResetTokenRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.mongodb.core.FindAndReplaceOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -77,7 +78,8 @@ public class PasswordResetService {
     @Autowired
     public PasswordResetService(AppUserRepository users, PasswordResetTokenRepository tokens,
                                 AppUserService appUserService, MailSettingsService mail,
-                                MongoTemplate mongoTemplate, Executor recoveryMailExecutor,
+                                MongoTemplate mongoTemplate,
+                                @Qualifier("recoveryMailExecutor") Executor recoveryMailExecutor,
                                 @Value("${autotrader.security.public-url:http://localhost:8081/autotrader}") String publicUrl,
                                 @Value("${autotrader.security.reset-token-minutes:30}") long minutes) {
         this(users, tokens, appUserService, mail, mongoTemplate, recoveryMailExecutor, publicUrl,

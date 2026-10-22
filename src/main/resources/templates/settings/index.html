@@ -142,6 +142,11 @@
         <p class="muted">The recovery mail is sent through this server. The password is needed only
             when the server asks for a username; it is written once, never shown again, and leaving
             it blank keeps the stored one.</p>
+        <form th:if="${mail.configured}" method="post"
+              th:action="@{/ui/settings/notifications/test}" style="margin-bottom:14px">
+            <button class="secondary" type="submit">Send test alert</button>
+            <span class="muted">Sends one mail to the account's email address.</span>
+        </form>
         <form method="post" th:action="@{/ui/settings/mail}" th:object="${mailForm}" autocomplete="off">
             <div class="filters">
                 <div class="f">

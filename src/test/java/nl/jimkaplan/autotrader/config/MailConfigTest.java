@@ -36,6 +36,22 @@ class MailConfigTest {
     }
 
     @Test
+    void theLiveAlertRunsOnItsOwnDaemonThread() throws Exception {
+        Executor executor = new MailConfig().liveAlertExecutor();
+        try {
+            String name = CompletableFuture.supplyAsync(() -> Thread.currentThread().getName(), executor)
+                    .get(5, TimeUnit.SECONDS);
+            boolean daemon = CompletableFuture.supplyAsync(Thread::currentThread, executor)
+                    .get(5, TimeUnit.SECONDS).isDaemon();
+
+            assertEquals("live-alert-mail", name);
+            assertTrue(daemon);
+        } finally {
+            ((ExecutorService) executor).shutdownNow();
+        }
+    }
+
+    @Test
     void theQueueIsBoundedSoABusyServerCannotPileUpWork() throws Exception {
         Executor executor = new MailConfig().recoveryMailExecutor();
         CountDownLatch busy = new CountDownLatch(1);

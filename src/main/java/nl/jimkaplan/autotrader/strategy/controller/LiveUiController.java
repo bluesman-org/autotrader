@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.ArrayList;
@@ -195,6 +196,109 @@ public class LiveUiController {
     @PostMapping("/{id}/stop")
     public String stop(@PathVariable String id) {
         return toggle(id, false);
+    }
+
+    /**
+     * The close confirmation page.
+     *
+     * @param id                 The strategy ID
+     * @param model              The preview
+     * @param redirectAttributes Carries a state error back to the live page
+     * @return The close page, or a redirect when the strategy cannot be closed
+     */
+    @GetMapping("/{id}/close")
+    public String closePreview(@PathVariable String id, Model model,
+                               RedirectAttributes redirectAttributes) {
+        try {
+            model.addAttribute("preview", liveStrategyService.closePreview(id));
+            return "live/close";
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+            return "redirect:/ui/live";
+        }
+    }
+
+    /**
+     * Execute the close after the confirmation page.
+     *
+     * @param id                 The strategy ID
+     * @param redirectAttributes Carries the outcome back to the live page
+     * @return A redirect to the live page
+     */
+    @PostMapping("/{id}/close")
+    public String close(@PathVariable String id, RedirectAttributes redirectAttributes) {
+        try {
+            LiveCloseResult result = liveStrategyService.close(id);
+            redirectAttributes.addFlashAttribute(result.closed() ? "notice" : "error", result.message());
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        } catch (RestClientException e) {
+            log.warn("Could not reach Bitvavo while closing a live position: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("error",
+                    "Bitvavo could not be reached, so the close was not executed; try again in a moment.");
+        } catch (RuntimeException e) {
+            log.warn("Could not close a live position: {}", e.getClass().getSimpleName());
+            redirectAttributes.addFlashAttribute("error",
+                    "The close failed; the position was not changed. Check the log and try again.");
+        }
+        return "redirect:/ui/live";
+    }
+
+    /**
+     * The page that lists the exchange sells which may have manually closed a real position.
+     *
+     * @param id                 The strategy ID
+     * @param model              The position and candidates
+     * @param redirectAttributes Carries a state error back to the live page
+     * @return The reconcile page, or a redirect when it cannot be shown
+     */
+    @GetMapping("/{id}/reconcile")
+    public String reconcileForm(@PathVariable String id, Model model,
+                                RedirectAttributes redirectAttributes) {
+        try {
+            model.addAttribute("reconcile", liveStrategyService.reconcileView(id));
+            return "live/reconcile";
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+            return "redirect:/ui/live";
+        } catch (RestClientException e) {
+            log.warn("Could not read Bitvavo's order history: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("error",
+                    "Bitvavo could not be reached, so the manual close could not be reconciled; "
+                            + "try again in a moment.");
+            return "redirect:/ui/live";
+        }
+    }
+
+    /**
+     * Attach the chosen exchange sell to the open position.
+     *
+     * @param id                 The strategy ID
+     * @param orderId            The exchange order id
+     * @param redirectAttributes Carries the outcome back to the live page
+     * @return A redirect to the live page
+     */
+    @PostMapping("/{id}/reconcile")
+    public String reconcile(@PathVariable String id,
+                            @RequestParam(required = false) String orderId,
+                            RedirectAttributes redirectAttributes) {
+        try {
+            liveStrategyService.reconcileExternalClose(id, orderId);
+            redirectAttributes.addFlashAttribute("notice",
+                    "The external sell was recorded and the position is closed.");
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        } catch (RestClientException e) {
+            log.warn("Could not reach Bitvavo while reconciling a manual close: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("error",
+                    "Bitvavo could not be reached, so the manual close was not reconciled; "
+                            + "try again in a moment.");
+        } catch (RuntimeException e) {
+            log.warn("Could not reconcile a manual close: {}", e.getClass().getSimpleName());
+            redirectAttributes.addFlashAttribute("error",
+                    "The manual close could not be recorded; the position was not changed.");
+        }
+        return "redirect:/ui/live";
     }
 
     private String toggle(String id, boolean start) {

@@ -247,6 +247,9 @@ public class TradeHistoryService {
                 : euro(position.getQuantity() * position.getExitPrice() * BacktestDefaults.FEE_RATE);
         String references = position.isDryRun() ? "none — dry run (simulated)"
                 : "buy " + shortRef(buy) + " · sell " + shortRef(sell);
+        if (sell != null && sell.isExternal()) {
+            references += " · external close";
+        }
         return new DetailsView(
                 display.minuteYear(Instant.ofEpochMilli(position.getEntryTime())) + " · " + quantity + " "
                         + asset + " @ " + euro(position.getEntryPrice()),

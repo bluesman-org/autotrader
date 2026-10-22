@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Close position · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container">
+    <h1>Close position</h1>
+    <p><a th:href="@{/ui/live}">← Back to the live page</a></p>
+
+    <div class="card" style="padding:18px 22px">
+        <div class="card-head">
+            <h2 th:text="${preview.name}">BTC-EUR 2h</h2>
+            <span class="muted" th:text="|${preview.market} · ${preview.interval}|">BTC-EUR · 2h</span>
+            <span class="badge dry" th:if="${preview.dryRun}">DRY RUN</span>
+            <span class="badge real" th:unless="${preview.dryRun}">REAL</span>
+        </div>
+
+        <p class="banner warn" th:if="${preview.priced}" th:text="${preview.warning}">warning</p>
+        <p class="banner error" th:unless="${preview.priced}">
+            The current price is unavailable, so the close cannot run now. Try again in a moment.
+        </p>
+
+        <div class="position">
+            <div class="pos-line">
+                <div class="kv">Position<b th:text="${preview.quantityText}">LONG 0,00136090 BTC</b></div>
+                <div class="kv">Bought<b th:text="${preview.entryText}">20 Oct 2026 18:00 · €73.481,00</b></div>
+                <div class="kv">Entry fee<b th:text="${preview.entryFeeText}">€0,20</b></div>
+                <div class="kv">Current bid<b th:text="${preview.bidText}">€73.400,00</b></div>
+                <div class="kv">Estimated proceeds<b th:text="${preview.proceedsText}">€99,84</b></div>
+                <div class="kv">Estimated sell fee<b th:text="${preview.feeText}">€0,20</b></div>
+                <div class="kv">Estimated result after fees
+                    <b th:classappend="${preview.profitClass}" th:text="${preview.profitText}">−€0,15</b>
+                </div>
+            </div>
+        </div>
+
+        <form th:if="${preview.priced}" method="post"
+              th:action="@{/ui/live/{id}/close(id=${preview.strategyId})}"
+              onsubmit="return confirm('Close the position now? This cannot be undone.')"
+              style="margin-top:16px">
+            <button class="primary" type="submit"
+                    th:text="${preview.dryRun} ? 'Record the simulated sell and close' : 'Sell at market and close'">
+                Sell at market and close
+            </button>
+            <a th:href="@{/ui/live}" style="margin-left:12px">Cancel</a>
+        </form>
+
+        <p class="muted" style="margin-top:18px">
+            The position is closed only when the engine has a confirmed fill. A real close is a
+            market order and can fill at a different price than the estimate; the order row and the
+            ledger record the exchange's figures.
+        </p>
+    </div>
+</main>
+</body>
+</html>
