@@ -348,11 +348,8 @@ public class LiveStrategyService {
         LivePosition position = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN")
                 .orElseThrow(() -> new IllegalArgumentException("there is no open position to " + action));
         boolean filledSellNotRecorded = liveOrderRepository
-                .findByStrategyIdOrderByCreatedTimeDesc(strategy.getId()).stream()
-                .anyMatch(order -> !order.isDryRun()
-                        && "SELL".equals(order.getSide())
-                        && "FILLED".equals(order.getStatus())
-                        && order.getSignalOpenTime() >= position.getEntryTime());
+                .existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+                        strategy.getId(), "SELL", "FILLED", position.getEntryTime());
         if (filledSellNotRecorded) {
             throw new IllegalArgumentException("the exchange filled a sell for this open position but "
                     + "the position record is not updated; restart the application so reconciliation "

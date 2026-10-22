@@ -811,6 +811,42 @@ class LiveTradingServiceTest {
     }
 
     @Test
+    void closeManually_refusesWhileAnOrderAwaitsReconciliation() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID))
+                .thenReturn(true);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveTradingService.closeManually(strategy, START + HOUR,
+                        "manual close in the app", 160.0));
+
+        assertTrue(error.getMessage().contains("awaiting reconciliation"));
+        verifyNoInteractions(alerts, bitvavoApiClient, credentialsService);
+    }
+
+    @Test
+    void closeManually_refusesAFilledSellThePositionDidNotRecord() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(liveOrderRepository
+                .existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+                        STRATEGY_ID, "SELL", "FILLED", position.getEntryTime()))
+                .thenReturn(true);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveTradingService.closeManually(strategy, START + HOUR,
+                        "manual close in the app", 160.0));
+
+        assertTrue(error.getMessage().contains("position record is not updated"));
+        verifyNoInteractions(alerts, bitvavoApiClient, credentialsService);
+    }
+
+    @Test
     void closeManually_dryRunClosesAtTheBidAndRecordsTheReason() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
         LivePosition position = openPosition(0.5, 200.0, 0.1);

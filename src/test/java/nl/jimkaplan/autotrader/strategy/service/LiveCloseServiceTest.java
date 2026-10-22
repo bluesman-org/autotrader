@@ -364,8 +364,6 @@ class LiveCloseServiceTest {
 
     @Test
     void reconcileRejectsBlankZeroNegativeAndUndatedSells() {
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
-                .thenReturn(List.of());
         assertReconcileError("Choose the exchange sell that closed the position.", " ");
 
         stubHistory(new OrderResponse[]{externalSell(FULL_ID, "0", "0", "0", FILLED_AT)});
@@ -384,8 +382,6 @@ class LiveCloseServiceTest {
 
     @Test
     void reconcileClosesThePositionAtTheAverageFillAndProratesALargerSell() {
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
-                .thenReturn(List.of());
         when(credentialsService.get()).thenReturn(Optional.of(credentials()));
         when(bitvavoApiClient.get(eq(historyUrl()), eq(OrderResponse[].class), eq("key"), eq("secret")))
                 .thenReturn(new OrderResponse[]{
@@ -418,13 +414,10 @@ class LiveCloseServiceTest {
     void reconcileRejectsWhatItCannotVerify() {
         assertReconcileError("Choose the exchange sell that closed the position.", null);
 
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
-                .thenReturn(List.of(LiveOrder.builder().strategyId(STRATEGY_ID)
-                        .orderId(FULL_ID).build()));
+        when(liveOrderRepository.existsByOrderId(FULL_ID)).thenReturn(true);
         assertReconcileError("already attached", FULL_ID);
 
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
-                .thenReturn(List.of());
+        when(liveOrderRepository.existsByOrderId(FULL_ID)).thenReturn(false);
         stubHistory(new OrderResponse[0]);
         assertReconcileError("not found in the exchange's order history", FULL_ID);
 

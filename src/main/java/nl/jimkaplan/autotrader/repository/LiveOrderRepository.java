@@ -43,6 +43,31 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     boolean existsByStrategyIdAndAwaitingReconciliationTrue(String strategyId);
 
     /**
+     * Whether an exchange order is already attached to any live order row. This is global on
+     * purpose: the reconcile page's candidate set is scoped to one strategy for rendering, but an
+     * exchange sell must never be attached to two positions, including two strategies on the same
+     * market.
+     *
+     * @param orderId The exchange order id
+     * @return Whether a row carries it
+     */
+    boolean existsByOrderId(String orderId);
+
+    /**
+     * Whether a real sell filled after the position's entry, which means the exchange has already
+     * sold the open position but the position record has not caught up. A derived exists query keeps
+     * this constant-size and indexed instead of loading the strategy's whole order history.
+     *
+     * @param strategyId     The strategy ID
+     * @param side           "SELL"
+     * @param status         "FILLED"
+     * @param signalOpenTime The position's entry signal time, inclusive
+     * @return Whether such an order exists
+     */
+    boolean existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+            String strategyId, String side, String status, long signalOpenTime);
+
+    /**
      * Orders whose decision candle falls in the given range, for the history page's order
      * references: a round trip's buy carries the position's entry signal time, its sell the exit
      * signal time. Explicit {@code @Query} for the same reason as

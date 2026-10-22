@@ -304,6 +304,17 @@ public class LiveTradingService {
                     .findByStrategyIdAndStatus(strategy.getId(), "OPEN")
                     .orElseThrow(() -> new IllegalArgumentException(
                             "there is no open position to close"));
+            if (liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(strategy.getId())) {
+                throw new IllegalArgumentException("a real order is awaiting reconciliation; restart "
+                        + "the application after it settles before closing");
+            }
+            if (liveOrderRepository
+                    .existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+                            strategy.getId(), "SELL", "FILLED", position.getEntryTime())) {
+                throw new IllegalArgumentException("the exchange filled a sell for this open position "
+                        + "but the position record is not updated; restart the application so "
+                        + "reconciliation closes it before another close");
+            }
             return sellAt(strategy, position, exitTime, reason, price);
         } finally {
             lock.unlock();

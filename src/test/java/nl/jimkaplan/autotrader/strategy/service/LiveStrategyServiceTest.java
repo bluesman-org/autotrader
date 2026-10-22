@@ -589,12 +589,10 @@ class LiveStrategyServiceTest {
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
         when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
                 .thenReturn(Optional.of(position));
-        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc("strategy-1"))
-                .thenReturn(List.of(LiveOrder.builder()
-                        .strategyId("strategy-1").market("BTC-EUR").side("SELL")
-                        .status("FILLED").dryRun(false)
-                        .signalOpenTime(position.getEntryTime())
-                        .build()));
+        when(liveOrderRepository
+                .existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+                        "strategy-1", "SELL", "FILLED", position.getEntryTime()))
+                .thenReturn(true);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> liveStrategyService.closePreview("strategy-1"));

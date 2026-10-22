@@ -165,7 +165,9 @@ public class LiveCloseService {
         if (orderId == null || orderId.isBlank()) {
             throw new IllegalArgumentException("Choose the exchange sell that closed the position.");
         }
-        if (recordedOrderIds(strategy).contains(orderId)) {
+        // Global on purpose: the candidate list is scoped to one strategy, but an exchange sell
+        // must never be attached to two positions (including two strategies on one market).
+        if (liveOrderRepository.existsByOrderId(orderId)) {
             throw new IllegalArgumentException("That exchange sell is already attached to a live order.");
         }
         OrderResponse order = find(strategy, position, orderId);
