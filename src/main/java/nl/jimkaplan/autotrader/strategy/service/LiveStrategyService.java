@@ -293,8 +293,8 @@ public class LiveStrategyService {
      */
     public synchronized LiveCloseResult close(String id) {
         LiveStrategy strategy = require(id);
-        LivePosition position = requireCloseable(strategy, "close");
-        return liveCloseService.close(strategy, position);
+        requireCloseable(strategy, "close");
+        return liveCloseService.close(strategy);
     }
 
     /**
@@ -345,8 +345,20 @@ public class LiveStrategyService {
                     + "application after it settles before "
                     + ("close".equals(action) ? "closing" : "reconciling"));
         }
-        return livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN")
+        LivePosition position = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN")
                 .orElseThrow(() -> new IllegalArgumentException("there is no open position to " + action));
+        boolean filledSellNotRecorded = liveOrderRepository
+                .findByStrategyIdOrderByCreatedTimeDesc(strategy.getId()).stream()
+                .anyMatch(order -> !order.isDryRun()
+                        && "SELL".equals(order.getSide())
+                        && "FILLED".equals(order.getStatus())
+                        && order.getSignalOpenTime() >= position.getEntryTime());
+        if (filledSellNotRecorded) {
+            throw new IllegalArgumentException("the exchange filled a sell for this open position but "
+                    + "the position record is not updated; restart the application so reconciliation "
+                    + "closes it before another close");
+        }
+        return position;
     }
 
     private static void requireRealPosition(LiveStrategy strategy) {

@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Evaluates a live strategy on closed candles with the same rules and parameters as the backtester,
@@ -83,6 +85,14 @@ public class LiveTradingService {
     private final Set<String> standDownWarned = ConcurrentHashMap.newKeySet();
 
     /**
+     * One lock per strategy, held by the trading path and by an operator close. A strategy can be
+     * stopped while a candle delivery that started just before the stop is still inside a fill;
+     * serializing on the strategy id means a close either waits for that fill or sees the position
+     * it closed, never placing a second sell on top of it.
+     */
+    private final ConcurrentMap<String, ReentrantLock> tradeLocks = new ConcurrentHashMap<>();
+
+    /**
      * Decide what the last closed candle of the series asks for.
      *
      * @param strategy The live strategy
@@ -123,6 +133,10 @@ public class LiveTradingService {
                 : null;
     }
 
+    private ReentrantLock lockFor(String strategyId) {
+        return tradeLocks.computeIfAbsent(strategyId, id -> new ReentrantLock());
+    }
+
     /**
      * Fill a decision at the moment it is taken, at the arriving candle's open.
      *
@@ -131,10 +145,16 @@ public class LiveTradingService {
      * @param price    The arriving candle's open, the market price as the decision is made
      */
     public void fill(LiveStrategy strategy, LiveDecision decision, double price) {
-        if ("SELL".equals(decision.side())) {
-            sell(strategy, decision, price);
-        } else {
-            buy(strategy, decision, price);
+        ReentrantLock lock = lockFor(strategy.getId());
+        lock.lock();
+        try {
+            if ("SELL".equals(decision.side())) {
+                sell(strategy, decision, price);
+            } else {
+                buy(strategy, decision, price);
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -265,20 +285,29 @@ public class LiveTradingService {
     /**
      * Close an open position on the operator's instruction, reusing the signal sell path so the
      * pre-write, the client order id, the fill handling and the reconciliation invariants stay one
-     * code path. The caller has already checked that the strategy is stopped and the position is
-     * open.
+     * code path. The position is re-read under the same per-strategy lock the signal fills use, so
+     * a fill already in flight when the strategy stopped either finishes first or sees the close.
      *
      * @param strategy The stopped strategy
-     * @param position The open position to close
      * @param exitTime The moment of the manual close, used as the order's signal open time and the
      *                 position's exit time
      * @param reason   Why the position is being closed
      * @param price    The current bid, used for the dry-run fill and the real pre-write estimate
      * @return The recorded order; the position is closed only when the fill is confirmed
+     * @throws IllegalArgumentException when there is no open position
      */
-    public LiveOrder closeManually(LiveStrategy strategy, LivePosition position, long exitTime,
-                                   String reason, double price) {
-        return sellAt(strategy, position, exitTime, reason, price);
+    public LiveOrder closeManually(LiveStrategy strategy, long exitTime, String reason, double price) {
+        ReentrantLock lock = lockFor(strategy.getId());
+        lock.lock();
+        try {
+            LivePosition position = livePositionRepository
+                    .findByStrategyIdAndStatus(strategy.getId(), "OPEN")
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "there is no open position to close"));
+            return sellAt(strategy, position, exitTime, reason, price);
+        } finally {
+            lock.unlock();
+        }
     }
 
     private LiveOrder sellAt(LiveStrategy strategy, LivePosition position, long exitTime, String reason,

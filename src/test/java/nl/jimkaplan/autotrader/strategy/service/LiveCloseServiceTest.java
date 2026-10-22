@@ -128,14 +128,12 @@ class LiveCloseServiceTest {
                 .thenReturn(book(73_400));
         LiveOrder order = LiveOrder.builder().side("SELL").status("FILLED")
                 .orderId("order-1").price(73_400.0).build();
-        LivePosition position = position();
-        when(liveTradingService.closeManually(eq(realStrategy()), eq(position), anyLong(),
-                eq("manual close in the app"), eq(73_400.0))).thenAnswer(invocation -> {
-            position.setStatus("CLOSED");
-            return order;
-        });
+        when(liveTradingService.closeManually(eq(realStrategy()), anyLong(),
+                eq("manual close in the app"), eq(73_400.0))).thenReturn(order);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
 
-        LiveCloseResult result = service.close(realStrategy(), position);
+        LiveCloseResult result = service.close(realStrategy());
 
         assertTrue(result.closed());
         assertEquals("FILLED", result.status());
@@ -148,11 +146,12 @@ class LiveCloseServiceTest {
         when(bitvavoApiClient.getPublic(eq("/ticker/book?market=BTC-EUR"), eq(GetBookResponse.class)))
                 .thenReturn(book(73_400));
         LiveOrder order = LiveOrder.builder().side("SELL").status("PENDING").orderId("order-2").build();
-        LivePosition position = position();
-        when(liveTradingService.closeManually(eq(realStrategy()), eq(position), anyLong(),
+        when(liveTradingService.closeManually(eq(realStrategy()), anyLong(),
                 eq("manual close in the app"), eq(73_400.0))).thenReturn(order);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position()));
 
-        LiveCloseResult result = service.close(realStrategy(), position);
+        LiveCloseResult result = service.close(realStrategy());
 
         assertFalse(result.closed());
         assertEquals("PENDING", result.status());
@@ -165,11 +164,12 @@ class LiveCloseServiceTest {
                 .thenReturn(book(73_400));
         LiveOrder order = LiveOrder.builder().status("REJECTED")
                 .errorMessage("No Bitvavo API key is configured").build();
-        LivePosition position = position();
-        when(liveTradingService.closeManually(eq(realStrategy()), eq(position), anyLong(),
+        when(liveTradingService.closeManually(eq(realStrategy()), anyLong(),
                 eq("manual close in the app"), eq(73_400.0))).thenReturn(order);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position()));
 
-        LiveCloseResult result = service.close(realStrategy(), position);
+        LiveCloseResult result = service.close(realStrategy());
 
         assertFalse(result.closed());
         assertEquals("REJECTED", result.status());
@@ -183,10 +183,10 @@ class LiveCloseServiceTest {
                 .thenThrow(new RestClientException("connect timed out"));
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                () -> service.close(realStrategy(), position()));
+                () -> service.close(realStrategy()));
 
         assertTrue(error.getMessage().contains("current price is unavailable"));
-        verify(liveTradingService, never()).closeManually(any(), any(), anyLong(), any(), anyDouble());
+        verify(liveTradingService, never()).closeManually(any(), anyLong(), any(), anyDouble());
     }
 
     @Test
@@ -224,39 +224,56 @@ class LiveCloseServiceTest {
                 .thenReturn(new GetBookResponse(MARKET, null, BigDecimal.ONE,
                         BigDecimal.ONE, BigDecimal.ONE));
 
-        assertThrows(IllegalArgumentException.class, () -> service.close(realStrategy(), position()));
-        verify(liveTradingService, never()).closeManually(any(), any(), anyLong(), any(), anyDouble());
+        assertThrows(IllegalArgumentException.class, () -> service.close(realStrategy()));
+        verify(liveTradingService, never()).closeManually(any(), anyLong(), any(), anyDouble());
     }
 
     @Test
     void closeMessagesCoverTheDryNullReferenceAndFailedCases() {
         when(bitvavoApiClient.getPublic(eq("/ticker/book?market=BTC-EUR"), eq(GetBookResponse.class)))
                 .thenReturn(book(73_400));
-        LivePosition position = position();
-        when(liveTradingService.closeManually(eq(dryStrategy()), eq(position), anyLong(),
-                eq("manual close in the app"), eq(73_400.0))).thenAnswer(invocation -> {
-            position.setStatus("CLOSED");
-            return LiveOrder.builder().status("DRY_RUN").build();
-        });
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+        when(liveTradingService.closeManually(eq(dryStrategy()), anyLong(),
+                eq("manual close in the app"), eq(73_400.0)))
+                .thenReturn(LiveOrder.builder().status("DRY_RUN").build());
 
-        LiveCloseResult dry = service.close(dryStrategy(), position);
+        LiveCloseResult dry = service.close(dryStrategy());
         assertEquals("The position was closed.", dry.message());
 
-        LivePosition failedPosition = position();
-        when(liveTradingService.closeManually(eq(realStrategy()), eq(failedPosition), anyLong(),
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position()));
+        when(liveTradingService.closeManually(eq(realStrategy()), anyLong(),
                 eq("manual close in the app"), eq(73_400.0)))
                 .thenReturn(LiveOrder.builder().status("FAILED")
                         .errorMessage("canceledMarketProtection").build());
-        LiveCloseResult failed = service.close(realStrategy(), failedPosition);
+        LiveCloseResult failed = service.close(realStrategy());
         assertTrue(failed.message().contains("not settled"));
         assertTrue(failed.message().contains("canceledMarketProtection"));
 
-        LivePosition unreported = position();
-        when(liveTradingService.closeManually(eq(realStrategy()), eq(unreported), anyLong(),
+        when(liveTradingService.closeManually(eq(realStrategy()), anyLong(),
                 eq("manual close in the app"), eq(73_400.0)))
                 .thenReturn(LiveOrder.builder().status("FAILED").build());
-        LiveCloseResult noReason = service.close(realStrategy(), unreported);
+        LiveCloseResult noReason = service.close(realStrategy());
         assertTrue(noReason.message().contains("did not give a reason"));
+    }
+
+    @Test
+    void aFilledSellWhosePositionSaveFailedIsReportedAsUnrecorded() {
+        when(bitvavoApiClient.getPublic(eq("/ticker/book?market=BTC-EUR"), eq(GetBookResponse.class)))
+                .thenReturn(book(73_400));
+        when(liveTradingService.closeManually(eq(realStrategy()), anyLong(),
+                eq("manual close in the app"), eq(73_400.0)))
+                .thenReturn(LiveOrder.builder().status("FILLED").orderId("order-1")
+                        .price(73_400.0).build());
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position()));
+
+        LiveCloseResult result = service.close(realStrategy());
+
+        assertFalse(result.closed());
+        assertTrue(result.message().contains("exchange filled the sell"));
+        assertTrue(result.message().contains("Do not close again"));
     }
 
     @Test
@@ -267,9 +284,9 @@ class LiveCloseServiceTest {
                         engineSell(ENGINE_ID), externalSell(DUPLICATE_ID, "0.001", "73.40", "0.1468", FILLED_AT),
                         externalSell(SMALL_ID, "0.0005", "36.70", "0.0734", FILLED_AT),
                         new OrderResponse()});
-        when(liveOrderRepository.existsByOrderId(FULL_ID)).thenReturn(false);
-        when(liveOrderRepository.existsByOrderId(DUPLICATE_ID)).thenReturn(true);
-        when(liveOrderRepository.existsByOrderId(SMALL_ID)).thenReturn(false);
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of(LiveOrder.builder().strategyId(STRATEGY_ID)
+                        .orderId(DUPLICATE_ID).build()));
 
         ReconcileView view = service.reconcileView(realStrategy(), position());
 
@@ -285,6 +302,8 @@ class LiveCloseServiceTest {
 
     @Test
     void reconcileViewExplainsAnEmptyListAndAFullPage() {
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
         when(credentialsService.get()).thenReturn(Optional.of(credentials()));
         when(bitvavoApiClient.get(eq(historyUrl()), eq(OrderResponse[].class), eq("key"), eq("secret")))
                 .thenReturn(new OrderResponse[0]);
@@ -294,7 +313,6 @@ class LiveCloseServiceTest {
 
         OrderResponse[] page = new OrderResponse[LiveCloseService.ORDER_HISTORY_LIMIT];
         page[0] = externalSell(FULL_ID, "0.001", "73.40", "0.1468", FILLED_AT);
-        when(liveOrderRepository.existsByOrderId(FULL_ID)).thenReturn(false);
         when(bitvavoApiClient.get(eq(historyUrl()), eq(OrderResponse[].class), eq("key"), eq("secret")))
                 .thenReturn(page);
 
@@ -312,6 +330,8 @@ class LiveCloseServiceTest {
 
     @Test
     void aReconcileViewWithoutAnEntryFeeShowsADash() {
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
         LivePosition position = position();
         position.setEntryFee(null);
         stubHistory(new OrderResponse[0]);
@@ -332,7 +352,8 @@ class LiveCloseServiceTest {
         Fills later = new Fills();
         later.setTimestamp(FILLED_AT);
         multi.setFills(List.of(earlier, later));
-        when(liveOrderRepository.existsByOrderId(SMALL_ID)).thenReturn(false);
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
         stubHistory(new OrderResponse[]{null, noId, multi});
 
         ReconcileView view = service.reconcileView(realStrategy(), position());
@@ -343,6 +364,8 @@ class LiveCloseServiceTest {
 
     @Test
     void reconcileRejectsBlankZeroNegativeAndUndatedSells() {
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
         assertReconcileError("Choose the exchange sell that closed the position.", " ");
 
         stubHistory(new OrderResponse[]{externalSell(FULL_ID, "0", "0", "0", FILLED_AT)});
@@ -361,7 +384,8 @@ class LiveCloseServiceTest {
 
     @Test
     void reconcileClosesThePositionAtTheAverageFillAndProratesALargerSell() {
-        when(liveOrderRepository.existsByOrderId(FULL_ID)).thenReturn(false);
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
         when(credentialsService.get()).thenReturn(Optional.of(credentials()));
         when(bitvavoApiClient.get(eq(historyUrl()), eq(OrderResponse[].class), eq("key"), eq("secret")))
                 .thenReturn(new OrderResponse[]{
@@ -394,10 +418,13 @@ class LiveCloseServiceTest {
     void reconcileRejectsWhatItCannotVerify() {
         assertReconcileError("Choose the exchange sell that closed the position.", null);
 
-        when(liveOrderRepository.existsByOrderId(FULL_ID)).thenReturn(true);
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of(LiveOrder.builder().strategyId(STRATEGY_ID)
+                        .orderId(FULL_ID).build()));
         assertReconcileError("already attached", FULL_ID);
 
-        when(liveOrderRepository.existsByOrderId(FULL_ID)).thenReturn(false);
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of());
         stubHistory(new OrderResponse[0]);
         assertReconcileError("not found in the exchange's order history", FULL_ID);
 

@@ -651,6 +651,7 @@ class LiveOrderReconciliationServiceTest {
 
         verify(liveOrderRepository, never()).save(any());
         verify(liveStrategyRepository).updateNextOrderSequence(STRATEGY_ID, 4);
+        verify(alerts).reconciledFailure(eq(strategy), any(LiveOrder.class));
     }
 
     @Test

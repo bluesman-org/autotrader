@@ -164,20 +164,20 @@ public class LiveAlertService {
     }
 
     private void send(String subject, String body) {
-        Optional<String> recipient = accountEmail();
-        if (recipient.isEmpty()) {
-            log.warn("No account email is set, so the live alert was not sent: {}", subject);
-            return;
-        }
-        if (!mailSettingsService.configured()) {
-            if (missingMailWarned.compareAndSet(false, true)) {
-                log.warn("No SMTP server is configured, so live alerts are not being sent; add one "
-                        + "on the settings page");
-            }
-            return;
-        }
-        String to = recipient.get();
         try {
+            Optional<String> recipient = accountEmail();
+            if (recipient.isEmpty()) {
+                log.warn("No account email is set, so the live alert was not sent: {}", subject);
+                return;
+            }
+            if (!mailSettingsService.configured()) {
+                if (missingMailWarned.compareAndSet(false, true)) {
+                    log.warn("No SMTP server is configured, so live alerts are not being sent; add one "
+                            + "on the settings page");
+                }
+                return;
+            }
+            String to = recipient.get();
             taskExecutor.execute(() -> {
                 try {
                     mailSettingsService.send(to, subject, body);
@@ -186,7 +186,9 @@ public class LiveAlertService {
                 }
             });
         } catch (RuntimeException ex) {
-            log.warn("Could not schedule the live alert '{}': {}", subject, ex.getMessage());
+            // The lookup and the dispatch are part of the trading path's best effort: a Mongo or
+            // executor failure must never propagate into an order decision.
+            log.warn("Could not prepare or schedule the live alert '{}': {}", subject, ex.getMessage());
         }
     }
 

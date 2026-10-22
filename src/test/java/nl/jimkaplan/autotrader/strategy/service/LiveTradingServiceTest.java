@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -796,12 +797,28 @@ class LiveTradingServiceTest {
     }
 
     @Test
+    void closeManually_withoutAnOpenPositionIsRejected() {
+        LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.empty());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveTradingService.closeManually(strategy, START + HOUR,
+                        "manual close in the app", 160.0));
+
+        assertEquals("there is no open position to close", error.getMessage());
+        verifyNoInteractions(alerts, bitvavoApiClient, credentialsService);
+    }
+
+    @Test
     void closeManually_dryRunClosesAtTheBidAndRecordsTheReason() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
         LivePosition position = openPosition(0.5, 200.0, 0.1);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
         long exit = START + HOUR;
 
-        LiveOrder order = liveTradingService.closeManually(strategy, position, exit,
+        LiveOrder order = liveTradingService.closeManually(strategy, exit,
                 "manual close in the app", 160.0);
 
         assertEquals("SELL", order.getSide());
@@ -818,6 +835,8 @@ class LiveTradingServiceTest {
     void closeManually_realFillUsesTheExchangePriceAndAlerts() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
         when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 8));
@@ -831,7 +850,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
-        LiveOrder order = liveTradingService.closeManually(strategy, position, START + HOUR,
+        LiveOrder order = liveTradingService.closeManually(strategy, START + HOUR,
                 "manual close in the app", 160.0);
 
         assertEquals("FILLED", order.getStatus());
@@ -845,6 +864,8 @@ class LiveTradingServiceTest {
     void closeManually_realPendingLeavesThePositionOpenAndAlerts() {
         LiveStrategy strategy = strategy(false, 0, RuleCondition.PRICE_ABOVE_SAR);
         LivePosition position = openPosition(0.001, 100000.0, 0.2);
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(position));
         when(credentialsService.get()).thenReturn(Optional.of(stored()));
         when(bitvavoApiClient.get("/markets?market=BTC-EUR", GetMarketResponse.class, KEY, SECRET))
                 .thenReturn(market(5.0, 2, 8));
@@ -855,7 +876,7 @@ class LiveTradingServiceTest {
         when(bitvavoApiClient.post(eq("/order"), any(CreateOrderRequest.class),
                 eq(CreateOrderResponse.class), eq(KEY), eq(SECRET))).thenReturn(response);
 
-        LiveOrder order = liveTradingService.closeManually(strategy, position, START + HOUR,
+        LiveOrder order = liveTradingService.closeManually(strategy, START + HOUR,
                 "manual close in the app", 160.0);
 
         assertEquals("PENDING", order.getStatus());

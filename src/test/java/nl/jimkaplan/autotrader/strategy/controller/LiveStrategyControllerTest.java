@@ -2,7 +2,8 @@ package nl.jimkaplan.autotrader.strategy.controller;
 
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
-import nl.jimkaplan.autotrader.strategy.service.LiveStrategyService;import org.junit.jupiter.api.Test;
+import nl.jimkaplan.autotrader.strategy.service.LiveStrategyService;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;

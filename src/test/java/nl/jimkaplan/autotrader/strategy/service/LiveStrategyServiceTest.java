@@ -502,7 +502,7 @@ class LiveStrategyServiceTest {
         LiveCloseView view = closeView();
         LiveCloseResult result = new LiveCloseResult(true, "FILLED", "order-1", "closed");
         when(liveCloseService.preview(strategy, position)).thenReturn(view);
-        when(liveCloseService.close(strategy, position)).thenReturn(result);
+        when(liveCloseService.close(strategy)).thenReturn(result);
 
         assertEquals(view, liveStrategyService.closePreview("strategy-1"));
         assertEquals(result, liveStrategyService.close("strategy-1"));
@@ -579,6 +579,27 @@ class LiveStrategyServiceTest {
         verify(liveStrategyRepository, never()).findById("strategy-2");
         verify(liveStrategyRepository, never()).updateEnabled("strategy-2", true);
         verify(alerts).reconciliationHeldBack(held);
+    }
+
+    @Test
+    void closeRefusesWhenAFilledSellWasNotRecordedInThePosition() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        strategy.setDryRun(false);
+        LivePosition position = openPosition();
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.of(position));
+        when(liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc("strategy-1"))
+                .thenReturn(List.of(LiveOrder.builder()
+                        .strategyId("strategy-1").market("BTC-EUR").side("SELL")
+                        .status("FILLED").dryRun(false)
+                        .signalOpenTime(position.getEntryTime())
+                        .build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.closePreview("strategy-1"));
+
+        assertTrue(error.getMessage().contains("position record is not updated"));
     }
 
     @Test

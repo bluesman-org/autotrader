@@ -197,7 +197,10 @@ public class LiveOrderReconciliationService {
             if (!"filled".equalsIgnoreCase(order.getStatus())) {
                 if (LiveOrderStatus.isTerminalNonFill(order.getStatus())) {
                     // Terminal: the engine has no row to settle, so keep the skip and warn —
-                    // including about any part the exchange did fill.
+                    // including about any part the exchange did fill. A real order the engine
+                    // placed still failed, so the operator is alerted even though there is no row.
+                    LiveOrder failedRow = recoveredFailureRow(strategy, order, candidate);
+                    alerts.reconciledFailure(strategy, failedRow);
                     log.warn("Recoverable exchange order {} of strategy {} is {}; left alone{}",
                             order.getOrderId(), strategy.getId(), order.getStatus(),
                             LiveOrderStatus.partialFillNote(order.getFilledAmountQuote()));
@@ -251,6 +254,36 @@ public class LiveOrderReconciliationService {
                 .fee(order.getFeePaid() == null ? null : order.getFeePaid().doubleValue())
                 .orderId(String.valueOf(order.getOrderId()))
                 .clientOrderId(clientOrderId)
+                .createdTime(Instant.ofEpochMilli(order.getCreated()))
+                .build();
+    }
+
+    /**
+     * One transient {@code FAILED} row for a matched exchange order that came back terminal after
+     * its record was lost. It is not stored; the alert is the operator's record of the failure.
+     */
+    private static LiveOrder recoveredFailureRow(LiveStrategy strategy, OrderResponse order,
+                                                 String clientOrderId) {
+        Double amountQuote = TradeMath.amount(order.getFilledAmountQuote(), order.getAmountQuote());
+        Double quantity = TradeMath.amount(order.getFilledAmount(), order.getAmount());
+        Double price = TradeMath.price(order.getFilledAmount(), order.getFilledAmountQuote());
+        String note = LiveOrderStatus.partialFillNote(order.getFilledAmountQuote());
+        return LiveOrder.builder()
+                .strategyId(strategy.getId())
+                .market(strategy.getMarket())
+                .side(order.getSide().toUpperCase(Locale.ROOT))
+                .status("FAILED")
+                .dryRun(false)
+                .awaitingReconciliation(false)
+                .signalOpenTime(0)
+                .reason("recovered after a restore: the exchange reports " + order.getStatus())
+                .amountQuote(amountQuote)
+                .quantity(quantity)
+                .price(price)
+                .fee(order.getFeePaid() == null ? null : order.getFeePaid().doubleValue())
+                .orderId(String.valueOf(order.getOrderId()))
+                .clientOrderId(clientOrderId)
+                .errorMessage("exchange order status: " + order.getStatus() + note)
                 .createdTime(Instant.ofEpochMilli(order.getCreated()))
                 .build();
     }

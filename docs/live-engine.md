@@ -242,11 +242,15 @@ and creation minute (e.g. `BTC-EUR 1h · 12 Oct 21:04`).
   the same rules with dry-run off and the name suffixed `-REAL`; the new strategy starts its own
   anchor, so its live record is separate from the trial's.
 - **Closing a position:** a stopped strategy with an open position has **Close position**. Stop and
-  close are separate actions, and both ask before acting. The confirmation shows the current bid,
-  the estimated sell fee and the estimated result after both fees. A dry-run close records a
+  close are separate actions, and both ask before acting. The close is serialized with the
+  strategy's trading path, so a fill that started just before the stop finishes first and the close
+  then sees the closed position instead of placing a second sell. The confirmation shows the current
+  bid, the estimated sell fee and the estimated result after both fees. A dry-run close records a
   simulated sell at the bid; a real close sends a market sell and closes the position only when the
   exchange reports it filled. If a real sell is left `PENDING`, the position stays open and the
-  strategy stands down until the next boot reconciles it.
+  strategy stands down until the next boot reconciles it. If the exchange fills the sell but saving
+  the position fails, the page says the fill was not recorded and further closes are refused until
+  the next boot reconciles the position from the fill.
 - **Reconciling a manual close:** a real position can also be sold on Bitvavo's own app or website.
   **Reconcile manual close** lists the filled sells without a client order ID from the strategy's
   market and lets the operator pick the one that closed the position. The app verifies it and

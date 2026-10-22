@@ -151,6 +151,22 @@ class LiveAlertServiceTest {
     }
 
     @Test
+    void aFailingAccountLookupDoesNotEscapeTheTradingPath() {
+        when(users.findAll()).thenThrow(new RuntimeException("mongo down"));
+
+        service.realFill(strategy(), order("FILLED"), null);
+
+        verifyNoInteractions(mail);
+    }
+
+    @Test
+    void sendTestStillThrowsWhenTheAccountLookupFails() {
+        when(users.findAll()).thenThrow(new RuntimeException("mongo down"));
+
+        assertThrows(RuntimeException.class, () -> service.sendTest());
+    }
+
+    @Test
     void noConfiguredSmtpMeansNoAlertAndNoThrow() {
         when(users.findAll()).thenReturn(List.of(user()));
         when(mail.configured()).thenReturn(false);

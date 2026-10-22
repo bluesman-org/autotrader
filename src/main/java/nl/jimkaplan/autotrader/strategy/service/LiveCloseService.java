@@ -30,6 +30,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Closes a live position on the operator's instruction, and attaches a manual sell made on the
@@ -109,21 +112,25 @@ public class LiveCloseService {
 
     /**
      * Close the position. A dry close is immediate; a real close is a market sell and leaves the
-     * position open unless the exchange reports it filled.
+     * position open unless the exchange reports it filled. The position is re-read under the
+     * trading lock by {@link LiveTradingService#closeManually}, so a signal fill that was still in
+     * flight when the strategy stopped cannot be overtaken by a second sell.
      *
      * @param strategy The stopped strategy
-     * @param position The open position
      * @return What happened, for the page
+     * @throws IllegalArgumentException when there is no open position or the current price is
+     *                                  unavailable
      */
-    public LiveCloseResult close(LiveStrategy strategy, LivePosition position) {
+    public LiveCloseResult close(LiveStrategy strategy) {
         GetBookResponse book = book(strategy.getMarket());
         if (book == null || book.getBid() == null) {
             throw new IllegalArgumentException(
                     "The current price is unavailable, so the close was not executed; try again in a moment.");
         }
-        LiveOrder order = liveTradingService.closeManually(strategy, position,
-                Instant.now().toEpochMilli(), "manual close in the app", book.getBid().doubleValue());
-        boolean closed = "CLOSED".equals(position.getStatus());
+        LiveOrder order = liveTradingService.closeManually(strategy, Instant.now().toEpochMilli(),
+                "manual close in the app", book.getBid().doubleValue());
+        boolean closed = livePositionRepository
+                .findByStrategyIdAndStatus(strategy.getId(), "OPEN").isEmpty();
         return new LiveCloseResult(closed, order.getStatus(), order.getOrderId(), message(order, closed));
     }
 
@@ -158,7 +165,7 @@ public class LiveCloseService {
         if (orderId == null || orderId.isBlank()) {
             throw new IllegalArgumentException("Choose the exchange sell that closed the position.");
         }
-        if (liveOrderRepository.existsByOrderId(orderId)) {
+        if (recordedOrderIds(strategy).contains(orderId)) {
             throw new IllegalArgumentException("That exchange sell is already attached to a live order.");
         }
         OrderResponse order = find(strategy, position, orderId);
@@ -234,6 +241,7 @@ public class LiveCloseService {
 
     private Candidates candidates(LiveStrategy strategy, LivePosition position) {
         OrderResponse[] history = history(strategy, position);
+        Set<String> recorded = recordedOrderIds(strategy);
         List<ExternalCloseView> views = new ArrayList<>();
         List<OrderResponse> orders = new ArrayList<>();
         for (OrderResponse order : history) {
@@ -245,7 +253,7 @@ public class LiveCloseService {
                 Comparator.nullsLast(Comparator.naturalOrder())).reversed());
         for (OrderResponse order : orders) {
             if (!isExternalSell(order) || order.getOrderId() == null
-                    || liveOrderRepository.existsByOrderId(String.valueOf(order.getOrderId()))) {
+                    || recorded.contains(String.valueOf(order.getOrderId()))) {
                 continue;
             }
             BigDecimal filledAmount = order.getFilledAmount();
@@ -284,6 +292,17 @@ public class LiveCloseService {
             }
         }
         return null;
+    }
+
+    /**
+     * The exchange order ids already recorded for the strategy, loaded in one query so the
+     * reconcile page does not ask the database once per exchange candidate.
+     */
+    private Set<String> recordedOrderIds(LiveStrategy strategy) {
+        return liveOrderRepository.findByStrategyIdOrderByCreatedTimeDesc(strategy.getId()).stream()
+                .map(LiveOrder::getOrderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     private OrderResponse[] history(LiveStrategy strategy, LivePosition position) {
@@ -346,6 +365,11 @@ public class LiveCloseService {
             String at = order.getPrice() == null ? "" : " at " + euro(order.getPrice());
             String reference = order.getOrderId() == null ? "" : " (order " + order.getOrderId() + ")";
             return "The position was closed" + at + reference + ".";
+        }
+        if ("FILLED".equals(order.getStatus())) {
+            return "The exchange filled the sell, but the position record could not be updated. "
+                    + "Do not close again; restart the application so reconciliation closes the "
+                    + "position from the fill.";
         }
         if ("REJECTED".equals(order.getStatus())) {
             return "The close was rejected: " + reason(order) + " The position stays open.";
