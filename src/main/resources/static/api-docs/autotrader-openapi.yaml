@@ -20,10 +20,14 @@ tags:
     description: "API for running strategy backtests over stored candles"
   - name: "Bot Configuration"
     description: "API for managing trading bot configurations"
+  - name: "Web Push"
+    description: "Browser subscriptions for live notifications"
   - name: "Transaction History"
     description: "API for viewing Bitvavo transaction history"
   - name: "Mail settings"
     description: "The SMTP server the recovery mails go out through"
+  - name: "Notifications"
+    description: "Test the live engine's email alerts"
   - name: "Password recovery"
     description: "Ask for a password-recovery mail"
   - name: "Markets"
@@ -70,6 +74,88 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/live-strategies/{id}:
+    get:
+      tags:
+        - "Live strategies"
+      summary: "Get a live strategy"
+      operationId: "getLiveStrategy"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Strategy found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveStrategyView"
+        "404":
+          description: "No strategy with that ID"
+    put:
+      tags:
+        - "Live strategies"
+      summary: "Update a live strategy"
+      description: "Updates a stopped strategy. The pair and interval can only change\
+        \ before the first start; dry-run is fixed at creation, so a real strategy\
+        \ is created as a separate copy."
+      operationId: "update"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LiveStrategyRequest"
+        required: true
+      responses:
+        "200":
+          description: "Strategy updated"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveStrategy"
+        "400":
+          description: "Invalid request or running strategy"
+        "404":
+          description: "No strategy with that ID"
+    delete:
+      tags:
+        - "Live strategies"
+      summary: "Delete or archive a live strategy"
+      description: "A strategy that never started and has no orders or positions is\
+        \ deleted. One that has run, or that has any orders or positions, is archived\
+        \ instead: it disappears from the live page and the forms, but its orders\
+        \ and positions stay for the account history page. A strategy with an open\
+        \ position cannot be deleted or archived; close the position first."
+      operationId: "delete"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Strategy deleted or archived"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveStrategyDeletion"
+        "400":
+          description: "Strategy is running or has an open position"
+        "404":
+          description: "No strategy with that ID"
   /api/bitvavo-credentials:
     get:
       tags:
@@ -160,6 +246,66 @@ paths:
               schema:
                 type: "string"
       security: []
+  /api/push/test:
+    post:
+      tags:
+        - "Web Push"
+      summary: "Send a test push"
+      description: "Sends a test notification to every subscribed browser and reports\
+        \ how many push services accepted it. Fails with 400 when no browser is subscribed."
+      operationId: "test"
+      responses:
+        "200":
+          description: "Test sent"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushTestResponse"
+        "400":
+          description: "No subscription"
+        "500":
+          description: "The push service rejected every send"
+  /api/push/subscriptions:
+    post:
+      tags:
+        - "Web Push"
+      summary: "Subscribe a browser"
+      description: "Stores the endpoint and encryption keys a browser returned from\
+        \ `PushManager.subscribe`. Re-subscribing the same endpoint replaces its keys."
+      operationId: "subscribe"
+      parameters:
+        - name: "User-Agent"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushSubscriptionRequest"
+        required: true
+      responses:
+        "201":
+          description: "Subscription stored"
+        "400":
+          description: "Incomplete subscription"
+    delete:
+      tags:
+        - "Web Push"
+      summary: "Unsubscribe a browser"
+      description: "Removes the subscription for an endpoint. Unknown endpoints are\
+        \ ignored."
+      operationId: "unsubscribe"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushEndpointRequest"
+        required: true
+      responses:
+        "204":
+          description: "Subscription removed"
   /api/password-recovery:
     post:
       tags:
@@ -181,6 +327,21 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/MessageResponse"
+  /api/notifications/test:
+    post:
+      tags:
+        - "Notifications"
+      summary: "Send a test alert"
+      description: "Sends one mail to the account's email address through the stored\
+        \ SMTP server. Fails when no account email or no SMTP server is configured."
+      operationId: "test_1"
+      responses:
+        "200":
+          description: "The test alert was sent"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationTestResponse"
   /api/markets:
     get:
       tags:
@@ -373,6 +534,69 @@ paths:
                 $ref: "#/components/schemas/LiveStrategyView"
         "404":
           description: "No strategy with that ID"
+  /api/live-strategies/{id}/reconcile-close:
+    post:
+      tags:
+        - "Live strategies"
+      summary: "Reconcile a manual close"
+      description: "Attaches a filled exchange sell made outside the engine to the\
+        \ strategy's open position, closes the position at the exchange's average\
+        \ fill and records the sell as an external fill. The sell must cover the whole\
+        \ position and must not already be attached."
+      operationId: "reconcileClose"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExternalCloseRequest"
+        required: true
+      responses:
+        "200":
+          description: "External close recorded"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveOrder"
+        "400":
+          description: "The sell is missing, already attached, does not cover the\
+            \ position or lacks the exchange's figures"
+        "404":
+          description: "No strategy with that ID"
+  /api/live-strategies/{id}/close:
+    post:
+      tags:
+        - "Live strategies"
+      summary: "Close a live position"
+      description: "Closes a stopped strategy's open position. A dry-run strategy\
+        \ records a simulated sell at the current bid; a real strategy sends a market\
+        \ sell and leaves the position open unless the exchange reports it filled."
+      operationId: "close"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Close executed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveCloseResult"
+        "400":
+          description: "The strategy is running, archived, flat, awaiting reconciliation,\
+            \ or the current price is unavailable"
+        "404":
+          description: "No strategy with that ID"
   /api/bots/webhook-key/{botId}:
     post:
       tags:
@@ -518,87 +742,19 @@ paths:
                 type: "string"
         "404":
           description: "Bot configuration not found within active configurations"
-  /api/live-strategies/{id}:
+  /api/push/public-key:
     get:
       tags:
-        - "Live strategies"
-      summary: "Get a live strategy"
-      operationId: "getLiveStrategy"
-      parameters:
-        - name: "id"
-          in: "path"
-          description: "ID of the live strategy"
-          required: true
-          schema:
-            type: "string"
+        - "Web Push"
+      summary: "Get the VAPID public key"
+      description: "Returns the installation's VAPID public key as raw bytes for `PushManager.subscribe({applicationServerKey})`.\
+        \ The key pair is generated on the first call and kept encrypted in the database."
+      operationId: "publicKey"
       responses:
         "200":
-          description: "Strategy found"
+          description: "The public key"
           content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LiveStrategyView"
-        "404":
-          description: "No strategy with that ID"
-    put:
-      tags:
-        - "Live strategies"
-      summary: "Update a live strategy"
-      description: "Updates a stopped strategy. The pair and interval can only change\
-        \ before the first start; dry-run is fixed at creation, so a real strategy\
-        \ is created as a separate copy."
-      operationId: "update"
-      parameters:
-        - name: "id"
-          in: "path"
-          description: "ID of the live strategy"
-          required: true
-          schema:
-            type: "string"
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LiveStrategyRequest"
-        required: true
-      responses:
-        "200":
-          description: "Strategy updated"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LiveStrategy"
-        "400":
-          description: "Invalid request or running strategy"
-        "404":
-          description: "No strategy with that ID"
-    delete:
-      tags:
-        - "Live strategies"
-      summary: "Delete or archive a live strategy"
-      description: "A strategy that never started is deleted. One that has run is\
-        \ archived instead: it disappears from the live page and the forms, but its\
-        \ orders and positions stay for the account history page. An open position\
-        \ must be closed before archiving."
-      operationId: "delete"
-      parameters:
-        - name: "id"
-          in: "path"
-          description: "ID of the live strategy"
-          required: true
-          schema:
-            type: "string"
-      responses:
-        "200":
-          description: "Strategy deleted or archived"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LiveStrategyDeletion"
-        "400":
-          description: "Strategy is running or has an open position"
-        "404":
-          description: "No strategy with that ID"
+            application/octet-stream: {}
   /api/live-strategies/{id}/orders:
     get:
       tags:
@@ -618,6 +774,61 @@ paths:
           description: "Orders returned"
           content:
             application/json: {}
+        "404":
+          description: "No strategy with that ID"
+  /api/live-strategies/{id}/external-closes:
+    get:
+      tags:
+        - "Live strategies"
+      summary: "List external closes"
+      description: "Lists the filled exchange sells without a client order id that\
+        \ could have closed the strategy's open position. Only a stopped real strategy\
+        \ with an open position and no order awaiting reconciliation can be reconciled."
+      operationId: "externalCloses"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Candidates returned"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileView"
+        "400":
+          description: "The strategy is dry-run, running, archived, flat, awaiting\
+            \ reconciliation, or has no API key"
+        "404":
+          description: "No strategy with that ID"
+  /api/live-strategies/{id}/close-preview:
+    get:
+      tags:
+        - "Live strategies"
+      summary: "Preview closing a position"
+      description: "Returns the open position, the current bid and the estimated result\
+        \ after both fees. Only a stopped strategy with an open position and no order\
+        \ awaiting reconciliation can be closed."
+      operationId: "closePreview"
+      parameters:
+        - name: "id"
+          in: "path"
+          description: "ID of the live strategy"
+          required: true
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Preview returned"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveCloseView"
+        "400":
+          description: "The strategy is running, archived, flat or awaiting reconciliation"
         "404":
           description: "No strategy with that ID"
   /api/bots:
@@ -842,110 +1053,6 @@ components:
         updatedTime:
           type: "string"
           format: "date-time"
-    BitvavoCredentialsRequest:
-      type: "object"
-      properties:
-        apiKey:
-          type: "string"
-        apiSecret:
-          type: "string"
-        operatorId:
-          type: "integer"
-          format: "int64"
-    BitvavoCredentialsResponse:
-      type: "object"
-      properties:
-        configured:
-          type: "boolean"
-        apiKeyHint:
-          type: "string"
-        operatorId:
-          type: "integer"
-          format: "int64"
-        updatedTime:
-          type: "string"
-          format: "date-time"
-    TradingViewAlertRequest:
-      type: "object"
-      description: "Alert details from TradingView"
-      properties:
-        botId:
-          type: "string"
-        ticker:
-          type: "string"
-        action:
-          type: "string"
-        timestamp:
-          type: "string"
-        dryRun:
-          type: "boolean"
-    EmailRequest:
-      type: "object"
-      properties:
-        email:
-          type: "string"
-    MessageResponse:
-      type: "object"
-      properties:
-        message:
-          type: "string"
-    MarketRequest:
-      type: "object"
-      properties:
-        market:
-          type: "string"
-          description: "Market in Bitvavo format"
-          example: "ETH-EUR"
-    Market:
-      type: "object"
-      properties:
-        id:
-          type: "string"
-        createdAt:
-          type: "string"
-          format: "date-time"
-        updatedAt:
-          type: "string"
-          format: "date-time"
-        market:
-          type: "string"
-        base:
-          type: "string"
-        quote:
-          type: "string"
-        enabled:
-          type: "boolean"
-        source:
-          type: "string"
-        status:
-          type: "string"
-        firstTradedAt:
-          type: "string"
-          format: "date-time"
-        lastTradedAt:
-          type: "string"
-          format: "date-time"
-        tradeCount:
-          type: "integer"
-          format: "int32"
-        addedTime:
-          type: "string"
-          format: "date-time"
-    Discovery:
-      type: "object"
-      properties:
-        markets:
-          type: "integer"
-          format: "int32"
-        added:
-          type: "integer"
-          format: "int32"
-        updated:
-          type: "integer"
-          format: "int32"
-        skipped:
-          type: "integer"
-          format: "int32"
     LiveStrategyRequest:
       type: "object"
       properties:
@@ -1108,6 +1215,143 @@ components:
         createdTime:
           type: "string"
           format: "date-time"
+    BitvavoCredentialsRequest:
+      type: "object"
+      properties:
+        apiKey:
+          type: "string"
+        apiSecret:
+          type: "string"
+        operatorId:
+          type: "integer"
+          format: "int64"
+    BitvavoCredentialsResponse:
+      type: "object"
+      properties:
+        configured:
+          type: "boolean"
+        apiKeyHint:
+          type: "string"
+        operatorId:
+          type: "integer"
+          format: "int64"
+        updatedTime:
+          type: "string"
+          format: "date-time"
+    TradingViewAlertRequest:
+      type: "object"
+      description: "Alert details from TradingView"
+      properties:
+        botId:
+          type: "string"
+        ticker:
+          type: "string"
+        action:
+          type: "string"
+        timestamp:
+          type: "string"
+        dryRun:
+          type: "boolean"
+    PushTestResponse:
+      type: "object"
+      description: "The result of a test push"
+      properties:
+        sent:
+          type: "integer"
+          format: "int32"
+          description: "How many subscribed devices accepted the notification"
+    Keys:
+      type: "object"
+      description: "The browser's encryption keys"
+      properties:
+        p256dh:
+          type: "string"
+          description: "The browser's P-256 public key"
+        auth:
+          type: "string"
+          description: "The browser's authentication secret"
+    PushSubscriptionRequest:
+      type: "object"
+      description: "A browser's Web Push subscription"
+      properties:
+        endpoint:
+          type: "string"
+          description: "The push service URL the browser returned"
+        keys:
+          $ref: "#/components/schemas/Keys"
+          description: "The browser's encryption keys"
+    EmailRequest:
+      type: "object"
+      properties:
+        email:
+          type: "string"
+    MessageResponse:
+      type: "object"
+      properties:
+        message:
+          type: "string"
+    NotificationTestResponse:
+      type: "object"
+      properties:
+        message:
+          type: "string"
+    MarketRequest:
+      type: "object"
+      properties:
+        market:
+          type: "string"
+          description: "Market in Bitvavo format"
+          example: "ETH-EUR"
+    Market:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+        createdAt:
+          type: "string"
+          format: "date-time"
+        updatedAt:
+          type: "string"
+          format: "date-time"
+        market:
+          type: "string"
+        base:
+          type: "string"
+        quote:
+          type: "string"
+        enabled:
+          type: "boolean"
+        source:
+          type: "string"
+        status:
+          type: "string"
+        firstTradedAt:
+          type: "string"
+          format: "date-time"
+        lastTradedAt:
+          type: "string"
+          format: "date-time"
+        tradeCount:
+          type: "integer"
+          format: "int32"
+        addedTime:
+          type: "string"
+          format: "date-time"
+    Discovery:
+      type: "object"
+      properties:
+        markets:
+          type: "integer"
+          format: "int32"
+        added:
+          type: "integer"
+          format: "int32"
+        updated:
+          type: "integer"
+          format: "int32"
+        skipped:
+          type: "integer"
+          format: "int32"
     LiveStrategyView:
       type: "object"
       properties:
@@ -1118,6 +1362,71 @@ components:
         connected:
           type: "boolean"
         lastError:
+          type: "string"
+    ExternalCloseRequest:
+      type: "object"
+      properties:
+        orderId:
+          type: "string"
+    LiveOrder:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+        createdAt:
+          type: "string"
+          format: "date-time"
+        updatedAt:
+          type: "string"
+          format: "date-time"
+        strategyId:
+          type: "string"
+        market:
+          type: "string"
+        side:
+          type: "string"
+        status:
+          type: "string"
+        dryRun:
+          type: "boolean"
+        clientOrderId:
+          type: "string"
+        signalOpenTime:
+          type: "integer"
+          format: "int64"
+        reason:
+          type: "string"
+        amountQuote:
+          type: "number"
+          format: "double"
+        quantity:
+          type: "number"
+          format: "double"
+        price:
+          type: "number"
+          format: "double"
+        fee:
+          type: "number"
+          format: "double"
+        orderId:
+          type: "string"
+        external:
+          type: "boolean"
+        errorMessage:
+          type: "string"
+        createdTime:
+          type: "string"
+          format: "date-time"
+    LiveCloseResult:
+      type: "object"
+      properties:
+        closed:
+          type: "boolean"
+        status:
+          type: "string"
+        orderId:
+          type: "string"
+        message:
           type: "string"
     WebhookApiKeyResponse:
       type: "object"
@@ -1334,6 +1643,83 @@ components:
         skippedSignals:
           type: "integer"
           format: "int32"
+    ExternalCloseView:
+      type: "object"
+      properties:
+        orderId:
+          type: "string"
+        timeText:
+          type: "string"
+        quantityText:
+          type: "string"
+        priceText:
+          type: "string"
+        feeText:
+          type: "string"
+        proceedsText:
+          type: "string"
+        coversPosition:
+          type: "boolean"
+        coverText:
+          type: "string"
+    ReconcileView:
+      type: "object"
+      properties:
+        strategyId:
+          type: "string"
+        name:
+          type: "string"
+        market:
+          type: "string"
+        interval:
+          type: "string"
+        dryRun:
+          type: "boolean"
+        quantityText:
+          type: "string"
+        entryText:
+          type: "string"
+        entryFeeText:
+          type: "string"
+        candidates:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/ExternalCloseView"
+        note:
+          type: "string"
+    LiveCloseView:
+      type: "object"
+      properties:
+        strategyId:
+          type: "string"
+        name:
+          type: "string"
+        market:
+          type: "string"
+        interval:
+          type: "string"
+        dryRun:
+          type: "boolean"
+        priced:
+          type: "boolean"
+        quantityText:
+          type: "string"
+        entryText:
+          type: "string"
+        entryFeeText:
+          type: "string"
+        bidText:
+          type: "string"
+        proceedsText:
+          type: "string"
+        feeText:
+          type: "string"
+        profitText:
+          type: "string"
+        profitClass:
+          type: "string"
+        warning:
+          type: "string"
     GetAccountHistoryResponse:
       type: "object"
       properties:
@@ -1480,6 +1866,13 @@ components:
           type: "string"
           enum:
             - "INSUFFICIENT_BALANCE"
+    PushEndpointRequest:
+      type: "object"
+      description: "The endpoint of the subscription to remove"
+      properties:
+        endpoint:
+          type: "string"
+          description: "The push service URL the browser returned"
     LiveStrategyDeletion:
       type: "object"
       properties:

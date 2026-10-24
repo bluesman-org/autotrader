@@ -212,6 +212,10 @@ brings the two back together:
 | `GET /api/live-strategies/{id}/external-closes` | The filled exchange sells that could be attached to an open real position |
 | `POST /api/live-strategies/{id}/reconcile-close` | Attach a manual exchange sell and close the position at its average fill |
 | `POST /api/notifications/test` | Send one test alert to the account's email address |
+| `GET /api/push/public-key` | The VAPID public key, as raw bytes, for `PushManager.subscribe` |
+| `POST /api/push/subscriptions` | Store or refresh a browser's Web Push subscription |
+| `DELETE /api/push/subscriptions` | Remove a browser's subscription by endpoint |
+| `POST /api/push/test` | Send one test push to every subscribed browser |
 | `GET /ui/live` | The live page: one card per strategy, refreshed in place every 10 seconds |
 | `GET /ui/live/new` | The create form, optionally prefilled from a copy or a ranked backtest entry |
 | `GET /ui/live/{id}/edit` | The edit form; the pair and interval stay fixed after the first start |
@@ -224,7 +228,7 @@ the exception, because it authenticates itself with its own webhook key (see `do
 | `GET /ui/history?tab=ledger` | The account history page's Bitvavo-ledger tab: the account's orders with their fills, average-cost P&L, the raw transactions and the current prices |
 | `GET /api/bitvavo-credentials` | The system-wide Bitvavo API key, masked: whether one is configured, a hint that identifies it and the operator id |
 | `PUT /api/bitvavo-credentials` | Store or replace that key (the secret is write-only) |
-| `GET /ui/settings` | The settings page: the key's state, the trading pairs, the mail settings and the password |
+| `GET /ui/settings` | The settings page: the key's state, the trading pairs, the mail settings, the Web Push devices and the password |
 
 ## Managing strategies
 
@@ -269,13 +273,35 @@ and creation minute (e.g. `BTC-EUR 1h · 12 Oct 21:04`).
 
 ## Alerts
 
-The engine emails the account's recovery address on real money events: a real buy or sell that
-filled, a real order that was rejected or failed, an order left `PENDING` for reconciliation, and a
-strategy held back because reconciliation failed. Dry-run activity never alerts. Sending runs on a
-bounded daemon executor and a mail failure is logged and swallowed, so SMTP can never delay a
-decision or change an order. The settings page's **Send test alert** button (and
-`POST /api/notifications/test`) proves the channel before real money moves. There is no daily
-heartbeat; monitoring stays manual plus these event alerts.
+The engine alerts on real-money events: a real buy or sell that filled, a real order that was
+rejected or failed, an order left `PENDING` for reconciliation, and a strategy held back because
+reconciliation failed. Dry-run activity never alerts.
+
+There are two independent channels, and either can be missing without suppressing the other:
+
+- **Email** to the account's recovery address, through the SMTP server on the settings page.
+  **Send test alert** (and `POST /api/notifications/test`) proves it.
+- **Web Push** to every browser subscribed on the settings page. **Enable on this device** registers
+  a service worker, asks for the notification permission and stores the browser's subscription;
+  **Send test push** (and `POST /api/push/test`) proves it on the devices. A notification says what
+  happened, opens `/ui/live` when clicked and is grouped by the order id in the browser.
+
+Both sends leave the trading thread on a bounded daemon executor, and a failure — a slow SMTP
+server, a push service that is down, an executor whose queue is full — is logged and swallowed, so
+an alert can never delay a decision or change an order. There is no daily heartbeat; monitoring
+stays manual plus these event alerts.
+
+The Web Push VAPID key pair is generated once, on the first request for the public key, and stored
+with the private key encrypted in `push_settings`; subscriptions live in `push_subscriptions`, keyed
+by the push service endpoint. A push service that answers 404 or 410 means the browser is gone, so
+that subscription is deleted; any other failure keeps it. The pair is deliberately stable: deleting
+`push_settings` rotates it and invalidates every browser subscription, so each device has to enable
+notifications again. Back it up with the rest of the database.
+
+Android Chrome works in the browser. On iOS, Web Push arrives only after the site is added to the
+home screen (iOS 16.4 and later); the settings card says so. The service worker, manifest and icon
+are the only public static push assets (see `docs/security.md`); the subscription API needs a
+signed-in session.
 
 ## The Bitvavo key
 

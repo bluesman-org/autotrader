@@ -9,6 +9,9 @@ import nl.jimkaplan.autotrader.service.MailSettingsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.DisplayZone;
 import nl.jimkaplan.autotrader.strategy.service.LiveAlertService;
+import nl.jimkaplan.autotrader.strategy.service.PushNotificationService;
+import nl.jimkaplan.autotrader.strategy.service.PushSettingsService;
+import nl.jimkaplan.autotrader.strategy.service.PushSubscriptionService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -28,7 +31,7 @@ import java.util.NoSuchElementException;
 /**
  * The settings page: the system-wide Bitvavo API key the engine trades with and the ledger reads
  * the account with, the trading-pair catalogue both offer, the SMTP server the recovery mails go
- * out through, and the account's password.
+ * out through, the browsers subscribed to Web Push, and the account's password.
  *
  * <p>Every secret is shown as a state, never as itself — the key, the SMTP password and the account
  * password are all write-only.</p>
@@ -43,6 +46,9 @@ public class SettingsUiController {
     private final MarketService marketService;
     private final AppUserService users;
     private final LiveAlertService alerts;
+    private final PushSettingsService pushSettingsService;
+    private final PushSubscriptionService pushSubscriptionService;
+    private final PushNotificationService pushNotificationService;
     private final DisplayZone display;
 
     public SettingsUiController(BitvavoCredentialsService credentialsService,
@@ -50,12 +56,18 @@ public class SettingsUiController {
                                 MarketService marketService,
                                 AppUserService users,
                                 LiveAlertService alerts,
+                                PushSettingsService pushSettingsService,
+                                PushSubscriptionService pushSubscriptionService,
+                                PushNotificationService pushNotificationService,
                                 @Value("${autotrader.ui.time-zone:}") String timeZone) {
         this.credentialsService = credentialsService;
         this.mailSettingsService = mailSettingsService;
         this.marketService = marketService;
         this.users = users;
         this.alerts = alerts;
+        this.pushSettingsService = pushSettingsService;
+        this.pushSubscriptionService = pushSubscriptionService;
+        this.pushNotificationService = pushNotificationService;
         this.display = new DisplayZone(timeZone);
     }
 
@@ -84,6 +96,8 @@ public class SettingsUiController {
         model.addAttribute("zoneLabel", display.label());
         model.addAttribute("updatedText", updatedText(view));
         model.addAttribute("markets", marketRows());
+        model.addAttribute("pushSubscriptions", pushSubscriptionService.count());
+        model.addAttribute("pushReady", pushSettingsService.configured());
         return "settings/index";
     }
 
@@ -247,6 +261,26 @@ public class SettingsUiController {
                     "The test alert was sent to the account's email address.");
         } catch (RuntimeException e) {
             log.warn("Could not send a test alert: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/ui/settings";
+    }
+
+    /**
+     * Send a test push to every subscribed browser, so the channel is proven before real money
+     * moves.
+     *
+     * @param redirectAttributes Carries the outcome back to the page
+     * @return A redirect to the page
+     */
+    @PostMapping("/push/test")
+    public String testPush(RedirectAttributes redirectAttributes) {
+        try {
+            int sent = pushNotificationService.sendTest();
+            redirectAttributes.addFlashAttribute("message",
+                    "The test push was sent to " + sent + (sent == 1 ? " device." : " devices."));
+        } catch (RuntimeException e) {
+            log.warn("Could not send a test push: {}", e.getMessage());
             redirectAttributes.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/ui/settings";

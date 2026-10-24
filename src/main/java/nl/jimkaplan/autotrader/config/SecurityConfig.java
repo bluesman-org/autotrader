@@ -31,10 +31,11 @@ import java.util.Set;
  * Who may reach what.
  *
  * <p>The pages sign in with a form and a session cookie; the JSON API keeps HTTP Basic with the
- * same account, so scripts and Postman keep working without a session. The TradingView webhook is
- * left open because it authenticates itself with its own webhook key. Nothing else is public: the
- * pages, the API, the exported OpenAPI files and the actuator endpoints behind them all ask for a
- * sign-in.</p>
+ * same account, so scripts and Postman keep working without a session. The TradingView webhook and
+ * the Web Push service worker, manifest and icon are left open: the webhook authenticates itself
+ * with its own webhook key, and the browser fetches the push assets before the page's session is
+ * considered. They contain no account data. Nothing else is public: the pages, the API, the
+ * exported OpenAPI files and the actuator endpoints behind them all ask for a sign-in.</p>
  */
 @Configuration
 @EnableWebSecurity
@@ -42,12 +43,14 @@ public class SecurityConfig {
 
     /**
      * The paths that stay open: the sign-in and recovery pages (a locked-out reader has to reach
-     * them), the stylesheet, the error page, the health probe for monitoring and the webhook.
+     * them), the stylesheet, the error page, the health probe for monitoring, the webhook and the
+     * static Web Push assets the browser fetches on its own.
      */
     static final String[] OPEN_PATHS = {
             "/", "/login", "/signup", "/forgot-password", "/reset-password",
             "/css/**", "/js/**", "/images/**", "/favicon.ico", "/error",
-            "/actuator/health", "/webhook/**"
+            "/actuator/health", "/webhook/**",
+            "/service-worker.js", "/manifest.webmanifest", "/icon.svg"
     };
 
     /**

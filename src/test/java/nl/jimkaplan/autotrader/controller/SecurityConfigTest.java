@@ -7,6 +7,9 @@ import nl.jimkaplan.autotrader.service.MailSettingsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.service.PasswordResetService;
 import nl.jimkaplan.autotrader.strategy.service.LiveAlertService;
+import nl.jimkaplan.autotrader.strategy.service.PushNotificationService;
+import nl.jimkaplan.autotrader.strategy.service.PushSettingsService;
+import nl.jimkaplan.autotrader.strategy.service.PushSubscriptionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -57,6 +60,12 @@ class SecurityConfigTest {
     private MarketService marketService;
     @MockitoBean
     private LiveAlertService alerts;
+    @MockitoBean
+    private PushSettingsService pushSettingsService;
+    @MockitoBean
+    private PushSubscriptionService pushSubscriptionService;
+    @MockitoBean
+    private PushNotificationService pushNotificationService;
 
     private final PasswordEncoder encoder = new BCryptPasswordEncoder();
 
@@ -108,6 +117,12 @@ class SecurityConfigTest {
         when(recovery.valid(null)).thenReturn(false);
         mockMvc.perform(get("/reset-password"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void thePushApiNeedsASignIn() throws Exception {
+        mockMvc.perform(get("/api/push/public-key"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

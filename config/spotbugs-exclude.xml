@@ -13,7 +13,8 @@
          records that carry a stored run (RunSummaryView, BacktestEntryTrades) do so for display,
          and the run is already published through the API as-is. The auth and settings controllers
          hold Spring-managed service collaborators for the same reason the two service-shaped
-         classes do, as do the live page's controller and view service. -->
+         classes do, as do the live page's controller and view service and the Web Push notifier
+         with its subscription service and Spring's ObjectMapper. -->
     <Match>
         <Or>
             <Class name="nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades"/>
@@ -33,6 +34,7 @@
             <Class name="nl.jimkaplan.autotrader.controller.SettingsUiController"/>
             <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveUiController"/>
             <Class name="nl.jimkaplan.autotrader.strategy.service.LiveViewService"/>
+            <Class name="nl.jimkaplan.autotrader.strategy.service.PushNotificationService"/>
             <Class name="nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient"/>
             <Class name="nl.jimkaplan.autotrader.strategy.live.BitvavoCandleStream"/>
         </Or>

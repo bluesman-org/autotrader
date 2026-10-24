@@ -39,11 +39,14 @@ class LiveAlertServiceTest {
     @Mock
     private AppUserRepository users;
 
+    @Mock
+    private PushNotificationService push;
+
     private LiveAlertService service;
 
     @BeforeEach
     void setUp() {
-        service = new LiveAlertService(mail, users, new SyncTaskExecutor(), "UTC", PUBLIC_URL);
+        service = new LiveAlertService(mail, users, push, new SyncTaskExecutor(), "UTC", PUBLIC_URL);
     }
 
     @Test
@@ -71,14 +74,14 @@ class LiveAlertServiceTest {
     void aDryRunOrderNeverAlerts() {
         service.realFill(strategy(), order("FILLED", true), closedPosition());
 
-        verifyNoInteractions(mail, users);
+        verifyNoInteractions(mail, users, push);
     }
 
     @Test
     void aNullOrderDoesNothing() {
         service.realFill(strategy(), null, null);
 
-        verifyNoInteractions(mail, users);
+        verifyNoInteractions(mail, users, push);
     }
 
     @Test
@@ -138,7 +141,7 @@ class LiveAlertServiceTest {
 
     @Test
     void aRejectedExecutorDoesNotBreakTheTradingPath() {
-        LiveAlertService rejecting = new LiveAlertService(mail, users,
+        LiveAlertService rejecting = new LiveAlertService(mail, users, push,
                 command -> {
                     throw new java.util.concurrent.RejectedExecutionException("queue full");
                 }, "UTC", PUBLIC_URL);
@@ -236,6 +239,28 @@ class LiveAlertServiceTest {
         doThrow(new RuntimeException("smtp down")).when(mail)
                 .send(anyString(), anyString(), anyString());
         assertThrows(RuntimeException.class, () -> service.sendTest());
+    }
+
+    @Test
+    void aRealFillAlsoPushesAShortSummary() {
+        when(users.findAll()).thenReturn(List.of(user()));
+        when(mail.configured()).thenReturn(true);
+
+        service.realFill(strategy(), order("FILLED"), closedPosition());
+
+        verify(push).send(contains("REAL BUY filled"), contains("0,00100000 @ €73.481,00"), eq("order-order-1"));
+    }
+
+    @Test
+    void aPushFailureIsSwallowedOnTheTradingPath() {
+        when(users.findAll()).thenReturn(List.of(user()));
+        when(mail.configured()).thenReturn(true);
+        doThrow(new RuntimeException("push down")).when(push)
+                .send(anyString(), anyString(), anyString());
+
+        service.realFill(strategy(), order("FILLED"), null);
+
+        verify(mail).send(eq(EMAIL), contains("REAL BUY filled"), anyString());
     }
 
     private static AppUser user() {

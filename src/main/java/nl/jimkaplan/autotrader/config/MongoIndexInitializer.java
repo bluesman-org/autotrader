@@ -10,6 +10,7 @@ import nl.jimkaplan.autotrader.strategy.model.document.BacktestRun;
 import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
+import nl.jimkaplan.autotrader.strategy.model.document.PushSubscriptionDocument;
 import org.bson.Document;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -80,6 +81,10 @@ public class MongoIndexInitializer implements ApplicationRunner {
         ensureIndex(LivePosition.class, new Index()
                 .on("status", Sort.Direction.ASC)
                 .on("entryTime", Sort.Direction.ASC));
+        // A browser subscribes once per endpoint; re-subscribing replaces the keys on the same
+        // document, so the endpoint is the natural unique key.
+        ensureIndex(PushSubscriptionDocument.class,
+                new Index().on("endpoint", Sort.Direction.ASC).unique());
     }
 
     /**

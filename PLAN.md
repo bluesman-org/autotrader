@@ -27,8 +27,8 @@ Caddy (PR #48). The trading-pair catalogue and the ledger reporting pass landed 
 (PRs #50–#56), and the TradingView offset timestamps and the unused live-strategy `botId` went with
 PR #57. The live strategy management UI landed with PR #58, and the live order status guard with
 PR #59. The live position close/reconcile and email alert path merged with PR #61 and is deployed;
-the dry-run cleanup exposed a delete-path bug (a strategy without a start marker was deleted while
-its dry position was still open), whose fix is on `bugfix/delete-open-position`. TradingView is kept
+the delete-path bug merged with PR #62 and was deployed, and the dry-run cleanup is complete. Web
+Push notifications are implemented on `feature/live-web-push` (merge pending). TradingView is kept
 as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: dry strategy
 exploration, with the live trial user-triggered.
 
@@ -302,14 +302,22 @@ exploration, with the live trial user-triggered.
     `PENDING` and strategies held back by reconciliation email the account through a bounded daemon
     executor, with a test button on the settings page (PR #61; the dry close acceptance exposed the
     delete-path bug below)
-33. ⬜ Never delete a live strategy with an open position, and archive one that has any history: the
+33. ✅ Never delete a live strategy with an open position, and archive one that has any history: the
     delete path checked the open position only after the never-started branch, so an old 1m
     strategy without start markers was deleted while its dry position stayed open. The open
     position is now checked first; `hasStarted` also honors `lastEvaluatedOpenTime`; and the delete
     path archives a strategy with any orders or positions. The live card treats an open or closed
     position as started. The two affected strategies were restored for the cleanup: the orphaned
-    dry position was closed and archived, and the other history label was restored. Implemented on
-    `bugfix/delete-open-position`; merge pending.
+    dry position was closed and archived, and the other history label was restored (PR #62,
+    deployed)
+34. ⬜ Web Push notifications next to email: the live engine's real fills, failures, pending orders
+    and held-back strategies also reach a subscribed browser, independently of SMTP. The settings
+    page registers the service worker, asks for the permission, stores the browser's subscription
+    and offers a test push per device. The VAPID pair is generated once and its private key kept
+    encrypted in `push_settings`; subscriptions live in `push_subscriptions`, a gone endpoint (404
+    or 410) is removed, and the service worker, manifest and icon are the only public push assets.
+    Android Chrome works in the browser; iOS needs the site on the home screen. Implemented on
+    `feature/live-web-push`; merge pending.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

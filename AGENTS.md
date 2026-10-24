@@ -21,6 +21,8 @@ application also provides a REST API for interacting with the exchange.
 - **Mockito**: Mocking framework for testing
 - **OpenAPI/Swagger**: API documentation and testing via springdoc-openapi
 - **AES-256 Encryption**: For securing sensitive data like API keys
+- **Web Push**: `com.zerodeplibs:zerodep-web-push-java` for VAPID signing and payload encryption; no
+  third-party web-push or JWT dependency
 
 ## Project Structure
 
@@ -203,9 +205,14 @@ Tests follow the Arrange-Act-Assert pattern and use Mockito for mocking dependen
     - Follow the authentication pattern used for Bitvavo API
     - The app holds one account (see `docs/security.md`): the pages sign in with a form and a
       session, the API with HTTP Basic, and a fresh installation starts at `/signup`. The
-      TradingView webhook stays open because it authenticates itself, everything else — pages, API,
-      Swagger UI — needs a sign-in. A page asks with a redirect to `/login`; an API request answers
-      401. Recovery mail goes out through the SMTP server stored on the settings page.
+      TradingView webhook stays open because it authenticates itself, and the Web Push service
+      worker, manifest and icon are public static assets; everything else — pages, API, Swagger
+      UI — needs a sign-in. A page asks with a redirect to `/login`; an API request answers 401.
+      Recovery mail goes out through the SMTP server stored on the settings page. Live alerts go
+      out by email and Web Push (the browser subscriptions on the settings page) on real fills,
+      failures and pending orders; both channels are best effort and never run on the trading
+      thread. The VAPID private key is encrypted in `push_settings`, and subscriptions are kept in
+      `push_subscriptions`.
     - Production is served on `https://at.bluris.nl` behind Caddy, with
       `server.forward-headers-strategy=native` (Tomcat trusts forwarded addresses only from a proxy
       on the host, which is what makes the exporter's loopback rule safe) and

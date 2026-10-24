@@ -9,13 +9,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The single thread the recovery mail leaves on, and the one the live engine's alerts leave on, so
- * the request that asked for a mail answers at once and a slow SMTP server cannot hold a request
- * thread or a trading decision.
+ * The single thread the recovery mail leaves on, the one the live engine's email alerts leave on,
+ * and the one its Web Push notifications leave on, so the request that asked for a mail answers at
+ * once and a slow SMTP or push service cannot hold a request thread or a trading decision.
  *
- * <p>Each queue is small and bounded: a stuck SMTP server holds one send while a handful of others
+ * <p>Each queue is small and bounded: a stuck server holds one send while a handful of others
  * wait, and beyond that the submission is refused (which the caller logs) rather than growing a
- * queue of work nobody asked for. The threads are daemons, so a mail in flight never keeps the
+ * queue of work nobody asked for. The threads are daemons, so a send in flight never keeps the
  * application from shutting down.</p>
  */
 @Configuration
@@ -40,6 +40,16 @@ public class MailConfig {
     @Bean(destroyMethod = "shutdown")
     public Executor liveAlertExecutor() {
         return singleThreadExecutor("live-alert-mail", ALERT_QUEUE_CAPACITY);
+    }
+
+    /**
+     * The push sends are normally as rare as the email alerts, but one event fans out over every
+     * subscribed browser, so they get their own thread: a slow push service must not delay the
+     * email that says the same thing.
+     */
+    @Bean(destroyMethod = "shutdown")
+    public Executor livePushExecutor() {
+        return singleThreadExecutor("live-alert-push", ALERT_QUEUE_CAPACITY);
     }
 
     private static Executor singleThreadExecutor(String name, int queueCapacity) {
