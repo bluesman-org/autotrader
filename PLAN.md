@@ -319,6 +319,10 @@ exploration, with the live trial user-triggered.
     assets.
     Android Chrome works in the browser; iOS needs the site on the home screen. Implemented on
     `feature/live-web-push`; merge pending.
+35. ⬜ Regenerate the committed OpenAPI spec after #63 merges: the push endpoints, the #61
+    close/reconcile endpoints and the #62 delete description are missing from the committed copy.
+    It is split into a follow-up so the Web Push PR stays within the reviewer's diff limit;
+    regenerate it with the clean 8081 startup procedure.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
