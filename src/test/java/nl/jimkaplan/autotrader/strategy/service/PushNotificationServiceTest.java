@@ -92,6 +92,19 @@ class PushNotificationServiceTest {
     }
 
     @Test
+    void aRotatedKeySubscriptionIsRemovedOn403() throws Exception {
+        when(subscriptions.all()).thenReturn(List.of(document()));
+        when(settings.keyPair()).thenReturn(keyPair);
+        when(settings.subject()).thenReturn("mailto:trader@example.com");
+        when(sender.send(any(HttpRequest.class))).thenReturn(403);
+
+        service.send("REAL BUY filled", "body", "order-1");
+
+        verify(subscriptions).delete("subscription-1");
+        verify(subscriptions, never()).markSuccess("subscription-1");
+    }
+
+    @Test
     void aServerErrorIsRecordedAndTheSubscriptionIsKept() throws Exception {
         when(subscriptions.all()).thenReturn(List.of(document()));
         when(settings.keyPair()).thenReturn(keyPair);

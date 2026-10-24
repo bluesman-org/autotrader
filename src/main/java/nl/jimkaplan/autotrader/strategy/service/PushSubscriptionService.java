@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -41,8 +42,8 @@ public class PushSubscriptionService {
             throw new IllegalArgumentException("The push subscription is incomplete.");
         }
         String endpoint = requireEndpoint(request.endpoint());
-        String p256dh = requireValue(request.keys().p256dh(), "The push subscription has no p256dh key.");
-        String auth = requireValue(request.keys().auth(), "The push subscription has no auth key.");
+        String p256dh = requireP256dh(request.keys().p256dh());
+        String auth = requireAuth(request.keys().auth());
 
         PushSubscriptionDocument document = pushSubscriptionRepository.findByEndpoint(endpoint)
                 .orElseGet(() -> PushSubscriptionDocument.builder()
@@ -147,6 +148,35 @@ public class PushSubscriptionService {
             throw new IllegalArgumentException(message);
         }
         return value.trim();
+    }
+
+    private static String requireP256dh(String value) {
+        String key = requireValue(value, "The push subscription has no p256dh key.");
+        try {
+            byte[] point = Base64.getUrlDecoder().decode(key);
+            if (point.length != 65 || point[0] != 4) {
+                throw new IllegalArgumentException(
+                        "The push subscription p256dh key is not an uncompressed P-256 point.");
+            }
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    "The push subscription p256dh key is not a base64url P-256 point.", ex);
+        }
+        return key;
+    }
+
+    private static String requireAuth(String value) {
+        String secret = requireValue(value, "The push subscription has no auth key.");
+        try {
+            if (Base64.getUrlDecoder().decode(secret).length != 16) {
+                throw new IllegalArgumentException(
+                        "The push subscription auth secret is not 16 bytes.");
+            }
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    "The push subscription auth secret is not a base64url 16-byte value.", ex);
+        }
+        return secret;
     }
 
     private static String truncate(String value, int max) {

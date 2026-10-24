@@ -35,7 +35,6 @@ import java.util.List;
 public class PushSettingsService {
 
     private static final String CURVE = "secp256r1";
-    private static final String FALLBACK_SUBJECT = "mailto:noreply@localhost";
 
     private final PushSettingsRepository pushSettingsRepository;
     private final EncryptionService encryptionService;
@@ -81,7 +80,9 @@ public class PushSettingsService {
      * The VAPID JWT subject: the account's recovery address, as a {@code mailto:} contact. Push
      * services use it only to contact the operator about a misbehaving sender.
      *
-     * @return The subject, or a placeholder when no account address is set
+     * @return The subject
+     * @throws IllegalStateException when the account has no email address, because a placeholder
+     *                               contact is not a useful VAPID subject
      */
     public String subject() {
         List<AppUser> users = appUserRepository.findAll();
@@ -90,7 +91,8 @@ public class PushSettingsService {
                 .filter(email -> email != null && !email.isBlank())
                 .findFirst()
                 .map(email -> "mailto:" + email)
-                .orElse(FALLBACK_SUBJECT);
+                .orElseThrow(() -> new IllegalStateException(
+                        "No account email is set, so Web Push cannot be sent."));
     }
 
     private PushSettings generate() {

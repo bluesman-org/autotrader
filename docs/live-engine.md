@@ -293,10 +293,12 @@ stays manual plus these event alerts.
 
 The Web Push VAPID key pair is generated once, on the first request for the public key, and stored
 with the private key encrypted in `push_settings`; subscriptions live in `push_subscriptions`, keyed
-by the push service endpoint. A push service that answers 404 or 410 means the browser is gone, so
-that subscription is deleted; any other failure keeps it. The pair is deliberately stable: deleting
-`push_settings` rotates it and invalidates every browser subscription, so each device has to enable
-notifications again. Back it up with the rest of the database.
+by the push service endpoint. The VAPID subject is the account's recovery address; without one, the
+push is skipped (the settings page says so). A push service that answers 403, 404 or 410 means the
+subscription cannot be used — the browser is gone, or the VAPID pair changed — so it is deleted; any
+other failure keeps it. The pair is deliberately stable: deleting `push_settings` rotates it and
+invalidates every browser subscription, so each device has to disable and enable notifications
+again. Back it up with the rest of the database.
 
 Android Chrome works in the browser. On iOS, Web Push arrives only after the site is added to the
 home screen (iOS 16.4 and later); the settings card says so. The service worker, manifest and icon

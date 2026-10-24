@@ -11,6 +11,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,6 +29,10 @@ import static org.mockito.Mockito.when;
 class PushSubscriptionServiceTest {
 
     private static final String ENDPOINT = "https://push.example.com/abc";
+    private static final String P256DH = point(4, 1);
+    private static final String P256DH_2 = point(4, 2);
+    private static final String AUTH = secret(1);
+    private static final String AUTH_2 = secret(2);
 
     @Mock
     private PushSubscriptionRepository repository;
@@ -36,15 +42,15 @@ class PushSubscriptionServiceTest {
 
     @Test
     void aNewSubscriptionIsStoredWithItsBrowserAndTime() {
-        service.subscribe(request(" p256dh ", " auth "), "Mozilla/5.0");
+        service.subscribe(request(" " + P256DH + " ", " " + AUTH + " "), "Mozilla/5.0");
 
         ArgumentCaptor<PushSubscriptionDocument> captor =
                 ArgumentCaptor.forClass(PushSubscriptionDocument.class);
         verify(repository).save(captor.capture());
         PushSubscriptionDocument stored = captor.getValue();
         assertEquals(ENDPOINT, stored.getEndpoint());
-        assertEquals("p256dh", stored.getP256dh());
-        assertEquals("auth", stored.getAuth());
+        assertEquals(P256DH, stored.getP256dh());
+        assertEquals(AUTH, stored.getAuth());
         assertEquals("Mozilla/5.0", stored.getUserAgent());
         assertNotNull(stored.getCreatedTime());
     }
@@ -55,10 +61,10 @@ class PushSubscriptionServiceTest {
         Instant created = existing.getCreatedTime();
         when(repository.findByEndpoint(ENDPOINT)).thenReturn(Optional.of(existing));
 
-        service.subscribe(request("new-key", "new-auth"), "Other browser");
+        service.subscribe(request(P256DH_2, AUTH_2), "Other browser");
 
-        assertEquals("new-key", existing.getP256dh());
-        assertEquals("new-auth", existing.getAuth());
+        assertEquals(P256DH_2, existing.getP256dh());
+        assertEquals(AUTH_2, existing.getAuth());
         assertEquals("Other browser", existing.getUserAgent());
         assertEquals(created, existing.getCreatedTime());
         verify(repository).save(existing);
@@ -68,7 +74,7 @@ class PushSubscriptionServiceTest {
     void aLongUserAgentIsTruncated() {
         String agent = "a".repeat(300);
 
-        service.subscribe(request("p256dh", "auth"), agent);
+        service.subscribe(request(P256DH, AUTH), agent);
 
         ArgumentCaptor<PushSubscriptionDocument> captor =
                 ArgumentCaptor.forClass(PushSubscriptionDocument.class);
@@ -83,10 +89,25 @@ class PushSubscriptionServiceTest {
                 () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT, null), null));
         assertThrows(IllegalArgumentException.class,
                 () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT,
-                        new PushSubscriptionRequest.Keys(null, "auth")), null));
+                        new PushSubscriptionRequest.Keys(null, AUTH)), null));
         assertThrows(IllegalArgumentException.class,
                 () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT,
-                        new PushSubscriptionRequest.Keys("p256dh", " ")), null));
+                        new PushSubscriptionRequest.Keys(P256DH, " ")), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT,
+                        new PushSubscriptionRequest.Keys("not base64!", AUTH)), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT,
+                        new PushSubscriptionRequest.Keys(point(5, 1), AUTH)), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT,
+                        new PushSubscriptionRequest.Keys(base64(new byte[64]), AUTH)), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT,
+                        new PushSubscriptionRequest.Keys(P256DH, "not base64!")), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.subscribe(new PushSubscriptionRequest(ENDPOINT,
+                        new PushSubscriptionRequest.Keys(P256DH, base64(new byte[15]))), null));
         assertThrows(IllegalArgumentException.class,
                 () -> service.subscribe(new PushSubscriptionRequest(" ", keys()), null));
         assertThrows(IllegalArgumentException.class,
@@ -152,7 +173,24 @@ class PushSubscriptionServiceTest {
     }
 
     private static PushSubscriptionRequest.Keys keys() {
-        return new PushSubscriptionRequest.Keys("p256dh", "auth");
+        return new PushSubscriptionRequest.Keys(P256DH, AUTH);
+    }
+
+    private static String point(int first, int fill) {
+        byte[] point = new byte[65];
+        point[0] = (byte) first;
+        Arrays.fill(point, 1, point.length, (byte) fill);
+        return base64(point);
+    }
+
+    private static String secret(int fill) {
+        byte[] secret = new byte[16];
+        Arrays.fill(secret, (byte) fill);
+        return base64(secret);
+    }
+
+    private static String base64(byte[] bytes) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private static PushSubscriptionDocument document() {

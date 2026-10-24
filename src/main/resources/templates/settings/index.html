@@ -199,7 +199,8 @@
             when a strategy is held back at start-up. Enable it separately on each device; the
             service worker and keys stay on this server. Android Chrome works in the browser. On an
             iPhone, add this site to the home screen first; iOS delivers Web Push only to an installed
-            web app.</p>
+            web app. If the VAPID key pair is rotated, disable and enable notifications again on each
+            device.</p>
         <p>
             <button class="secondary" id="push-enable" type="button">Enable on this device</button>
             <button class="secondary" id="push-disable" type="button">Disable on this device</button>

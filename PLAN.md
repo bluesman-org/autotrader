@@ -314,8 +314,9 @@ exploration, with the live trial user-triggered.
     and held-back strategies also reach a subscribed browser, independently of SMTP. The settings
     page registers the service worker, asks for the permission, stores the browser's subscription
     and offers a test push per device. The VAPID pair is generated once and its private key kept
-    encrypted in `push_settings`; subscriptions live in `push_subscriptions`, a gone endpoint (404
-    or 410) is removed, and the service worker, manifest and icon are the only public push assets.
+    encrypted in `push_settings`; subscriptions live in `push_subscriptions`, an unusable endpoint
+    (403, 404 or 410) is removed, and the service worker, manifest and icon are the only public push
+    assets.
     Android Chrome works in the browser; iOS needs the site on the home screen. Implemented on
     `feature/live-web-push`; merge pending.
 

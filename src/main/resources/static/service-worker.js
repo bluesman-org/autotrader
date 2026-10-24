@@ -42,3 +42,35 @@ self.addEventListener('notificationclick', function (event) {
             return undefined;
         }));
 });
+
+/*
+ * FCM and Firefox can rotate a subscription without the settings page being open. Register the new
+ * one with the same server so the device keeps receiving alerts; if the session has expired the
+ * POST answers 401, and the next settings visit can enable the device again.
+ */
+self.addEventListener('pushsubscriptionchange', function (event) {
+    event.waitUntil((async function () {
+        try {
+            const keyResponse = await fetch('/autotrader/api/push/public-key', {
+                credentials: 'same-origin'
+            });
+            if (!keyResponse.ok) {
+                return;
+            }
+            const key = new Uint8Array(await keyResponse.arrayBuffer());
+            const subscription = await self.registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: key
+            });
+            await fetch('/autotrader/api/push/subscriptions', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(subscription)
+            });
+        } catch (error) {
+            // A failed re-subscription must not break the worker; the settings page can re-enable.
+        }
+    })());
+});
+

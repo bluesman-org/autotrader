@@ -24,10 +24,11 @@ import java.util.concurrent.TimeUnit;
  * Sends live notifications through Web Push to every browser that subscribed on the settings page.
  *
  * <p>Notifications are sent off the trading thread, one subscription at a time. A push service
- * answer of 404 or 410 means the browser is gone and its subscription is deleted; any other
- * failure is logged and the subscription is kept, because a temporary outage should not silently
- * unsubscribe the operator. Email and push are independent channels: a missing SMTP server does
- * not suppress a push and an unsubscribed browser does not suppress the email.</p>
+ * answer of 403, 404 or 410 means the browser's subscription cannot be used (it is gone, or the
+ * VAPID key changed) and is deleted; any other failure is logged and the subscription is kept,
+ * because a temporary outage should not silently unsubscribe the operator. Email and push are
+ * independent channels: a missing SMTP server does not suppress a push and an unsubscribed browser
+ * does not suppress the email.</p>
  */
 @Slf4j
 @Service
@@ -132,9 +133,9 @@ public class PushNotificationService {
                 if (status == 201 || status == 202) {
                     pushSubscriptionService.markSuccess(recipient.getId());
                     sent++;
-                } else if (status == 404 || status == 410) {
+                } else if (status == 403 || status == 404 || status == 410) {
                     pushSubscriptionService.delete(recipient.getId());
-                    log.info("Removed a Web Push subscription the push service reported as gone ({})",
+                    log.info("Removed a Web Push subscription the push service reported as unusable ({})",
                             status);
                 } else {
                     pushSubscriptionService.markFailure(recipient.getId());

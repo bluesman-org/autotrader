@@ -104,19 +104,23 @@ class PushSettingsServiceTest {
     }
 
     @Test
-    void theSubjectFallsBackWhenThereIsNoUsableAddress() {
+    void noUsableAccountAddressIsAnActionableFailure() {
         when(users.findAll()).thenReturn(List.of(
                 AppUser.builder().username("one").email(null).build(),
                 AppUser.builder().username("two").email(" ").build()));
 
-        assertEquals("mailto:noreply@localhost", service.subject());
+        IllegalStateException error = assertThrows(IllegalStateException.class, service::subject);
+
+        assertTrue(error.getMessage().contains("account email"));
     }
 
     @Test
-    void noAccountAtAllStillYieldsASubject() {
+    void noAccountAtAllIsAnActionableFailure() {
         when(users.findAll()).thenReturn(List.of());
 
-        assertEquals("mailto:noreply@localhost", service.subject());
+        IllegalStateException error = assertThrows(IllegalStateException.class, service::subject);
+
+        assertTrue(error.getMessage().contains("account email"));
         verify(repository, never()).save(any(PushSettings.class));
     }
 }

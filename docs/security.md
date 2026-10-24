@@ -82,8 +82,9 @@ session; CSRF is off for `/api/**` like the rest of the API, and the session coo
 - **Transport.** The server encrypts each payload to the browser's p256dh key with its auth secret;
   the push service sees the endpoint, the timing and the message size, not the order details. The
   notification is only a short summary and opens `/ui/live`.
-- **Gone devices.** A push service that answers 404 or 410 removes the subscription; other failures
-  keep it and are logged. The trading path never waits for a push.
+- **Gone devices.** A push service that answers 403, 404 or 410 removes the subscription; other
+  failures keep it and are logged. The trading path never waits for a push. A 403 usually means the
+  VAPID pair changed, so the device must disable and enable notifications again.
 - **Browser requirements.** HTTPS (localhost is the development exception), and on iOS the site must
   be added to the home screen before Web Push is available (iOS 16.4 and later). Android Chrome works
   in the browser.
