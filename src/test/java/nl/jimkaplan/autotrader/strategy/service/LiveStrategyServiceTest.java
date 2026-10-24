@@ -447,6 +447,24 @@ class LiveStrategyServiceTest {
     }
 
     @Test
+    void delete_archivesANeverStartedStrategyWithOnlyAPosition() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
+        when(livePositionRepository.existsByStrategyId("strategy-1")).thenReturn(true);
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean archived = liveStrategyService.delete("strategy-1");
+
+        assertTrue(archived);
+        assertTrue(strategy.isArchived());
+        verify(liveStrategyRepository).save(strategy);
+        verify(liveStrategyRepository, never()).delete(any());
+    }
+
+    @Test
     void delete_refusesToDeleteANeverStartedStrategyWithAnOpenPosition() {
         LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));

@@ -38,14 +38,14 @@
                 <input type="hidden" name="real" value="true">
                 <button class="secondary small" type="submit">Create real copy</button>
             </form>
-            <form th:if="${!card.running and !card.started}"
+            <form th:if="${!card.running and !card.started and card.position == null}"
                   th:action="@{/ui/live/{id}/delete(id=${card.id})}" method="post"
-                  onsubmit="return confirm('This strategy has never run. Delete it?')">
+                  onsubmit="return confirm('This strategy has never run and has no history. Delete it?')">
                 <button class="secondary small" type="submit">Delete</button>
             </form>
-            <form th:if="${!card.running and card.started}"
+            <form th:if="${!card.running and card.started and card.position == null}"
                   th:action="@{/ui/live/{id}/delete(id=${card.id})}" method="post"
-                  onsubmit="return confirm('This strategy has run. Archive it and keep its history?')">
+                  onsubmit="return confirm('This strategy has history. Archive it and keep its orders and trades?')">
                 <button class="secondary small" type="submit">Archive</button>
             </form>
             <form th:if="${card.running}" th:action="@{/ui/live/{id}/stop(id=${card.id})}" method="post"
@@ -58,6 +58,9 @@
         </div>
         <p class="muted card-meta tight" th:if="${card.running}">
             Stop the strategy to edit or archive it.
+        </p>
+        <p class="muted card-meta tight" th:if="${!card.running and card.position != null}">
+            Close the position before deleting or archiving the strategy.
         </p>
 
         <p class="muted card-meta" th:text="${card.statusLine}">Running since 13 Oct 16:35 (1 d 22 h) ·

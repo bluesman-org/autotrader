@@ -205,8 +205,8 @@ public class LiveStrategyService {
     }
 
     /**
-     * Delete a strategy with no history, or archive one that has orders or positions so its
-     * recorded state survives for the history tab.
+     * Delete a strategy that never started and has no orders or positions, or archive one that has
+     * run or has either, so its recorded state survives for the history tab.
      *
      * @param id The strategy ID
      * @return {@code true} when the strategy was archived, {@code false} when it was deleted
@@ -232,7 +232,7 @@ public class LiveStrategyService {
         }
         strategy.setArchived(true);
         liveStrategyRepository.save(strategy);
-        log.info("Archived live strategy {} (it has run, so its history stays)", id);
+        log.info("Archived live strategy {} (it has history, so its records stay)", id);
         return true;
     }
 

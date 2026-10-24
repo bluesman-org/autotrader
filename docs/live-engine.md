@@ -257,12 +257,12 @@ and creation minute (e.g. `BTC-EUR 1h · 12 Oct 21:04`).
   records an external `FILLED` sell at the exchange's average fill; a sell that covers only part of
   the position is refused, and a larger one is prorated. This is the only way an exchange trade the
   engine did not place enters its records.
-- **Delete or archive:** a strategy with no orders or positions is deleted. One with a history is
-  archived: it leaves the live page and the forms, but its orders and positions stay, and the
-  history tab keeps showing it (labelled `(archived)` in the strategy filter). An open position
-  blocks both deleting and archiving — close it in the app, or reconcile the manual sell that
-  closed it, before deleting or archiving — so a real position can never be hidden behind an
-  archived or deleted strategy.
+- **Delete or archive:** a strategy that never started and has no orders or positions is deleted.
+  One that has run, or that has any orders or positions, is archived: it leaves the live page and
+  the forms, but its orders and positions stay, and the history tab keeps showing it (labelled
+  `(archived)` in the strategy filter). An open position blocks both deleting and archiving — close
+  it in the app, or reconcile the manual sell that closed it, before deleting or archiving — so a
+  real position can never be hidden behind an archived or deleted strategy.
 - **From a backtest:** each ranked row on a stored run has a **Use live** link that opens the create
   form with the market, interval, parameters, rules and amount filled in. It saves dry-run unless
   the form's dry-run checkbox is cleared.
