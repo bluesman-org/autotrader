@@ -147,17 +147,24 @@ class LiveUiControllerRenderTest {
         when(liveViewService.cards()).thenReturn(List.of(stoppedCard(true, true)));
         mockMvc.perform(get("/ui/live"))
                 .andExpect(content().string(containsString("Close position")))
+                .andExpect(content().string(containsString("Close the position before deleting or archiving")))
+                .andExpect(content().string(not(containsString(">Delete<"))))
+                .andExpect(content().string(not(containsString(">Archive<"))))
                 .andExpect(content().string(not(containsString("Reconcile manual close"))));
 
         when(liveViewService.cards()).thenReturn(List.of(stoppedCard(false, true)));
         mockMvc.perform(get("/ui/live"))
                 .andExpect(content().string(containsString("Close position")))
+                .andExpect(content().string(containsString("Close the position before deleting or archiving")))
+                .andExpect(content().string(not(containsString(">Delete<"))))
+                .andExpect(content().string(not(containsString(">Archive<"))))
                 .andExpect(content().string(containsString("Reconcile manual close")));
 
         when(liveViewService.cards()).thenReturn(List.of(stoppedCard(false, false)));
         mockMvc.perform(get("/ui/live"))
                 .andExpect(content().string(not(containsString("Close position"))))
-                .andExpect(content().string(not(containsString("Reconcile manual close"))));
+                .andExpect(content().string(not(containsString("Reconcile manual close"))))
+                .andExpect(content().string(containsString(">Archive<")));
     }
 
     @Test

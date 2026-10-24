@@ -22,6 +22,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -162,6 +163,26 @@ class LiveViewServiceTest {
     }
 
     @Test
+    void cards_markAStoppedStrategyWithClosedHistoryAsStarted() {
+        LiveStrategy strategy = strategy();
+        strategy.setLastStartedTime(null);
+        strategy.setSeriesStartTime(0);
+        strategy.setLastEvaluatedOpenTime(0);
+        when(liveStrategyService.active()).thenReturn(List.of(strategy));
+        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
+                .thenReturn(List.of(closedPosition(0.12)));
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
+
+        LiveCardView card = service.cards().get(0);
+
+        assertFalse(strategy.hasStarted());
+        assertTrue(card.started());
+        assertEquals("Realised since start: 1 round trips · +€0,12 · 1 wins / 0 losses · avg win +€0,12",
+                card.statsLine());
+    }
+
+    @Test
     void statsLine_reportsWinsLossesAndTheirAverages() {
         when(liveStrategyService.active()).thenReturn(List.of(strategy()));
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
@@ -173,6 +194,44 @@ class LiveViewServiceTest {
 
         assertEquals("Realised since start: 2 round trips · +€0,01 · 1 wins / 1 losses · avg win +€0,12 "
                 + "· avg loss −€0,11", card.statsLine());
+    }
+
+    @Test
+    void cards_markAStoppedStrategyWithAnOpenPositionAsStarted() {
+        LiveStrategy strategy = strategy();
+        strategy.setLastStartedTime(null);
+        strategy.setSeriesStartTime(0);
+        strategy.setLastEvaluatedOpenTime(0);
+        when(liveStrategyService.active()).thenReturn(List.of(strategy));
+        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
+                .thenReturn(Optional.of(openPosition()));
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
+
+        LiveCardView card = service.cards().get(0);
+
+        assertFalse(strategy.hasStarted());
+        assertTrue(card.started());
+        assertNotNull(card.position());
+    }
+
+    @Test
+    void cards_markAStoppedStrategyWithOrdersAsStarted() {
+        LiveStrategy strategy = strategy();
+        strategy.setLastStartedTime(null);
+        strategy.setSeriesStartTime(0);
+        strategy.setLastEvaluatedOpenTime(0);
+        when(liveStrategyService.active()).thenReturn(List.of(strategy));
+        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
+                .thenReturn(List.of(order("BUY", SIGNAL_ENTRY, Instant.parse("2026-10-11T20:20:02Z"),
+                        0.001, 74_403, "DRY_RUN")));
+
+        LiveCardView card = service.cards().get(0);
+
+        assertFalse(strategy.hasStarted());
+        assertTrue(card.started());
     }
 
     @Test
@@ -203,6 +262,7 @@ class LiveViewServiceTest {
         strategy.setName(null);
         strategy.setLastStartedTime(null);
         strategy.setSeriesStartTime(0);
+        strategy.setLastEvaluatedOpenTime(0);
         when(liveStrategyService.active()).thenReturn(List.of(strategy));
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());

@@ -152,12 +152,15 @@ public class LiveStrategy extends BaseDocument {
     private Instant createdTime;
 
     /**
-     * @return Whether the strategy has ever run. The pair and interval lock on this, Delete turns
-     *         into Archive, and the live page's edit form uses it to disable them; keeping the
-     *         definition here stops those four callers from drifting apart.
+     * @return Whether the strategy has ever run. The pair and interval lock on this and the live
+     *         page's edit form uses it to disable them; the delete path also preserves a strategy
+     *         with any orders or positions, so this is not the only archive condition. Keeping the
+     *         definition here stops those callers from drifting apart. A document created before the
+     *         start fields existed is still started when it has an evaluated candle, so an old run
+     *         with a history is archived rather than deleted.
      */
     @JsonIgnore
     public boolean hasStarted() {
-        return lastStartedTime != null || seriesStartTime > 0;
+        return lastStartedTime != null || seriesStartTime > 0 || lastEvaluatedOpenTime > 0;
     }
 }
