@@ -13,6 +13,7 @@ user would have nothing of their own.
 | --- | --- |
 | `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password` | anyone |
 | `/css/**`, `/js/**`, `/images/**`, `/favicon.ico`, `/error` | anyone |
+| `/service-worker.js`, `/manifest.webmanifest`, `/icon.svg` | anyone — static Web Push assets, no account data |
 | `/actuator/health` | anyone (the monitoring probe) |
 | `/webhook/**` | anyone — the TradingView webhook authenticates itself with its own key |
 | `/v3/api-docs/**` | a signed-in account, and the machine itself (the specification exporter fetches it over the loopback at startup) |
@@ -62,6 +63,31 @@ The mail goes out through the SMTP server stored on the settings page ("Mail (pa
 or through `PUT /api/mail-settings`. The password is stored encrypted (AES-256-GCM under
 `ENCRYPTION_MASTER_KEY`) and is write-only; leaving it blank keeps the stored one, so the host can be
 corrected without re-typing it. No SMTP environment variables are required.
+
+## Web Push
+
+Live alerts also go to subscribed browsers (see "Alerts" in `docs/live-engine.md`). Only three push
+assets are public: `service-worker.js`, `manifest.webmanifest` and `icon.svg`. They are static and
+carry no account data. The subscription API (`/api/push/**`) and the settings page need a signed-in
+session; CSRF is off for `/api/**` like the rest of the API, and the session cookie is
+`SameSite=Strict`.
+
+- **VAPID key pair.** Generated once on the first request for the public key. The private key is
+  encrypted with `ENCRYPTION_MASTER_KEY` (AES-256-GCM) in `push_settings`; the public key is not
+  secret. Deleting `push_settings` rotates the pair and invalidates every browser subscription, so
+  each device must enable notifications again. Keep it in the database backups.
+- **Subscriptions.** Stored in `push_subscriptions`, keyed by the push service endpoint. That
+  endpoint is a capability URL: anyone who holds it can send a notification to that browser. It is
+  never rendered back into a page or returned by the API.
+- **Transport.** The server encrypts each payload to the browser's p256dh key with its auth secret;
+  the push service sees the endpoint, the timing and the message size, not the order details. The
+  notification is only a short summary and opens `/ui/live`.
+- **Gone devices.** A push service that answers 403, 404 or 410 removes the subscription; other
+  failures keep it and are logged. The trading path never waits for a push. A 403 usually means the
+  VAPID pair changed, so the device must disable and enable notifications again.
+- **Browser requirements.** HTTPS (localhost is the development exception), and on iOS the site must
+  be added to the home screen before Web Push is available (iOS 16.4 and later). Android Chrome works
+  in the browser.
 
 ## Served over HTTPS
 

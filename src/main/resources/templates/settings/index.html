@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="app-context" th:content="@{/}">
     <title>Settings · Autotrader</title>
     <link rel="icon"
           href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="manifest" th:href="@{/manifest.webmanifest}">
     <link rel="stylesheet" th:href="@{/css/app.css}">
 </head>
 <body>
@@ -186,6 +188,30 @@
     </div>
 
     <div class="card" style="padding:18px 22px">
+        <h2 style="margin-top:0">Push notifications</h2>
+        <p>
+            <span id="push-state" class="badge">checking this device…</span>
+            <span id="push-count" th:text="${pushSubscriptions == 1 ? '1 device subscribed' : pushSubscriptions + ' devices subscribed'}">0 devices subscribed</span>
+            <span>·</span>
+            <span th:text="${pushReady ? 'keys ready' : 'keys are generated when you enable notifications'}">keys are generated when you enable notifications</span>
+        </p>
+        <p class="muted">A notification on the phone or desktop when a real order fills or fails, or
+            when a strategy is held back at start-up. Enable it separately on each device; the
+            service worker and keys stay on this server. Android Chrome works in the browser. On an
+            iPhone, add this site to the home screen first; iOS delivers Web Push only to an installed
+            web app. If the VAPID key pair is rotated, disable and enable notifications again on each
+            device.</p>
+        <p>
+            <button class="secondary" id="push-enable" type="button">Enable on this device</button>
+            <button class="secondary" id="push-disable" type="button">Disable on this device</button>
+        </p>
+        <form method="post" th:action="@{/ui/settings/push/test}">
+            <button class="secondary" type="submit">Send test push</button>
+            <span class="muted">Sends one notification to every subscribed device.</span>
+        </form>
+    </div>
+
+    <div class="card" style="padding:18px 22px">
         <h2 style="margin-top:0">Account</h2>
         <p>
             <span class="badge ok">signed in</span>
@@ -220,5 +246,102 @@
         </form>
     </div>
 </main>
+<script>
+    (function () {
+        const base = document.querySelector('meta[name="app-context"]').content;
+        const state = document.getElementById('push-state');
+        const enableButton = document.getElementById('push-enable');
+        const disableButton = document.getElementById('push-disable');
+        let registration = null;
+
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) ||
+            !('Notification' in window)) {
+            state.textContent = 'not supported by this browser';
+            enableButton.disabled = true;
+            disableButton.disabled = true;
+            return;
+        }
+
+        async function ensureRegistration() {
+            if (!registration) {
+                registration = await navigator.serviceWorker.register(base + 'service-worker.js');
+            }
+            await navigator.serviceWorker.ready;
+            return registration;
+        }
+
+        async function refresh() {
+            try {
+                const current = await (await ensureRegistration()).pushManager.getSubscription();
+                state.textContent = current ? 'enabled on this device' : 'not enabled on this device';
+                enableButton.disabled = Boolean(current);
+                disableButton.disabled = !current;
+            } catch (error) {
+                state.textContent = 'could not check this device';
+                console.warn('Web Push check failed', error);
+            }
+        }
+
+        enableButton.addEventListener('click', async function () {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    state.textContent = 'notification permission was not granted';
+                    return;
+                }
+                const current = await ensureRegistration();
+                state.textContent = 'requesting the key…';
+                const keyResponse = await fetch(base + 'api/push/public-key', {
+                    credentials: 'same-origin'
+                });
+                if (!keyResponse.ok) {
+                    throw new Error('public key request failed with ' + keyResponse.status);
+                }
+                const key = new Uint8Array(await keyResponse.arrayBuffer());
+                const subscription = await current.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: key
+                });
+                state.textContent = 'storing the subscription…';
+                const response = await fetch(base + 'api/push/subscriptions', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(subscription)
+                });
+                if (!response.ok) {
+                    throw new Error('subscription request failed with ' + response.status);
+                }
+                state.textContent = 'enabled on this device';
+                window.location.reload();
+            } catch (error) {
+                state.textContent = 'could not enable push';
+                console.warn('Web Push enable failed', error);
+            }
+        });
+
+        disableButton.addEventListener('click', async function () {
+            try {
+                const current = await (await ensureRegistration()).pushManager.getSubscription();
+                if (current) {
+                    await fetch(base + 'api/push/subscriptions', {
+                        method: 'DELETE',
+                        credentials: 'same-origin',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({endpoint: current.endpoint})
+                    });
+                    await current.unsubscribe();
+                }
+                state.textContent = 'not enabled on this device';
+                window.location.reload();
+            } catch (error) {
+                state.textContent = 'could not disable push';
+                console.warn('Web Push disable failed', error);
+            }
+        });
+
+        refresh();
+    })();
+</script>
 </body>
 </html>

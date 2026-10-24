@@ -36,6 +36,7 @@ public class LiveAlertService {
 
     private final MailSettingsService mailSettingsService;
     private final AppUserRepository appUserRepository;
+    private final PushNotificationService pushNotificationService;
     private final Executor taskExecutor;
     private final DisplayZone display;
     private final String publicUrl;
@@ -43,12 +44,14 @@ public class LiveAlertService {
 
     public LiveAlertService(MailSettingsService mailSettingsService,
                             AppUserRepository appUserRepository,
+                            PushNotificationService pushNotificationService,
                             @Qualifier("liveAlertExecutor") Executor taskExecutor,
                             @Value("${autotrader.ui.time-zone:}") String timeZone,
                             @Value("${autotrader.security.public-url:http://localhost:8081/autotrader}")
                             String publicUrl) {
         this.mailSettingsService = mailSettingsService;
         this.appUserRepository = appUserRepository;
+        this.pushNotificationService = pushNotificationService;
         this.taskExecutor = taskExecutor;
         this.display = new DisplayZone(timeZone);
         this.publicUrl = publicUrl;
@@ -66,8 +69,9 @@ public class LiveAlertService {
         if (order == null || order.isDryRun()) {
             return;
         }
-        send(subject("REAL " + side(order) + " " + status(order), strategy),
-                body(strategy, order, position));
+        String subject = subject("REAL " + side(order) + " " + status(order), strategy);
+        send(subject, body(strategy, order, position));
+        sendPush(subject, pushFillBody(order, position), tag(strategy, order));
     }
 
     /**
@@ -82,7 +86,9 @@ public class LiveAlertService {
         if (order == null || order.isDryRun()) {
             return;
         }
-        send(subject("REAL " + side(order) + " " + kind, strategy), body(strategy, order, null));
+        String subject = subject("REAL " + side(order) + " " + kind, strategy);
+        send(subject, body(strategy, order, null));
+        sendPush(subject, pushFailureBody(order), tag(strategy, order));
     }
 
     /**
@@ -96,8 +102,9 @@ public class LiveAlertService {
         if (order == null || order.isDryRun()) {
             return;
         }
-        send(subject("REAL " + side(order) + " needs reconciliation", strategy),
-                body(strategy, order, null));
+        String subject = subject("REAL " + side(order) + " needs reconciliation", strategy);
+        send(subject, body(strategy, order, null));
+        sendPush(subject, pushFailureBody(order), tag(strategy, order));
     }
 
     /**
@@ -110,7 +117,9 @@ public class LiveAlertService {
         if (order == null || order.isDryRun()) {
             return;
         }
-        send(subject("REAL " + side(order) + " reconciled", strategy), body(strategy, order, null));
+        String subject = subject("REAL " + side(order) + " reconciled", strategy);
+        send(subject, body(strategy, order, null));
+        sendPush(subject, pushFillBody(order, null), tag(strategy, order));
     }
 
     /**
@@ -123,8 +132,9 @@ public class LiveAlertService {
         if (order == null || order.isDryRun()) {
             return;
         }
-        send(subject("REAL " + side(order) + " failed at reconciliation", strategy),
-                body(strategy, order, null));
+        String subject = subject("REAL " + side(order) + " failed at reconciliation", strategy);
+        send(subject, body(strategy, order, null));
+        sendPush(subject, pushFailureBody(order), tag(strategy, order));
     }
 
     /**
@@ -140,7 +150,10 @@ public class LiveAlertService {
                 + "Check the application log, fix the exchange, key or network problem, and restart "
                 + "the application.\n\n"
                 + livePageLine() + "\n";
-        send(subject("Live strategy not started · " + strategy.getMarket(), strategy), body);
+        String subject = subject("Live strategy not started · " + strategy.getMarket(), strategy);
+        send(subject, body);
+        sendPush(subject,
+                "The strategy was not started; check the application log.", "strategy-" + strategy.getId());
     }
 
     /**
@@ -256,6 +269,72 @@ public class LiveAlertService {
         return strategy.getName() == null || strategy.getName().isBlank()
                 ? strategy.getMarket() + " " + strategy.getInterval()
                 : strategy.getName();
+    }
+
+    private void sendPush(String subject, String body, String tag) {
+        try {
+            pushNotificationService.send(subject, body, tag);
+        } catch (RuntimeException ex) {
+            // Like the email channel, the push is best effort and must never escape the trading
+            // path, even if the notification service itself fails before it can swallow the error.
+            log.warn("Could not prepare the live push '{}': {}", subject, ex.getMessage());
+        }
+    }
+
+    private String pushFillBody(LiveOrder order, LivePosition position) {
+        StringBuilder body = new StringBuilder();
+        if (order.getQuantity() != null) {
+            body.append(ViewText.decimal(order.getQuantity(), 8));
+        }
+        if (order.getPrice() != null) {
+            if (!body.isEmpty()) {
+                body.append(' ');
+            }
+            body.append("@ ").append(ViewText.euro(order.getPrice()));
+        }
+        if (order.getAmountQuote() != null) {
+            appendPushSeparator(body);
+            body.append(ViewText.euro(order.getAmountQuote()));
+        }
+        if (order.getFee() != null) {
+            appendPushSeparator(body);
+            body.append("fee ").append(ViewText.euro(order.getFee()));
+        }
+        if (position != null && position.getProfit() != null) {
+            appendPushSeparator(body);
+            body.append(ViewText.signed(position.getProfit()));
+        }
+        return body.isEmpty() ? "A real order changed; open the live page." : body.toString();
+    }
+
+    private static String pushFailureBody(LiveOrder order) {
+        StringBuilder body = new StringBuilder();
+        if (order.getStatus() != null) {
+            body.append(order.getStatus());
+        }
+        if (order.getErrorMessage() != null && !order.getErrorMessage().isBlank()) {
+            appendPushSeparator(body);
+            body.append(order.getErrorMessage());
+        }
+        return body.isEmpty() ? "A real order needs attention; open the live page." : truncate(body.toString(), 180);
+    }
+
+    private static void appendPushSeparator(StringBuilder body) {
+        if (!body.isEmpty()) {
+            body.append(" · ");
+        }
+    }
+
+    private static String tag(LiveStrategy strategy, LiveOrder order) {
+        String id = order.getOrderId() != null ? order.getOrderId() : order.getClientOrderId();
+        if (id != null && !id.isBlank()) {
+            return "order-" + id;
+        }
+        return strategy.getId() == null ? "autotrader-order" : "strategy-" + strategy.getId();
+    }
+
+    private static String truncate(String value, int max) {
+        return value.length() <= max ? value : value.substring(0, max - 1) + "…";
     }
 
     private String livePageLine() {

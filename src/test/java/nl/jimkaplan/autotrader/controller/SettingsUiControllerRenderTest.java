@@ -6,6 +6,9 @@ import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.service.MailSettingsService;
 import nl.jimkaplan.autotrader.service.MarketService;
 import nl.jimkaplan.autotrader.strategy.service.LiveAlertService;
+import nl.jimkaplan.autotrader.strategy.service.PushNotificationService;
+import nl.jimkaplan.autotrader.strategy.service.PushSettingsService;
+import nl.jimkaplan.autotrader.strategy.service.PushSubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +61,12 @@ class SettingsUiControllerRenderTest {
     private AppUserService users;
     @MockitoBean
     private LiveAlertService alerts;
+    @MockitoBean
+    private PushSettingsService pushSettingsService;
+    @MockitoBean
+    private PushSubscriptionService pushSubscriptionService;
+    @MockitoBean
+    private PushNotificationService pushNotificationService;
 
     @BeforeEach
     void setUp() {
@@ -256,6 +265,47 @@ class SettingsUiControllerRenderTest {
         mockMvc.perform(post("/ui/settings/markets/discover"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/ui/settings"));
+    }
+
+    @Test
+    void thePushCardShowsTheSubscribedDevices() throws Exception {
+        when(credentialsService.view()).thenReturn(new BitvavoCredentialsResponse(false, null, null, null));
+        when(pushSubscriptionService.count()).thenReturn(2L);
+        when(pushSettingsService.configured()).thenReturn(true);
+
+        mockMvc.perform(get("/ui/settings"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Push notifications")))
+                .andExpect(content().string(containsString("2 devices subscribed")))
+                .andExpect(content().string(containsString("keys ready")))
+                .andExpect(content().string(containsString("Enable on this device")))
+                .andExpect(content().string(containsString("Send test push")))
+                .andExpect(content().string(containsString("service-worker.js")))
+                .andExpect(content().string(containsString("manifest.webmanifest")));
+    }
+
+    @Test
+    void postSendsATestPush() throws Exception {
+        when(pushNotificationService.sendTest()).thenReturn(2);
+
+        mockMvc.perform(post("/ui/settings/push/test"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"))
+                .andExpect(flash().attribute("message", containsString("test push")))
+                .andExpect(flash().attribute("message", containsString("2 devices")));
+
+        verify(pushNotificationService).sendTest();
+    }
+
+    @Test
+    void postReportsATestPushFailure() throws Exception {
+        doThrow(new IllegalArgumentException("No push subscription is registered"))
+                .when(pushNotificationService).sendTest();
+
+        mockMvc.perform(post("/ui/settings/push/test"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ui/settings"))
+                .andExpect(flash().attribute("error", containsString("No push subscription")));
     }
 
     private static Market market(String symbol) {
