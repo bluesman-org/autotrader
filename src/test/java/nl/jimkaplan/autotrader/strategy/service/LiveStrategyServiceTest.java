@@ -382,6 +382,8 @@ class LiveStrategyServiceTest {
     void delete_removesAStrategyThatNeverStarted() {
         LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
 
         boolean archived = liveStrategyService.delete("strategy-1");
 
@@ -395,6 +397,8 @@ class LiveStrategyServiceTest {
         LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
         strategy.setLastStartedTime(Instant.now());
         when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
         when(liveStrategyRepository.save(any(LiveStrategy.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -418,10 +422,80 @@ class LiveStrategyServiceTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> liveStrategyService.delete("strategy-1"));
 
-        assertEquals("close the open position before archiving", error.getMessage());
+        assertEquals("close the open position before deleting or archiving it", error.getMessage());
         assertFalse(strategy.isArchived());
         verify(liveStrategyRepository, never()).delete(any());
         verify(liveStrategyRepository, never()).save(any());
+    }
+
+    @Test
+    void delete_archivesANeverStartedStrategyThatHasHistory() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
+        when(liveOrderRepository.existsByStrategyId("strategy-1")).thenReturn(true);
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean archived = liveStrategyService.delete("strategy-1");
+
+        assertTrue(archived);
+        assertTrue(strategy.isArchived());
+        verify(liveStrategyRepository).save(strategy);
+        verify(liveStrategyRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_archivesANeverStartedStrategyWithOnlyAPosition() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
+        when(livePositionRepository.existsByStrategyId("strategy-1")).thenReturn(true);
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean archived = liveStrategyService.delete("strategy-1");
+
+        assertTrue(archived);
+        assertTrue(strategy.isArchived());
+        verify(liveStrategyRepository).save(strategy);
+        verify(liveStrategyRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_refusesToDeleteANeverStartedStrategyWithAnOpenPosition() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.of(LivePosition.builder()
+                        .strategyId("strategy-1").market("BTC-EUR").status("OPEN").build()));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> liveStrategyService.delete("strategy-1"));
+
+        assertEquals("close the open position before deleting or archiving it", error.getMessage());
+        verify(liveStrategyRepository, never()).delete(any());
+        verify(liveStrategyRepository, never()).save(any());
+    }
+
+    @Test
+    void delete_archivesAStrategyThatOnlyHasAnEvaluatedCandle() {
+        LiveStrategy strategy = stored("strategy-1", "BTC-EUR");
+        strategy.setLastEvaluatedOpenTime(1_791_749_880_000L);
+        when(liveStrategyRepository.findById("strategy-1")).thenReturn(Optional.of(strategy));
+        when(livePositionRepository.findByStrategyIdAndStatus("strategy-1", "OPEN"))
+                .thenReturn(Optional.empty());
+        when(liveStrategyRepository.save(any(LiveStrategy.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        boolean archived = liveStrategyService.delete("strategy-1");
+
+        assertTrue(archived);
+        assertTrue(strategy.isArchived());
+        verify(liveStrategyRepository).save(strategy);
+        verify(liveStrategyRepository, never()).delete(any());
     }
 
     @Test

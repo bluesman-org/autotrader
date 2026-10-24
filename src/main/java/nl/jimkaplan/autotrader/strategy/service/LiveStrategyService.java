@@ -205,8 +205,8 @@ public class LiveStrategyService {
     }
 
     /**
-     * Delete a strategy that never started, or archive one that has a history so its recorded
-     * orders and positions survive for the history tab.
+     * Delete a strategy that never started and has no orders or positions, or archive one that has
+     * run or has either, so its recorded state survives for the history tab.
      *
      * @param id The strategy ID
      * @return {@code true} when the strategy was archived, {@code false} when it was deleted
@@ -218,17 +218,21 @@ public class LiveStrategyService {
         if (runners.containsKey(id)) {
             throw new IllegalArgumentException("stop the strategy before deleting it");
         }
-        if (!strategy.hasStarted()) {
+        // Checked before the never-started branch: an old strategy can lack the start markers and
+        // still own an open position. Deleting it would leave that position unreachable.
+        if (livePositionRepository.findByStrategyIdAndStatus(id, "OPEN").isPresent()) {
+            throw new IllegalArgumentException("close the open position before deleting or archiving it");
+        }
+        if (!strategy.hasStarted()
+                && !liveOrderRepository.existsByStrategyId(id)
+                && !livePositionRepository.existsByStrategyId(id)) {
             liveStrategyRepository.delete(strategy);
             log.info("Deleted live strategy {} (never started)", id);
             return false;
         }
-        if (livePositionRepository.findByStrategyIdAndStatus(id, "OPEN").isPresent()) {
-            throw new IllegalArgumentException("close the open position before archiving");
-        }
         strategy.setArchived(true);
         liveStrategyRepository.save(strategy);
-        log.info("Archived live strategy {} (it has run, so its history stays)", id);
+        log.info("Archived live strategy {} (it has history, so its records stay)", id);
         return true;
     }
 

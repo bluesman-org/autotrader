@@ -118,12 +118,13 @@ public class LiveViewService {
         String name = strategy.getName() == null || strategy.getName().isBlank()
                 ? strategy.getMarket() + " " + strategy.getInterval()
                 : strategy.getName();
-        boolean started = strategy.hasStarted();
+        List<LiveCardView.OrderView> orderViews = orders(strategy.getId(), position, closed);
+        boolean started = strategy.hasStarted() || position != null || !closed.isEmpty()
+                || !orderViews.isEmpty();
         return new LiveCardView(strategy.getId(), name, strategy.getMarket(), strategy.getInterval(),
                 started, running, connected, strategy.isDryRun(),
                 parameters(strategy), statusLine(strategy, running, lastError, now),
-                position(position, book, strategy), statsLine(closed),
-                orders(strategy.getId(), position, closed));
+                position(position, book, strategy), statsLine(closed), orderViews);
     }
 
     private String statusLine(LiveStrategy strategy, boolean running, String lastError, Instant now) {

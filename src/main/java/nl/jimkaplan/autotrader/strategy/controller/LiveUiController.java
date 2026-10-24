@@ -161,7 +161,8 @@ public class LiveUiController {
     }
 
     /**
-     * Delete a strategy that never started, or archive one that has run.
+     * Delete a strategy that never started and has no orders or positions, or archive one that has
+     * run or has either.
      *
      * @param id                 The strategy ID
      * @param redirectAttributes Carries the outcome back to the live page

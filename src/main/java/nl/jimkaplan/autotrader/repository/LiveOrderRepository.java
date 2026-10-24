@@ -32,6 +32,15 @@ public interface LiveOrderRepository extends MongoRepository<LiveOrder, String> 
     List<LiveOrder> findTop8ByStrategyIdOrderByCreatedTimeDesc(String strategyId);
 
     /**
+     * Whether the strategy has any recorded orders, so a strategy with a history is archived even
+     * when it predates the start markers.
+     *
+     * @param strategyId The strategy ID
+     * @return Whether at least one row exists
+     */
+    boolean existsByStrategyId(String strategyId);
+
+    /**
      * Whether the strategy has a real order the engine must stand down for: a pre-write that has
      * not been settled, including an ambiguous submission recorded as {@code FAILED}. The marker
      * is set when the row is written and cleared by every reconciliation outcome, so a timed-out
