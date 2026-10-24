@@ -140,10 +140,11 @@ public class LiveStrategyController {
      * @return Whether the strategy was archived instead of deleted
      */
     @Operation(summary = "Delete or archive a live strategy",
-            description = "A strategy that never started is deleted. One that has run is archived " +
-                          "instead: it disappears from the live page and the forms, but its orders " +
-                          "and positions stay for the account history page. An open position must " +
-                          "be closed before archiving.")
+            description = "A strategy with no orders or positions is deleted. One that has a " +
+                          "history is archived instead: it disappears from the live page and the " +
+                          "forms, but its orders and positions stay for the account history page. A " +
+                          "strategy with an open position cannot be deleted or archived; close the " +
+                          "position first.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Strategy deleted or archived",
                     content = @Content(mediaType = "application/json",

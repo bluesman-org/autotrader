@@ -33,6 +33,15 @@ public interface LivePositionRepository extends MongoRepository<LivePosition, St
     List<LivePosition> findAllByStrategyIdAndStatus(String strategyId, String status);
 
     /**
+     * Whether the strategy has any recorded positions, so a strategy with a history is archived
+     * even when it predates the start markers.
+     *
+     * @param strategyId The strategy ID
+     * @return Whether at least one position exists
+     */
+    boolean existsByStrategyId(String strategyId);
+
+    /**
      * Closed round trips that opened within the given range, for the history page. The range bounds
      * the read; the page filters, sorts and pages the result in memory because its totals and its
      * daily breakdown cover the whole selected period, not one page.

@@ -162,6 +162,26 @@ class LiveViewServiceTest {
     }
 
     @Test
+    void cards_markAStoppedStrategyWithClosedHistoryAsStarted() {
+        LiveStrategy strategy = strategy();
+        strategy.setLastStartedTime(null);
+        strategy.setSeriesStartTime(0);
+        strategy.setLastEvaluatedOpenTime(0);
+        when(liveStrategyService.active()).thenReturn(List.of(strategy));
+        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
+                .thenReturn(List.of(closedPosition(0.12)));
+        when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
+        when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
+
+        LiveCardView card = service.cards().get(0);
+
+        assertFalse(strategy.hasStarted());
+        assertTrue(card.started());
+        assertEquals("Realised since start: 1 round trips · +€0,12 · 1 wins / 0 losses · avg win +€0,12",
+                card.statsLine());
+    }
+
+    @Test
     void statsLine_reportsWinsLossesAndTheirAverages() {
         when(liveStrategyService.active()).thenReturn(List.of(strategy()));
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
@@ -203,6 +223,7 @@ class LiveViewServiceTest {
         strategy.setName(null);
         strategy.setLastStartedTime(null);
         strategy.setSeriesStartTime(0);
+        strategy.setLastEvaluatedOpenTime(0);
         when(liveStrategyService.active()).thenReturn(List.of(strategy));
         when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
