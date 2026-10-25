@@ -28,9 +28,10 @@ Caddy (PR #48). The trading-pair catalogue and the ledger reporting pass landed 
 PR #57. The live strategy management UI landed with PR #58, and the live order status guard with
 PR #59. The live position close/reconcile and email alert path merged with PR #61 and is deployed;
 the delete-path bug merged with PR #62 and was deployed, and the dry-run cleanup is complete. Web
-Push notifications are implemented on `feature/live-web-push` (merge pending). TradingView is kept
-as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`); next: dry strategy
-exploration, with the live trial user-triggered.
+Push notifications merged as PR #63 and are deployed; the phone test passed. The OpenAPI spec
+catch-up and the manifest MIME fix are on `bugfix/manifest-mime-and-openapi` (review pending).
+TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
+next: dry strategy exploration, with the live trial user-triggered.
 
 ## Objective
 
@@ -310,19 +311,21 @@ exploration, with the live trial user-triggered.
     position as started. The two affected strategies were restored for the cleanup: the orphaned
     dry position was closed and archived, and the other history label was restored (PR #62,
     deployed)
-34. ⬜ Web Push notifications next to email: the live engine's real fills, failures, pending orders
+34. ✅ Web Push notifications next to email: the live engine's real fills, failures, pending orders
     and held-back strategies also reach a subscribed browser, independently of SMTP. The settings
     page registers the service worker, asks for the permission, stores the browser's subscription
     and offers a test push per device. The VAPID pair is generated once and its private key kept
     encrypted in `push_settings`; subscriptions live in `push_subscriptions`, an unusable endpoint
     (403, 404 or 410) is removed, and the service worker, manifest and icon are the only public push
-    assets.
-    Android Chrome works in the browser; iOS needs the site on the home screen. Implemented on
-    `feature/live-web-push`; merge pending.
-35. ⬜ Regenerate the committed OpenAPI spec after #63 merges: the push endpoints, the #61
-    close/reconcile endpoints and the #62 delete description are missing from the committed copy.
-    It is split into a follow-up so the Web Push PR stays within the reviewer's diff limit;
-    regenerate it with the clean 8081 startup procedure.
+    assets. Android Chrome works in the browser; iOS needs the site on the home screen (PR #63,
+    deployed; locked-screen test passed)
+35. ✅ Regenerate the committed OpenAPI spec after #63: it now includes the push endpoints, the #61
+    close/reconcile endpoints and the #62 delete description, which were missing from the committed
+    copy. It is generated with the clean 8081 startup procedure (this PR).
+36. ✅ Serve the web app manifest as `manifest.json` instead of `.webmanifest`: Spring's static
+    resource handler served the latter as `application/octet-stream`, which browsers may reject;
+    `.json` is served as `application/json`. The link, the security open path and the docs follow
+    the new name (this PR).
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

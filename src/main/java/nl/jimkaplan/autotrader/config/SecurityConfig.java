@@ -50,7 +50,7 @@ public class SecurityConfig {
             "/", "/login", "/signup", "/forgot-password", "/reset-password",
             "/css/**", "/js/**", "/images/**", "/favicon.ico", "/error",
             "/actuator/health", "/webhook/**",
-            "/service-worker.js", "/manifest.webmanifest", "/icon.svg"
+            "/service-worker.js", "/manifest.json", "/icon.svg"
     };
 
     /**

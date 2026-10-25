@@ -13,7 +13,7 @@ class SecurityConfigOpenPathsTest {
     @Test
     void onlyThePushStaticAssetsAreOpen() {
         assertThat(SecurityConfig.OPEN_PATHS)
-                .contains("/service-worker.js", "/manifest.webmanifest", "/icon.svg")
+                .contains("/service-worker.js", "/manifest.json", "/icon.svg")
                 .doesNotContain("/api/push/public-key", "/api/push/subscriptions", "/api/push/test");
     }
 }
