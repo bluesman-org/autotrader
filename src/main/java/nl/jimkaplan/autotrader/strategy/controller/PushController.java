@@ -98,7 +98,7 @@ public class PushController {
      *
      * @return How many subscriptions accepted it
      */
-    @Operation(summary = "Send a test push",
+    @Operation(summary = "Send a test push", operationId = "sendTestPush",
             description = "Sends a test notification to every subscribed browser and reports how " +
                           "many push services accepted it. Fails with 400 when no browser is " +
                           "subscribed.")

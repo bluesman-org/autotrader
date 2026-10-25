@@ -281,7 +281,7 @@ class SettingsUiControllerRenderTest {
                 .andExpect(content().string(containsString("Enable on this device")))
                 .andExpect(content().string(containsString("Send test push")))
                 .andExpect(content().string(containsString("service-worker.js")))
-                .andExpect(content().string(containsString("manifest.webmanifest")));
+                .andExpect(content().string(containsString("manifest.json")));
     }
 
     @Test

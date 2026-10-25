@@ -13,7 +13,7 @@ user would have nothing of their own.
 | --- | --- |
 | `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password` | anyone |
 | `/css/**`, `/js/**`, `/images/**`, `/favicon.ico`, `/error` | anyone |
-| `/service-worker.js`, `/manifest.webmanifest`, `/icon.svg` | anyone — static Web Push assets, no account data |
+| `/service-worker.js`, `/manifest.json`, `/icon.svg` | anyone — static Web Push assets, no account data |
 | `/actuator/health` | anyone (the monitoring probe) |
 | `/webhook/**` | anyone — the TradingView webhook authenticates itself with its own key |
 | `/v3/api-docs/**` | a signed-in account, and the machine itself (the specification exporter fetches it over the loopback at startup) |
@@ -67,9 +67,11 @@ corrected without re-typing it. No SMTP environment variables are required.
 ## Web Push
 
 Live alerts also go to subscribed browsers (see "Alerts" in `docs/live-engine.md`). Only three push
-assets are public: `service-worker.js`, `manifest.webmanifest` and `icon.svg`. They are static and
-carry no account data. The subscription API (`/api/push/**`) and the settings page need a signed-in
-session; CSRF is off for `/api/**` like the rest of the API, and the session cookie is
+assets are public: `service-worker.js`, `manifest.json` and `icon.svg`. They are static and
+carry no account data. The manifest is `.json` rather than `.webmanifest` because Spring's static
+resource handler serves the latter as `application/octet-stream`, which browsers may reject; `.json`
+is served as `application/json`. The subscription API (`/api/push/**`) and the settings page need a
+signed-in session; CSRF is off for `/api/**` like the rest of the API, and the session cookie is
 `SameSite=Strict`.
 
 - **VAPID key pair.** Generated once on the first request for the public key. The private key is

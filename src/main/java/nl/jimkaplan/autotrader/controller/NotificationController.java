@@ -29,7 +29,7 @@ public class NotificationController {
      *
      * @return A confirmation message
      */
-    @Operation(summary = "Send a test alert",
+    @Operation(summary = "Send a test alert", operationId = "sendTestAlert",
             description = "Sends one mail to the account's email address through the stored SMTP "
                           + "server. Fails when no account email or no SMTP server is configured.")
     @ApiResponse(responseCode = "200", description = "The test alert was sent",
