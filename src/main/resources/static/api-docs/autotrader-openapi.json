@@ -388,7 +388,7 @@
         ],
         "summary": "Send a test push",
         "description": "Sends a test notification to every subscribed browser and reports how many push services accepted it. Fails with 400 when no browser is subscribed.",
-        "operationId": "test",
+        "operationId": "sendTestPush",
         "responses": {
           "200": {
             "description": "Test sent",
@@ -509,7 +509,7 @@
         ],
         "summary": "Send a test alert",
         "description": "Sends one mail to the account's email address through the stored SMTP server. Fails when no account email or no SMTP server is configured.",
-        "operationId": "test_1",
+        "operationId": "sendTestAlert",
         "responses": {
           "200": {
             "description": "The test alert was sent",

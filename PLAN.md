@@ -321,11 +321,14 @@ next: dry strategy exploration, with the live trial user-triggered.
     deployed; locked-screen test passed)
 35. ✅ Regenerate the committed OpenAPI spec after #63: it now includes the push endpoints, the #61
     close/reconcile endpoints and the #62 delete description, which were missing from the committed
-    copy. It is generated with the clean 8081 startup procedure (this PR).
+    copy. It is generated with the clean 8081 startup procedure. The two test endpoints have
+    explicit operation IDs (`sendTestAlert`, `sendTestPush`), and `OpenApiSpecDriftTest` boots the
+    app on a random port and compares `/v3/api-docs` with the committed JSON, so a future annotation
+    change fails CI when the spec is stale.
 36. ✅ Serve the web app manifest as `manifest.json` instead of `.webmanifest`: Spring's static
     resource handler served the latter as `application/octet-stream`, which browsers may reject;
     `.json` is served as `application/json`. The link, the security open path and the docs follow
-    the new name (this PR).
+    the new name, and a request-level test pins the anonymous 200 and the JSON content type.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
