@@ -39,6 +39,8 @@ class HelpControllerRenderTest {
                 .andExpect(content().string(containsString("Max drawdown")))
                 .andExpect(content().string(containsString("Profit factor")))
                 .andExpect(content().string(containsString("Possible spam")))
+                .andExpect(content().string(containsString("brief stream outage")))
+                .andExpect(content().string(containsString("cannot be resolved")))
                 .andExpect(content().string(containsString("Closing and history")))
                 .andExpect(content().string(containsString("id=\"glossary\"")))
                 .andExpect(content().string(containsString("href=\"/ui/help\"")));

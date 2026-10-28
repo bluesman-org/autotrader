@@ -506,7 +506,9 @@
             <p>The engine only acts when a candle closes. A 1h strategy can be quiet for an hour. Check
                 that the card says it is connected, and read the last error. If the stream is
                 disconnected, wait for the reconnect; if there is an error, the reason is on the card.
-                Old candles are never replayed, so a gap in the stream is not traded later.</p>
+                The seed and downtime between runs are never replayed. A candle that closes during a
+                brief stream outage is evaluated when the stream reconnects; only a boundary whose
+                candle cannot be resolved becomes a SKIPPED row.</p>
         </details>
 
         <details>
@@ -526,10 +528,12 @@
 
         <details>
             <summary>Why does the live result differ from the backtest?</summary>
-            <p>The live strategy has its own start point (the anchor) and does not replay the past.
-                A gap in the candle stream becomes a skipped boundary. The backtest may have started
-                from a different point, with different warm-up or a different position at the start.
-                Fees and fills also differ slightly because live fills use the exchange's report.</p>
+            <p>The live strategy has its own start point (the anchor) and never replays the seed or
+                downtime. A candle that closes during a brief stream outage is evaluated when the
+                stream reconnects; only a boundary whose candle cannot be resolved becomes a SKIPPED
+                row. The backtest may have started from a different point, with different warm-up or a
+                different position at the start. Fees and fills also differ slightly because live fills
+                use the exchange's report.</p>
         </details>
 
         <details>
