@@ -34,7 +34,8 @@
         <p class="muted" th:unless="${credentials.configured}">No key is configured yet.</p>
 
         <p class="muted">The key is used as-is and never shown again — replacing it overwrites the
-            stored one. Use a key that may trade, because the engine places real orders with it.</p>
+            stored one. Use a key that may trade, because the engine places real orders with it.
+            <a th:href="@{/ui/help} + '#settings'">Which permissions does the key need?</a></p>
         <form method="post" th:action="@{/ui/settings}" autocomplete="off">
             <div class="filters">
                 <div class="f">
@@ -143,7 +144,8 @@
 
         <p class="muted">The recovery mail is sent through this server. The password is needed only
             when the server asks for a username; it is written once, never shown again, and leaving
-            it blank keeps the stored one.</p>
+            it blank keeps the stored one.
+            <a th:href="@{/ui/help} + '#alerts'">How do alerts work?</a></p>
         <form th:if="${mail.configured}" method="post"
               th:action="@{/ui/settings/notifications/test}" style="margin-bottom:14px">
             <button class="secondary" type="submit">Send test alert</button>
@@ -200,7 +202,7 @@
             service worker and keys stay on this server. Android Chrome works in the browser. On an
             iPhone, add this site to the home screen first; iOS delivers Web Push only to an installed
             web app. If the VAPID key pair is rotated, disable and enable notifications again on each
-            device.</p>
+            device. <a th:href="@{/ui/help} + '#alerts'">Chrome says “Possible spam”?</a></p>
         <p>
             <button class="secondary" id="push-enable" type="button">Enable on this device</button>
             <button class="secondary" id="push-disable" type="button">Disable on this device</button>

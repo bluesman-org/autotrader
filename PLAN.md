@@ -29,9 +29,10 @@ PR #57. The live strategy management UI landed with PR #58, and the live order s
 PR #59. The live position close/reconcile and email alert path merged with PR #61 and is deployed;
 the delete-path bug merged with PR #62 and was deployed, and the dry-run cleanup is complete. Web
 Push notifications merged as PR #63 and are deployed; the phone test passed. The OpenAPI spec
-catch-up and the manifest MIME fix are on `bugfix/manifest-mime-and-openapi` (review pending).
+catch-up and the manifest MIME fix merged as `89d8cee` (PR #64) and are deployed. The dry
+exploration is running with five BTC-EUR strategies. The in-app Help page is in this PR (item 37).
 TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
-next: dry strategy exploration, with the live trial user-triggered.
+next: compare the dry strategies, with the live trial user-triggered.
 
 ## Objective
 
@@ -329,6 +330,16 @@ next: dry strategy exploration, with the live trial user-triggered.
     resource handler served the latter as `application/octet-stream`, which browsers may reject;
     `.json` is served as `application/json`. The link, the security open path and the docs follow
     the new name, and a request-level test pins the anonymous 200 and the JSON content type.
+37. ✅ In-app help page: a single signed-in `/ui/help` operator guide with a contents list, short
+    sections for the live engine, strategies, positions and history, alerts and push, settings and
+    security, troubleshooting and a glossary. The backtest section explains train/validate, every
+    result column, the simulation assumptions and worked examples in plain language. The Help link
+    is in the navigation, with contextual links from the backtest, live, close/reconcile and
+    settings pages. Static page; no model or repository. Tests cover the page, the sign-in rule and
+    the contextual links (this PR).
+38. ✅ Stabilize the live-runner anchor test: its bounds were on the wrong side of the start time,
+    so a slow CI run failed even though the anchor was correct. It now checks the anchor between
+    `beforeStart - window` and `afterStart - window` (this PR).
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
