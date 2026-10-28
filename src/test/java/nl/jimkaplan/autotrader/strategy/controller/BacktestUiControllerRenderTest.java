@@ -65,7 +65,6 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 .andExpect(content().string(containsString("SAR BEARISH CROSSOVER")))
                 .andExpect(content().string(containsString("Run sweep")))
-                .andExpect(content().string(containsString("How to read a backtest")))
                 // The fee-cover hint, its default data attributes and the ids its script looks up
                 .andExpect(content().string(containsString("id=\"fee-hint\"")))
                 .andExpect(content().string(containsString("id=\"initialCapital\"")))

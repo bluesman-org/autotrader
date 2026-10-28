@@ -248,7 +248,7 @@
             </tr>
             <tr>
                 <td><span class="badge real">FILLED</span></td>
-                <td>The exchange filled a real order, or a dry close recorded its simulated fill.</td>
+                <td>The exchange filled a real order.</td>
             </tr>
             <tr>
                 <td><span class="badge warn">PENDING</span></td>
@@ -490,7 +490,9 @@
         <ul>
             <li>There is one account. The pages use a signed-in session; the JSON API uses HTTP
                 Basic with the same account.</li>
-            <li>Change the password here; other sessions keep running until they are used again.</li>
+            <li>Changing the password applies to new sign-ins. Browsers that are already signed in
+                keep working until they sign out or the session expires, so sign out on any device
+                you no longer trust.</li>
             <li>In production, the app is served over HTTPS. The TradingView webhook stays open
                 because it authenticates itself.</li>
             <li>The API documentation is at <a th:href="@{/swagger-ui.html}">API docs</a>.</li>

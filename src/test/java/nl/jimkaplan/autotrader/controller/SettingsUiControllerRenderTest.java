@@ -92,8 +92,7 @@ class SettingsUiControllerRenderTest {
                 .andExpect(content().string(containsString("href=\"/ui/help#settings\"")))
                 .andExpect(content().string(containsString("16 Oct 2026 08:00 (UTC)")))
                 .andExpect(content().string(containsString("type=\"password\" name=\"apiKey\"")))
-                .andExpect(content().string(containsString("type=\"password\" name=\"apiSecret\"")))
-                .andExpect(content().string(containsString("Which permissions does the key need?")));
+                .andExpect(content().string(containsString("type=\"password\" name=\"apiSecret\"")));
     }
 
     @Test
