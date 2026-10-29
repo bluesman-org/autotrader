@@ -35,6 +35,7 @@
     </div>
 
     <h2>Ranked combinations</h2>
+    <p class="muted"><a th:href="@{/ui/help#backtest}">How to read this table</a></p>
     <p class="muted">
         Ranked by <span th:text="${#strings.replace(run.rankingMetric, '_', ' ')}">TOTAL RETURN</span> on the
         train side; only the best 50 combinations are stored per run. Click a row number to see that

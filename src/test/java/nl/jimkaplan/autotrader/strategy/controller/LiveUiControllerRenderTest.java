@@ -70,6 +70,8 @@ class LiveUiControllerRenderTest {
         mockMvc.perform(get("/ui/live"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Live engine")))
+                .andExpect(content().string(containsString("How the live engine works")))
+                .andExpect(content().string(containsString("href=\"/ui/help#live\"")))
                 .andExpect(content().string(containsString("Order times are local time (UTC)")))
                 .andExpect(content().string(containsString("id=\"last-refresh\"")))
                 .andExpect(content().string(containsString("data-time-zone=\"UTC\"")))
@@ -180,7 +182,8 @@ class LiveUiControllerRenderTest {
                 .andExpect(content().string(containsString("Close position")))
                 .andExpect(content().string(containsString("Estimated result after fees")))
                 .andExpect(content().string(containsString("+€0,05")))
-                .andExpect(content().string(containsString("Sell at market and close")));
+                .andExpect(content().string(containsString("Sell at market and close")))
+                .andExpect(content().string(containsString("href=\"/ui/help#positions\"")));
     }
 
     @Test
@@ -197,7 +200,8 @@ class LiveUiControllerRenderTest {
                 .andExpect(content().string(containsString("Reconcile a manual close")))
                 .andExpect(content().string(containsString("Use this sell")))
                 .andExpect(content().string(containsString("21 Oct 2026 14:00 (UTC)")))
-                .andExpect(content().string(containsString("covers the position")));
+                .andExpect(content().string(containsString("covers the position")))
+                .andExpect(content().string(containsString("href=\"/ui/help#positions\"")));
     }
 
     @Test
@@ -230,7 +234,8 @@ class LiveUiControllerRenderTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("New live strategy")))
                 .andExpect(content().string(containsString("BTC-EUR")))
-                .andExpect(content().string(containsString("Create strategy")));
+                .andExpect(content().string(containsString("Create strategy")))
+                .andExpect(content().string(containsString("href=\"/ui/help#strategies\"")));
     }
 
     @Test

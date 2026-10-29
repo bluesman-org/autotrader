@@ -93,12 +93,14 @@ class LiveStrategyRunnerTest {
 
         runner.start();
 
+        long afterStart = System.currentTimeMillis();
         ArgumentCaptor<Long> anchorCaptor = ArgumentCaptor.forClass(Long.class);
         verify(liveStrategyRepository).updateSeriesStartTime(eq(STRATEGY_ID), anchorCaptor.capture());
         long window = 1007L * HOUR; // warm-up 0 + MACD slow 5 + signal 2 + margin 1000, one-hour candles
         long anchor = anchorCaptor.getValue();
-        assertTrue(anchor <= beforeStart - window && anchor > beforeStart - window - 60_000,
-                "the anchor should be the start time minus the seed window, but was " + anchor);
+        assertTrue(anchor >= beforeStart - window && anchor <= afterStart - window,
+                "the anchor should be between the start of the call minus the seed window and the "
+                        + "end of the call minus the seed window, but was " + anchor);
         verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
                 eq(at(anchor)), any());
     }

@@ -88,6 +88,8 @@ class SettingsUiControllerRenderTest {
                 .andExpect(content().string(containsString("configured")))
                 .andExpect(content().string(containsString("…1234")))
                 .andExpect(content().string(containsString("operator id 7")))
+                .andExpect(content().string(containsString("Which permissions does the key need?")))
+                .andExpect(content().string(containsString("href=\"/ui/help#settings\"")))
                 .andExpect(content().string(containsString("16 Oct 2026 08:00 (UTC)")))
                 .andExpect(content().string(containsString("type=\"password\" name=\"apiKey\"")))
                 .andExpect(content().string(containsString("type=\"password\" name=\"apiSecret\"")));
@@ -126,6 +128,8 @@ class SettingsUiControllerRenderTest {
                 .andExpect(content().string(containsString("from autotrader@example.com")))
                 .andExpect(content().string(containsString("STARTTLS")))
                 .andExpect(content().string(containsString("Send test alert")))
+                .andExpect(content().string(containsString("How do alerts work?")))
+                .andExpect(content().string(containsString("href=\"/ui/help#alerts\"")))
                 // The stored password never travels back into the page.
                 .andExpect(content().string(not(containsString("smtp-password"))));
     }
@@ -281,7 +285,9 @@ class SettingsUiControllerRenderTest {
                 .andExpect(content().string(containsString("Enable on this device")))
                 .andExpect(content().string(containsString("Send test push")))
                 .andExpect(content().string(containsString("service-worker.js")))
-                .andExpect(content().string(containsString("manifest.json")));
+                .andExpect(content().string(containsString("manifest.json")))
+                .andExpect(content().string(containsString("Chrome says")))
+                .andExpect(content().string(containsString("href=\"/ui/help#alerts\"")));
     }
 
     @Test

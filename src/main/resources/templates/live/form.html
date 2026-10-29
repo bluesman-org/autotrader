@@ -17,6 +17,7 @@
         The engine evaluates these rules on closed candles and fills at the next candle's open, the
         same way a backtest does. A new strategy is not started until you press Start on the live
         page.
+        <a th:href="@{/ui/help} + '#strategies'">Help with these settings</a>.
     </p>
 
     <div class="banner error" th:if="${error}" th:text="${error}">error</div>

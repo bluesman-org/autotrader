@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help · Autotrader</title>
+    <link rel="icon"
+          href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+    <link rel="manifest" th:href="@{/manifest.json}">
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <link rel="stylesheet" th:href="@{/css/help.css}">
+</head>
+<body>
+<nav th:replace="~{fragments/nav :: nav}"></nav>
+<main class="container help-page">
+    <h1>Help</h1>
+    <p class="muted help-lede">
+        A plain guide to the app: what a backtest means, how the live engine behaves, and what to do
+        when something looks wrong. Use the contents to jump to a section.
+    </p>
+
+    <div class="card help-toc">
+        <a href="#start">Start here</a>
+        <a href="#backtest">Reading a backtest</a>
+        <a href="#live">The live engine</a>
+        <a href="#strategies">Strategies</a>
+        <a href="#positions">Closing and history</a>
+        <a href="#alerts">Alerts and push</a>
+        <a href="#settings">Settings and security</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+        <a href="#glossary">Glossary</a>
+    </div>
+
+    <section class="card help-section" id="start">
+        <h2>Start here</h2>
+        <p><b>In short:</b> a dry run is a simulator. A real strategy sends orders to Bitvavo.</p>
+
+        <table>
+            <thead>
+            <tr>
+                <th>Mode</th>
+                <th>What happens</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td><span class="badge dry">DRY RUN</span></td>
+                <td>Orders are recorded, but nothing is sent to the exchange. No real money moves.
+                    Dry runs never send email or push alerts.</td>
+            </tr>
+            <tr>
+                <td><span class="badge real">REAL</span></td>
+                <td>Orders are sent to Bitvavo as market orders. Real money moves. Fills and failures
+                    send the alerts you enabled on the settings page.</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div class="help-example">
+            <p><b>Example.</b> A dry buy of €1,000 records a simulated buy at the candle's opening
+                price. Your Bitvavo balance does not change. A real buy sends a market order for
+                about €1,000; the exchange decides the fill price and charges its fee.</p>
+        </div>
+
+        <h3>The main pages</h3>
+        <ul>
+            <li><a th:href="@{/ui/backtests}">Backtests</a> — test rules and settings on old candles.</li>
+            <li><a th:href="@{/ui/live}">Live</a> — create, start, stop and watch strategies.</li>
+            <li><a th:href="@{/ui/history}">History</a> — the engine's closed round trips and the
+                Bitvavo ledger.</li>
+            <li><a th:href="@{/ui/settings}">Settings</a> — the Bitvavo key, trading pairs, email,
+                push devices and password.</li>
+            <li><a th:href="@{/swagger-ui.html}">API docs</a> — the same actions through the JSON API.</li>
+        </ul>
+
+        <h3>Stopping is not the same as closing</h3>
+        <p><b>Stop</b> disconnects a strategy. It stops making new decisions. A position that is
+            already open stays open.</p>
+        <p><b>Close position</b> sells that open position. It is a separate action. An open position
+            also stops you from archiving or deleting the strategy.</p>
+        <p>There is no automatic profit or loss stop. You decide when to stop and close. Keep an eye
+            on the live page, or use the real-order alerts.</p>
+    </section>
+
+    <section class="card help-section" id="backtest">
+        <h2>Reading a backtest</h2>
+        <p><b>In short:</b> a backtest replays old candles. The app first finds settings that work
+            on the earlier part of the history (train), then checks those same settings on the later
+            part it did not use (validate).</p>
+
+        <div class="help-split">
+            <div class="train">
+                <b>Train — first 70%</b><br>
+                The practice exam. The app tries the parameter combinations here and ranks them.
+            </div>
+            <div class="validate">
+                <b>Validate — last 30%</b><br>
+                The real test. These candles were not used to choose the settings.
+            </div>
+        </div>
+
+        <h3>What the columns mean</h3>
+        <p>The run table repeats these six columns under <b>Train</b> and <b>Validate</b>. The
+            default split is 70/30; the form can change it.</p>
+        <table>
+            <thead>
+            <tr>
+                <th>Column</th>
+                <th>Plain meaning</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td><b>Trades</b></td>
+                <td>Completed buy-and-sell round trips. More trades are more evidence, but also more
+                    fees and noise. Five to ten trades is a thin sample; fifteen or more is better.</td>
+            </tr>
+            <tr>
+                <td><b>Skipped</b></td>
+                <td>Entry signals that could not be filled, usually because the test account did not
+                    have enough cash for the amount plus its fee. A high number means the result is
+                    less complete.</td>
+            </tr>
+            <tr>
+                <td><b>Return %</b></td>
+                <td>Total gain or loss on the starting cash, after fees. It is not annualised.</td>
+            </tr>
+            <tr>
+                <td><b>Max DD %</b></td>
+                <td><b>Max drawdown:</b> the worst fall from a high point of the equity curve. It is
+                    the pain you would have had to sit through. Lower is better.</td>
+            </tr>
+            <tr>
+                <td><b>Win %</b></td>
+                <td>The share of trades that made money. A low win rate can still be profitable when
+                    the winners are much bigger than the losers.</td>
+            </tr>
+            <tr>
+                <td><b>PF</b></td>
+                <td><b>Profit factor:</b> money won divided by money lost. Above 1 is profitable;
+                    infinity means there were no losing trades. A few big wins can make it look strong
+                    on a small sample.</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <h3>A small worked example</h3>
+        <div class="help-example">
+            <p><b>One round trip.</b> Buy €1,000 of BTC. The price rises 1%, so the gross gain is €10.
+                The fee is 0.2% on the buy (€2) and 0.2% on the sell (about €2). The net gain is about
+                <b>€6</b>.</p>
+        </div>
+        <div class="help-example">
+            <p><b>Max drawdown.</b> The test account reaches €10,500, then falls to €9,800. It dropped
+                €700 from its peak, about <b>6.7%</b>.</p>
+        </div>
+        <div class="help-example">
+            <p><b>Profit factor.</b> If the winning trades made €300 and the losing trades lost €100,
+                the profit factor is <b>3.0</b>. If both are €300, it is <b>1.0</b>.</p>
+        </div>
+        <div class="help-example">
+            <p><b>Win rate.</b> Four winners of €80 and six losers of €40 is a 40% win rate, but the
+                net result is still <b>+€80</b>. The win rate alone does not tell you whether a
+                strategy made money.</p>
+        </div>
+
+        <h3>What to look for</h3>
+        <ul>
+            <li><b>Start with validate.</b> The app ranks the table by the train result, so scroll
+                across to the validate side before trusting a row. A row that only looks good on train
+                is probably overfit.</li>
+            <li><b>Check the trade count.</b> A +20% result from three trades is luck, not evidence.</li>
+            <li><b>Check the drawdown.</b> A strategy that made money but spent months far below its
+                peak is harder to follow than the return suggests.</li>
+            <li><b>Read the win rate and profit factor together.</b> Each one alone can mislead.</li>
+        </ul>
+
+        <div class="help-example">
+            <p><b>Example table row (made up).</b> A strategy with 30 train trades, −1.0% train,
+                15 validate trades and +3.0% validate is interesting: it was slightly down in the
+                practice period and made money on the held-out period. The real run page shows your
+                actual numbers.</p>
+        </div>
+
+        <h3>What the simulation assumes</h3>
+        <ul>
+            <li>It decides after a candle has closed and fills at the next candle's open.</li>
+            <li>It holds one position at a time. It does not short.</li>
+            <li>Each buy spends the fixed euro amount from the form.</li>
+            <li>The fee defaults to 0.20% per side, the current taker rate. Set your own rate in the
+                form if your account tier differs.</li>
+            <li>The test account starts with the <b>initial capital</b> in the form. The returns are
+                on that amount, not on the amount per buy.</li>
+            <li>The first <b>warm-up</b> candles on the train side are never traded; the indicators
+                also need their own warm-up. The validate side starts with the earlier candles already
+                behind it.</li>
+            <li>Any open position is closed at the last candle, so every run ends flat.</li>
+            <li>It does not model order-book liquidity, slippage or exchange outages.</li>
+        </ul>
+
+        <h3>Why the percentages can look small</h3>
+        <p>The worked example uses €10,000 starting cash and buys €1,000 at a time. A +3%
+            validation is about <b>€300</b> on €10,000, not 3% on the €1,000 position. The live dry
+            page shows profits in euros, so compare the same kind of number.</p>
+
+        <h3>On the run page</h3>
+        <p>The form chooses the market, interval, date range, amount, fees, warm-up, train share,
+            ranking metric, indicator parameters and entry/exit rules. The run page stores the top
+            50 combinations, ranked on the train side. Click a row number to see that entry's
+            individual train and validate trades. <b>Use live</b> opens the create form with that
+            entry's settings filled in.</p>
+        <p class="muted">Backtest and live results can differ. See
+            <a href="#live">The live engine</a> and <a href="#troubleshooting">Troubleshooting</a>.</p>
+    </section>
+
+    <section class="card help-section" id="live">
+        <h2>The live engine</h2>
+        <p><b>In short:</b> the engine waits for a candle to close, decides from the closed candle,
+            and fills at the next candle's open. It holds one position at a time.</p>
+
+        <h3>What happens on each candle</h3>
+        <ol>
+            <li>The candle closes. The engine reads the market and interval from the strategy.</li>
+            <li>It checks the entry rules if it is flat, or the exit rules if it has a position.</li>
+            <li>If a rule fires, the fill is at the next candle's open. A dry run records that price.
+                A real strategy sends a market order at that moment.</li>
+            <li>If no rule fires, nothing happens.</li>
+        </ol>
+
+        <div class="help-example">
+            <p><b>Example.</b> A 1h strategy sees an entry signal when the 14:00 candle closes. It
+                fills at the open of the 15:00 candle. A dry run records a simulated buy; a real
+                strategy sends the order. It does not buy at the 14:00 close.</p>
+        </div>
+
+        <h3>Order statuses</h3>
+        <table>
+            <thead>
+            <tr>
+                <th>Status</th>
+                <th>What it means</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td><span class="badge dry">DRY_RUN</span></td>
+                <td>A simulated order. Nothing was sent to Bitvavo.</td>
+            </tr>
+            <tr>
+                <td><span class="badge real">FILLED</span></td>
+                <td>The exchange filled a real order.</td>
+            </tr>
+            <tr>
+                <td><span class="badge warn">PENDING</span></td>
+                <td>The app does not yet know the final state of a real order. It sends no new
+                    decisions for that strategy until the next start-up reconciliation settles it.</td>
+            </tr>
+            <tr>
+                <td><span class="badge bad">FAILED</span></td>
+                <td>The exchange said the order will not fill, or it rejected the order. The error
+                    column says why.</td>
+            </tr>
+            <tr>
+                <td><span class="badge">REJECTED</span></td>
+                <td>The app refused to send the order, for example because the key, balance or market
+                    minimum was not usable. No exchange order was created.</td>
+            </tr>
+            <tr>
+                <td><span class="badge">SKIPPED</span></td>
+                <td>The engine could not read the candle for that boundary, so it did not evaluate a
+                    trade. The reason column says why.</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <h3>Start, stop and restart</h3>
+        <ul>
+            <li><b>Start</b> seeds the strategy's history, connects to Bitvavo and starts watching
+                closed candles. It does not replay old opportunities.</li>
+            <li><b>Stop</b> disconnects it. An open position stays open; close it separately.</li>
+            <li><b>Restart</b> keeps the same series start (the <b>anchor</b>), so the indicator
+                decisions stay consistent. Downtime is not replayed.</li>
+            <li>The pair and interval are fixed after the first start. Use <b>Duplicate</b> to try
+                the same rules on another pair or interval.</li>
+        </ul>
+
+        <h3>What the live page shows</h3>
+        <p>Each card shows the strategy, its position, its recent orders and whether the candle
+            stream is connected. The page refreshes every 10 seconds. A <b>last error</b> means the
+            stream or the exchange reported a problem; the strategy may still be running without
+            receiving candles.</p>
+        <p class="muted">If a strategy is running but silent, see
+            <a href="#troubleshooting">Troubleshooting</a>.</p>
+    </section>
+
+    <section class="card help-section" id="strategies">
+        <h2>Strategies</h2>
+        <p><b>In short:</b> a strategy is a pair, an interval, an amount and a set of MACD and
+            Parabolic SAR rules. Dry or real is chosen when you create it and never changes.</p>
+
+        <h3>Creating one</h3>
+        <ul>
+            <li><b>Name</b> — a label for the live page and history.</li>
+            <li><b>Market and interval</b> — only EUR-quoted pairs. They are fixed after the first
+                start.</li>
+            <li><b>Amount per buy</b> — the euro amount of each simulated or real buy, before fees.</li>
+            <li><b>Warm-up</b> — candles the strategy never trades while the indicators settle. The
+                default is 200, plus the indicators' own warm-up.</li>
+            <li><b>MACD</b> — fast, slow and signal periods, default 12/26/9.</li>
+            <li><b>SAR</b> — acceleration and maximum, default 0.02/0.2.</li>
+            <li><b>Entry and exit rules</b> — conditions combined with ALL or ANY.</li>
+        </ul>
+
+        <h3>The two indicators</h3>
+        <p><b>MACD</b> compares two moving averages and a signal line. The histogram is the gap
+            between the MACD line and its signal. <b>Parabolic SAR</b> is a line that flips above or
+            below the price as the trend changes. They are tools for reading momentum and trend;
+            they do not predict the future on their own.</p>
+
+        <h3>The rule conditions</h3>
+        <p>A crossover compares the current candle with the previous one. A condition with no
+            previous candle is false.</p>
+        <ul>
+            <li><b>MACD bullish crossover</b> — the MACD line crosses above its signal line.</li>
+            <li><b>MACD bearish crossover</b> — the MACD line crosses below its signal line.</li>
+            <li><b>MACD above / below signal</b> — the lines are already on that side; no crossover
+                needed.</li>
+            <li><b>Histogram positive / negative</b> — the MACD line is above / below its signal line.</li>
+            <li><b>Price above / below SAR</b> — the close is on that side of the Parabolic SAR.</li>
+            <li><b>SAR bullish / bearish crossover</b> — the close crosses the SAR in that direction.</li>
+        </ul>
+        <p><b>ALL</b> means every condition must be true on the same closed candle. <b>ANY</b> means
+            at least one must be true.</p>
+
+        <div class="help-example">
+            <p><b>Example.</b> Entry <b>ALL</b> with MACD bullish crossover and SAR bullish crossover
+                waits until both cross on the same closed candle. Entry <b>ANY</b> with the same two
+                conditions opens when either one crosses.</p>
+        </div>
+
+        <h3>Dry and real copies</h3>
+        <p>A dry strategy records simulated orders. A real strategy sends market orders. You cannot
+            switch an existing strategy between the two. Create a dry copy, or use <b>Create real
+            copy</b> after a dry run, and keep the same rules and sizing.</p>
+
+        <h3>Editing, archiving and deleting</h3>
+        <ul>
+            <li>Only a stopped strategy can be edited. The pair and interval stay fixed after the
+                first start; dry/real cannot change.</li>
+            <li>A strategy that never started and has no orders or positions can be deleted.</li>
+            <li>One that has run, or has any orders or positions, is archived instead. Its history
+                stays in the History page.</li>
+            <li>An open position blocks both delete and archive. Close it or reconcile a manual sell
+                first.</li>
+        </ul>
+    </section>
+
+    <section class="card help-section" id="positions">
+        <h2>Closing and history</h2>
+        <p><b>In short:</b> stop first, then close. A manual sell made on Bitvavo can be attached to
+            the strategy, but only a verified exchange order is accepted.</p>
+
+        <h3>Close a position in the app</h3>
+        <ol>
+            <li>Stop the strategy.</li>
+            <li>Open <b>Close position</b> on its card.</li>
+            <li>Check the current bid, the estimated sell fee and the estimated result.</li>
+            <li>Confirm. A dry run records a simulated sell at the bid. A real strategy sends a
+                market sell.</li>
+        </ol>
+        <p>A real close is recorded as filled only when the exchange reports it filled. If it is
+            left pending, the position stays open and the strategy stands down until the next
+            start-up reconciliation. Do not place another close.</p>
+        <div class="help-example">
+            <p><b>Example.</b> A dry position is worth €1,012 at the current bid. The close preview
+                shows the bid, the estimated fee and the result after both fees. Confirming records a
+                simulated sell; your Bitvavo balance does not change.</p>
+        </div>
+
+        <h3>You sold on Bitvavo yourself</h3>
+        <p>Stop the strategy, open <b>Reconcile manual close</b>, and pick the filled sell that closed
+            the position. The app verifies the exchange order and records it as an external trade.
+            A sell that covers only part of the position is refused; a larger sell is prorated.</p>
+        <p>Only use this for a sell you actually made on Bitvavo's own app or website. It is not a
+            way to create a trade.</p>
+        <div class="help-example">
+            <p><b>Example.</b> You sold 0.010 BTC on the Bitvavo app. The strategy still shows an open
+                position of 0.010 BTC. After you pick that sell in <b>Reconcile manual close</b>, the
+                app records the external sell and closes the position. It does not send a second sell.</p>
+        </div>
+
+        <h3>The History page</h3>
+        <ul>
+            <li><b>Engine trades</b> — the strategy's closed round trips: entry, exit, fees and realised
+                profit. Archived strategies stay visible with an <b>(archived)</b> label.</li>
+            <li><b>Bitvavo ledger</b> — the account's orders and fills, average-cost profit and loss,
+                raw transactions and current prices. It is the exchange's view, not just the engine's.</li>
+        </ul>
+        <p>The two views can differ. The engine page is the strategy's own record; the ledger page is
+            the account's full Bitvavo history, including trades made elsewhere.</p>
+    </section>
+
+    <section class="card help-section" id="alerts">
+        <h2>Alerts and push</h2>
+        <p><b>In short:</b> only real events alert you. The app can send email and a browser push.
+            Dry runs never alert, and there is no daily heartbeat.</p>
+
+        <h3>What sends an alert</h3>
+        <ul>
+            <li>A real buy or sell filled.</li>
+            <li>A real order failed, was rejected, or is waiting for reconciliation.</li>
+            <li>A strategy was held back because start-up reconciliation failed.</li>
+        </ul>
+        <p>Email goes to the account's email address through the SMTP server on the settings page.
+            Push goes to every browser enabled in the settings push card.</p>
+        <div class="help-example">
+            <p><b>Example.</b> A real buy fills: you get one email and one push. A dry buy fills:
+                nothing is sent.</p>
+        </div>
+
+        <h3>Test the channels</h3>
+        <p>Use <b>Send test alert</b> for email and <b>Send test push</b> for push. They send one
+            message and report a problem on the page if the channel is not configured.</p>
+
+        <h3>Enable push on a phone</h3>
+        <ol>
+            <li>Open the settings page in Chrome.</li>
+            <li>Tap <b>Enable on this device</b> and allow notifications.</li>
+            <li>Wait for <b>1 device subscribed</b>. Lock the phone and use <b>Send test push</b>.</li>
+        </ol>
+        <p>Android Chrome works in the browser. On an iPhone, add the site to the home screen first;
+            iOS only delivers Web Push to an installed web app.</p>
+
+        <h3>Chrome says “Possible spam”</h3>
+        <p>That warning comes from Chrome's on-device spam filter. The app cannot switch it off. The
+            filter is more likely to flag repeated, generic test notifications from a new site; real
+            order alerts are specific and rare.</p>
+        <p>On the warning, tap <b>Show notification</b>, then <b>Always show</b> and <b>Mark as safe
+            to Chrome</b>. Do not tap Unsubscribe. Installing the site to the home screen also gives
+            it an app identity and helps.</p>
+        <div class="help-example">
+            <p><b>Example.</b> The warning shows “Possible spam” with two buttons. Tap <b>Show
+                notification</b>, then <b>Always show</b> → <b>Mark as safe to Chrome</b>. The next
+                notification should show normally.</p>
+        </div>
+        <p class="muted">If a warning still appears on real order alerts after that, check the site
+            permission under Chrome → Page info → Permissions → Notifications.</p>
+
+        <h3>If the VAPID key pair is rotated</h3>
+        <p>Rotating the key pair makes the old push subscriptions unusable. On each device, open the
+            settings page, disable notifications, then enable them again. The key pair is generated
+            once and kept encrypted in the database.</p>
+    </section>
+
+    <section class="card help-section" id="settings">
+        <h2>Settings and security</h2>
+        <p><b>In short:</b> one account, one system-wide Bitvavo key, and a key that can trade but
+            never needs withdrawal permission.</p>
+
+        <h3>The Bitvavo key</h3>
+        <ul>
+            <li>The live engine and the ledger use the same system-wide key from the settings page.</li>
+            <li>It is stored encrypted and shown only as a hint. Replacing it overwrites the stored
+                key.</li>
+            <li>It needs read permission and spot trading permission. It should <b>not</b> have
+                withdrawal permission.</li>
+            <li>If Bitvavo gives you an <b>operator id</b>, store it here so orders carry it.</li>
+        </ul>
+        <div class="help-example">
+            <p><b>Example.</b> A key with read-only permission can load balances and history, but a
+                real order will fail. A key with trade permission can place orders. Withdrawal
+                permission is not needed by anything in this app.</p>
+        </div>
+
+        <h3>Trading pairs</h3>
+        <p>The forms and the ledger offer the pairs in the catalogue. <b>Refresh from Bitvavo</b>
+            reads the account's trade history and adds or updates the pairs it finds. You can add a
+            pair by hand; disabling one hides it but keeps its history.</p>
+
+        <h3>Email</h3>
+        <p>Recovery mail and live alerts use the SMTP server on this page. Leave the password blank
+            when editing to keep the stored one. Use <b>Send test alert</b> to prove it.</p>
+
+        <h3>Push devices</h3>
+        <p>The push card lists how many devices are subscribed. Enable each device separately, and
+            use <b>Send test push</b> to prove it. A browser that is gone is removed automatically;
+            other failures keep the subscription and are logged.</p>
+
+        <h3>Account and API</h3>
+        <ul>
+            <li>There is one account. The pages use a signed-in session; the JSON API uses HTTP
+                Basic with the same account.</li>
+            <li>Changing the password applies to new sign-ins. Browsers that are already signed in
+                keep working until they sign out or the session expires, so sign out on any device
+                you no longer trust.</li>
+            <li>In production, the app is served over HTTPS. The TradingView webhook stays open
+                because it authenticates itself.</li>
+            <li>The API documentation is at <a th:href="@{/swagger-ui.html}">API docs</a>.</li>
+        </ul>
+    </section>
+
+    <section class="card help-section" id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <p><b>In short:</b> check the live page first for the strategy's state and last error.</p>
+
+        <details>
+            <summary>My strategy is running but nothing happens.</summary>
+            <p>The engine only acts when a candle closes. A 1h strategy can be quiet for an hour. Check
+                that the card says it is connected, and read the last error. If the stream is
+                disconnected, wait for the reconnect; if there is an error, the reason is on the card.
+                The seed and downtime between runs are never replayed. A candle that closes during a
+                brief stream outage is evaluated when the stream reconnects; only a boundary whose
+                candle cannot be resolved becomes a SKIPPED row.</p>
+        </details>
+
+        <details>
+            <summary>I get no email or push.</summary>
+            <p>For email: check the account email and the SMTP settings, then use <b>Send test alert</b>.
+                For push: check that the device is subscribed, that Chrome has notification permission,
+                and that the test push works. If Chrome shows “Possible spam”, mark the site safe. See
+                <a href="#alerts">Alerts and push</a>.</p>
+        </details>
+
+        <details>
+            <summary>An order is PENDING. What do I do?</summary>
+            <p>Do not place another close or a second order. The app reconciles pending real orders at
+                the next start-up. Restart the application and let it settle. The strategy stands down
+                until the order is reconciled.</p>
+        </details>
+
+        <details>
+            <summary>Why does the live result differ from the backtest?</summary>
+            <p>The live strategy has its own start point (the anchor) and never replays the seed or
+                downtime. A candle that closes during a brief stream outage is evaluated when the
+                stream reconnects; only a boundary whose candle cannot be resolved becomes a SKIPPED
+                row. The backtest may have started from a different point, with different warm-up or a
+                different position at the start. Fees and fills also differ slightly because live fills
+                use the exchange's report.</p>
+        </details>
+
+        <details>
+            <summary>Why can't I archive or delete a strategy?</summary>
+            <p>It is running, or it has an open position. Stop it first. If the position is open, close
+                it or reconcile the manual sell that closed it. An open position blocks both actions.</p>
+        </details>
+
+        <details>
+            <summary>Why is a backtest row last, or why does it have no trades?</summary>
+            <p>A combination with no train trades is ranked last. Check the date range, the warm-up,
+                the amount versus the starting cash, and the rules. A row with few trades may simply
+                not have enough opportunities in that period.</p>
+        </details>
+
+        <details>
+            <summary>The API answers 401.</summary>
+            <p>The API uses HTTP Basic with the account credentials. The pages use a session. Check the
+                credentials, and see the <a th:href="@{/swagger-ui.html}">API docs</a> for the
+                endpoint. CSRF is off for `/api/**`; that is expected.</p>
+        </details>
+
+        <details>
+            <summary>The close page says the current price is unavailable.</summary>
+            <p>The app will not guess a price. Wait a moment and try again. If the exchange cannot be
+                reached, the close cannot run.</p>
+        </details>
+
+        <details>
+            <summary>The engine history and Bitvavo ledger do not match.</summary>
+            <p>The engine page shows the strategy's closed round trips. The ledger page shows the whole
+                Bitvavo account, including trades made in the app, by the legacy webhook, or by hand.
+                Average-cost profit and the engine's round-trip profit are different calculations.</p>
+        </details>
+
+        <details>
+            <summary>Chrome says a notification may be spam.</summary>
+            <p>Tap <b>Show notification</b>, then <b>Always show</b> → <b>Mark as safe to Chrome</b>.
+                Do not tap Unsubscribe. See <a href="#alerts">Alerts and push</a>.</p>
+        </details>
+    </section>
+
+    <section class="card help-section" id="glossary">
+        <h2>Glossary</h2>
+        <dl>
+            <dt>Candle</dt>
+            <dd>One time period of price data: open, high, low and close.</dd>
+            <dt>Closed candle</dt>
+            <dd>A candle whose period has ended. The engine never decides on a candle that is still
+                forming.</dd>
+            <dt>Warm-up</dt>
+            <dd>The first candles a strategy does not trade while the indicators settle.</dd>
+            <dt>Anchor</dt>
+            <dd>The fixed start of the strategy's candle series. A restart keeps the same anchor.</dd>
+            <dt>Round trip</dt>
+            <dd>One buy and the matching sell. The backtest and history count these as trades.</dd>
+            <dt>Dry run</dt>
+            <dd>A simulated order. Nothing is sent to the exchange.</dd>
+            <dt>Real</dt>
+            <dd>A strategy that sends market orders with real money.</dd>
+            <dt>Train / validate</dt>
+            <dd>The earlier part of the history used to choose settings, and the later part used to
+                test them without changing them.</dd>
+            <dt>Max drawdown</dt>
+            <dd>The worst fall from a high point of the account value, in percent.</dd>
+            <dt>Profit factor</dt>
+            <dd>Money won divided by money lost. Above 1 is profitable.</dd>
+            <dt>Win rate</dt>
+            <dd>The share of trades that made money. It says nothing about their size.</dd>
+            <dt>Reconciliation</dt>
+            <dd>Checking a real order against the exchange at start-up, so an unknown order is settled
+                rather than guessed.</dd>
+            <dt>Taker fee</dt>
+            <dd>The fee for an order that takes liquidity immediately. Market orders pay it.</dd>
+            <dt>Operator id</dt>
+            <dd>The numeric id Bitvavo gives an API key or account for order attribution.</dd>
+            <dt>VAPID</dt>
+            <dd>The key pair the app uses to sign Web Push messages. Rotating it invalidates existing
+                browser subscriptions.</dd>
+            <dt>PWA</dt>
+            <dd>A website installed to the home screen as an app. On iOS, Web Push needs this.</dd>
+        </dl>
+    </section>
+
+    <p class="muted help-back"><a th:href="@{/ui/live}">← Back to the live page</a></p>
+</main>
+</body>
+</html>

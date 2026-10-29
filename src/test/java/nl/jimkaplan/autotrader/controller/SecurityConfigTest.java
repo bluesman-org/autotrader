@@ -78,6 +78,13 @@ class SecurityConfigTest {
     }
 
     @Test
+    void theHelpPageNeedsASignIn() throws Exception {
+        mockMvc.perform(get("/ui/help"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("http://localhost/login"));
+    }
+
+    @Test
     void theApiAnswersUnauthorizedInsteadOfASignInPage() throws Exception {
         mockMvc.perform(get("/api/bitvavo-credentials"))
                 .andExpect(status().isUnauthorized());

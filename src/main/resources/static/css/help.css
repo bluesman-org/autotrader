@@ -1,0 +1,152 @@
+/* The in-app operator guide. */
+.help-page {
+    max-width: 1040px;
+}
+
+.help-page .help-lede {
+    max-width: 780px;
+}
+
+.help-toc {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 2px 24px;
+    padding: 18px 22px;
+}
+
+.help-toc a {
+    display: block;
+    padding: 3px 0;
+    text-decoration: none;
+}
+
+.help-toc a:hover {
+    text-decoration: underline;
+}
+
+.help-section h2 {
+    margin-top: 0;
+}
+
+.help-section h3 {
+    color: var(--nav);
+    font-size: 1rem;
+    margin: 20px 0 4px;
+}
+
+.help-section p,
+.help-section ul,
+.help-section ol {
+    margin: 6px 0 10px;
+}
+
+.help-section li {
+    margin: 3px 0;
+}
+
+.help-page table {
+    white-space: normal;
+}
+
+.help-page th,
+.help-page td {
+    white-space: normal;
+    vertical-align: top;
+}
+
+.help-page th:first-child,
+.help-page td:first-child {
+    text-align: left;
+}
+
+.help-example {
+    background: #f8fbfd;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 10px 14px;
+    margin: 10px 0 14px;
+}
+
+.help-example b:first-child {
+    color: var(--accent-dark);
+}
+
+.help-example p:last-child {
+    margin-bottom: 0;
+}
+
+.help-split {
+    display: flex;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 12px 0;
+    font-size: 0.9rem;
+}
+
+.help-split > div {
+    padding: 10px 14px;
+}
+
+.help-split .train {
+    width: 70%;
+    background: var(--train);
+    color: var(--train-text);
+}
+
+.help-split .validate {
+    width: 30%;
+    background: var(--validate);
+    color: var(--validate-text);
+}
+
+.help-section details {
+    border-bottom: 1px solid var(--border);
+    padding: 9px 0;
+}
+
+.help-section details:last-of-type {
+    border-bottom: 0;
+}
+
+.help-section summary {
+    cursor: pointer;
+    color: var(--nav);
+    font-weight: 600;
+}
+
+.help-section summary:hover {
+    color: var(--accent-dark);
+}
+
+.help-section dl {
+    margin: 0;
+}
+
+.help-section dt {
+    color: var(--nav);
+    font-weight: 600;
+    margin-top: 12px;
+}
+
+.help-section dd {
+    margin: 2px 0 0;
+}
+
+.help-page .help-back {
+    margin-top: 4px;
+}
+
+@media (max-width: 700px) {
+    .help-toc {
+        grid-template-columns: 1fr;
+    }
+
+    .help-split {
+        display: block;
+    }
+
+    .help-split .train,
+    .help-split .validate {
+        width: auto;
+    }
+}

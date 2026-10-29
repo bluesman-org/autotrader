@@ -71,7 +71,9 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("id=\"amountPerBuy\"")))
                 .andExpect(content().string(containsString("id=\"feeRate\"")))
                 .andExpect(content().string(containsString("data-default-fee-rate")))
-                .andExpect(content().string(containsString("INSUFFICIENT_BALANCE")));
+                .andExpect(content().string(containsString("INSUFFICIENT_BALANCE")))
+                .andExpect(content().string(containsString("How to read a backtest")))
+                .andExpect(content().string(containsString("href=\"/ui/help#backtest\"")));
     }
 
     @Test
@@ -95,6 +97,8 @@ class BacktestUiControllerRenderTest {
                 .andExpect(content().string(containsString("12/26/9")))
                 .andExpect(content().string(containsString("Train — earlier part (optimised on)")))
                 .andExpect(content().string(containsString("Validate — held out")))
+                .andExpect(content().string(containsString("How to read this table")))
+                .andExpect(content().string(containsString("href=\"/ui/help#backtest\"")))
                 .andExpect(content().string(containsString("MACD BULLISH CROSSOVER")))
                 // A profit factor with no losses prints as the infinity symbol, not a broken cell
                 .andExpect(content().string(containsString("∞")))
