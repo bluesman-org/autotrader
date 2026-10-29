@@ -340,6 +340,11 @@ next: compare the dry strategies, with the live trial user-triggered.
 38. ✅ Stabilize the live-runner anchor test: its bounds were on the wrong side of the start time,
     so a slow CI run failed even though the anchor was correct. It now checks the anchor between
     `beforeStart - window` and `afterStart - window` (this PR).
+39. ✅ Stop line-ending normalization from dirtying `mvnw.cmd`: `.gitattributes` declared `*.cmd` as
+    `text eol=crlf`, but the wrapper's batch file is committed with CRLF, so the clean filter
+    rewrote it to LF in the index and every checkout reported it as modified, while `git add -A`
+    would have rewritten the file. The rule is now `*.cmd -text`, which keeps the committed bytes
+    and leaves a fresh clone clean (this PR).
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
