@@ -1,5 +1,6 @@
 /mvnw text eol=lf
+*.cmd text eol=crlf
 # The Maven wrapper ships its batch file with CRLF endings and it is committed as-is. Declaring it
-# `text` normalizes the blob to LF in the index while HEAD keeps CRLF, so every checkout reports
-# the file as modified and `git add -A` silently rewrites it.
-*.cmd -text
+# `text` keeps the index LF while HEAD holds the CRLF blob, so every checkout reports the file as
+# modified. The exemption must come last: the last matching pattern wins per attribute.
+/mvnw.cmd -text
