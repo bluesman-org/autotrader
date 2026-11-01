@@ -13,6 +13,7 @@ updates:
       # Spring Boot only moves with the JDK, springdoc and a compile pass (issue #18, PLAN item 11).
       # A bare major bump fails to build (Security 7 removed AntPathRequestMatcher, Boot 4 moved
       # WebServerInitializedEvent), so Dependabot would keep reopening a PR that cannot merge.
+      # Lift this entry when the migration lands (issue #18, PLAN item 11).
       - dependency-name: "org.springframework.boot:spring-boot-starter-parent"
         update-types: ["version-update:semver-major"]
 

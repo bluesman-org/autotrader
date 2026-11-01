@@ -201,7 +201,8 @@ Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migr
     `WebServerInitializedEvent` — and springdoc 2.x does not support Boot 4. The Maven ecosystem now
     ignores major `spring-boot-starter-parent` updates so the same PR does not return before this
     item lands; take 4.1.2 or later, with the JDK 25 build/runtime image, springdoc 3.x, and the
-    regenerated OpenAPI spec in one change
+    regenerated OpenAPI spec in one change, and lift the `ignore` entry in `.github/dependabot.yml`
+    in that same PR so later Boot majors reach the queue again
 12. ✅ Duplicate `botId` on create returns a clear 400 (PR #4)
 13. ✅ Inclusive boundary records for order/alert time-range queries (PR #4)
 14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
