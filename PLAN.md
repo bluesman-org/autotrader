@@ -38,7 +38,7 @@ is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of
 `docs/tradingview.md`); next: compare the dry strategies, with the live trial user-triggered.
 Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
 The repository queries now execute against a real MongoDB in CI (item 22, PR #72), and
-the app runs Spring Boot 4.1.2 on JDK 25 (item 11, this PR).
+the app runs Spring Boot 4.1.2 on JDK 25 (item 11, PR #73).
 
 ## Objective
 
@@ -209,7 +209,7 @@ the app runs Spring Boot 4.1.2 on JDK 25 (item 11, this PR).
     byte-identical to the committed files. springdoc is 3.2.0, and the Maven `ignore` for major Boot
     bumps is lifted so later majors reach the queue again. The image was built and booted against a
     scratch Mongo: sign-in pages, the API's 401 and the startup export all work; switching the box's
-    stack to it is the operator's step (this PR)
+    stack to it is the operator's step (PR #73)
 12. ✅ Duplicate `botId` on create returns a clear 400 (PR #4)
 13. ✅ Inclusive boundary records for order/alert time-range queries (PR #4)
 14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
