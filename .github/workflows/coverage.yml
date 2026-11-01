@@ -16,6 +16,14 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    services:
+      # The repository queries execute against a real server: a document Mongo accepts can still
+      # name the wrong field or carry the wrong bound, and only execution shows it. The suite is
+      # skipped without MONGODB_TEST_URI, so this service is what makes it run in CI.
+      mongo:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 21
@@ -25,4 +33,7 @@ jobs:
           java-version: '21'
           cache: 'maven'
       - name: Run tests and enforce coverage thresholds
+        env:
+          # A database ending in _test is required: the suite drops it before every test.
+          MONGODB_TEST_URI: mongodb://127.0.0.1:27017/autotrader_query_test
         run: ./mvnw -B verify -Ddocker.skip=true
