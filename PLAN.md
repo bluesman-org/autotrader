@@ -37,7 +37,7 @@ last evaluated candle current on 2026-11-01; the closed round trips are still fe
 is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12;
 `docs/tradingview.md`); next: compare the dry strategies, with the live trial user-triggered.
 Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
-The repository queries now execute against a real MongoDB in CI (item 22, this PR).
+The repository queries now execute against a real MongoDB in CI (item 22, PR #72).
 
 ## Objective
 
@@ -257,7 +257,7 @@ The repository queries now execute against a real MongoDB in CI (item 22, this P
     manual-close check and the targeted updates (the anchor is fixed by the first writer, the order
     sequence never moves backwards, the last-started time stores as an instant). The class is
     skipped locally without `MONGODB_TEST_URI`, which must name a database ending in `_test` because
-    the suite drops it (this PR)
+    the suite drops it (PR #72)
 23. ⬜ Keep the ledger's reads flat as the account grows: the ledger's ten-second refresh re-reads
     the market's whole buy/sell history from the account's start on every tick, because the
     average-cost walk needs it; a long-lived account makes that many pages. Cache the walk and
