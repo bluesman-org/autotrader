@@ -5,7 +5,7 @@ indicators. TradingView is kept as a legacy fallback (Phase 6 records that decis
 file with every PR**: check off completed steps, add new follow-ups, and keep the status line
 current.
 
-**Status (2026-10-20):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
+**Status (2026-11-01):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
 default, replay gate); the live series is anchored to a fixed start (PR #27) and the anchored
 design is verified live — restarts kept the same anchor and the engine's trades matched a
@@ -29,10 +29,14 @@ PR #57. The live strategy management UI landed with PR #58, and the live order s
 PR #59. The live position close/reconcile and email alert path merged with PR #61 and is deployed;
 the delete-path bug merged with PR #62 and was deployed, and the dry-run cleanup is complete. Web
 Push notifications merged as PR #63 and are deployed; the phone test passed. The OpenAPI spec
-catch-up and the manifest MIME fix merged as `89d8cee` (PR #64) and are deployed. The dry
-exploration is running with five BTC-EUR strategies. The in-app Help page is in this PR (item 37).
-TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12; `docs/tradingview.md`);
-next: compare the dry strategies, with the live trial user-triggered.
+catch-up and the manifest MIME fix merged as `89d8cee` (PR #64) and are deployed. The in-app Help
+page merged as PR #65 (item 37), the live-runner anchor test was stabilized and line-ending
+normalization stopped dirtying `mvnw.cmd` (PR #66, items 38–39), and the commons-codec bump followed
+(PR #67). The dry exploration is running with five BTC-EUR strategies — all dry-run and enabled, the
+last evaluated candle current on 2026-11-01; the closed round trips are still few, so the comparison
+is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12;
+`docs/tradingview.md`); next: compare the dry strategies, with the live trial user-triggered.
+Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
 
 ## Objective
 
@@ -190,9 +194,14 @@ next: compare the dry strategies, with the live trial user-triggered.
     shared 2026-10-13. The live page landed (PR #30, its "last refresh" indicator in PR #33), the
     engine-trades tab (PR #34) and the Bitvavo ledger tab (PR #36); the follow-ups made the two tabs'
     filter bars share their mechanics and the ledger's type and status filters multi-value (PR #44) ✅
-11. ⬜ Investigate upgrading to Spring Boot 4.1.1 with JDK 25 (issue #18): the runtime JDK bump
+11. ⬜ Investigate upgrading to Spring Boot 4.1.x with JDK 25 (issue #18): the runtime JDK bump
     belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
-    was closed
+    was closed. Dependabot's unguarded `spring-boot-starter-parent` 4.1.2 bump (PR #68) was closed
+    too: it does not compile — Spring Security 7 removed `AntPathRequestMatcher` and Boot 4 moved
+    `WebServerInitializedEvent` — and springdoc 2.x does not support Boot 4. The Maven ecosystem now
+    ignores major `spring-boot-starter-parent` updates so the same PR does not return before this
+    item lands; take 4.1.2 or later, with the JDK 25 build/runtime image, springdoc 3.x, and the
+    regenerated OpenAPI spec in one change
 12. ✅ Duplicate `botId` on create returns a clear 400 (PR #4)
 13. ✅ Inclusive boundary records for order/alert time-range queries (PR #4)
 14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites
@@ -336,16 +345,16 @@ next: compare the dry strategies, with the live trial user-triggered.
     result column, the simulation assumptions and worked examples in plain language. The Help link
     is in the navigation, with contextual links from the backtest, live, close/reconcile and
     settings pages. Static page; no model or repository. Tests cover the page, the sign-in rule and
-    the contextual links (this PR).
+    the contextual links (PR #65).
 38. ✅ Stabilize the live-runner anchor test: its bounds were on the wrong side of the start time,
     so a slow CI run failed even though the anchor was correct. It now checks the anchor between
-    `beforeStart - window` and `afterStart - window` (this PR).
+    `beforeStart - window` and `afterStart - window` (PR #66).
 39. ✅ Stop line-ending normalization from dirtying `mvnw.cmd`: `.gitattributes` declared `*.cmd` as
     `text eol=crlf`, but the wrapper's batch file is committed with CRLF, so the clean filter
     rewrote it to LF in the index and every checkout reported it as modified, while `git add -A`
     would have rewritten the file. The wrapper file is exempted with a later `/mvnw.cmd -text` line,
     which keeps its committed bytes and leaves a fresh clone clean, while other `.cmd` files keep
-    the `text eol=crlf` normalization (this PR).
+    the `text eol=crlf` normalization (PR #66).
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
