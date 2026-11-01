@@ -9,7 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
+import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -77,8 +77,8 @@ class MongoQueryExecutionTest {
             throw new IllegalStateException(
                     "MONGODB_TEST_URI must name a database ending in _test, because the suite drops it");
         }
-        registry.add("spring.data.mongodb.uri", () -> uri);
-        registry.add("spring.data.mongodb.database", () -> database);
+        registry.add("spring.mongodb.uri", () -> uri);
+        registry.add("spring.mongodb.database", () -> database);
     }
 
     @BeforeEach

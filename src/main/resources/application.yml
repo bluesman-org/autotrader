@@ -33,10 +33,9 @@ spring:
   web:
     locale: en_US
     locale-resolver: fixed
-  data:
-    mongodb:
-      uri: mongodb+srv://${MONGODB_AUTOTRADER_USER}:${MONGODB_AUTOTRADER_PASSWORD}@${MONGODB_AUTOTRADER_URI}
-      database: autotrader
+  mongodb:
+    uri: mongodb+srv://${MONGODB_AUTOTRADER_USER}:${MONGODB_AUTOTRADER_PASSWORD}@${MONGODB_AUTOTRADER_URI}
+    database: autotrader
 
 management:
   endpoints:
@@ -72,7 +71,7 @@ strategy:
 
 # TLS for the MongoDB client built in MongoConfig (default: true).
 # Set to false to connect to a local server without TLS. Note that Spring Boot's
-# spring.data.mongodb.ssl.enabled has no effect because this application builds its own client.
+# spring.mongodb.ssl.enabled has no effect because this application builds its own client.
 # mongodb:
 #   ssl:
 #     enabled: true

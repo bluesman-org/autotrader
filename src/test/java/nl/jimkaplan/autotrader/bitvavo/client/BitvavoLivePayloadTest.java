@@ -1,7 +1,8 @@
 package nl.jimkaplan.autotrader.bitvavo.client;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.GetPriceResponse;
 import org.junit.jupiter.api.Test;
@@ -22,8 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class BitvavoLivePayloadTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private final ObjectMapper objectMapper = JsonMapper.builder()
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .build();
 
     @Test
     void deserializeTickerPricePayload_withMarket_returnsSingleObject() throws Exception {

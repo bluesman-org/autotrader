@@ -1,6 +1,6 @@
 package nl.jimkaplan.autotrader.bitvavo.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.bitvavo.model.BitvavoAuthHeaders;
 import nl.jimkaplan.autotrader.bitvavo.model.CreateOrderRequest;
 import nl.jimkaplan.autotrader.bitvavo.service.BitvavoAuthenticationService;
@@ -195,7 +195,7 @@ class BitvavoApiClientTest {
         // Arrange
         String endpoint = "/order";
         Map<String, Object> invalidBody = new HashMap<>();
-        invalidBody.put("self", invalidBody); // Circular reference, causes JsonProcessingException
+        invalidBody.put("self", invalidBody); // Circular reference, causes JacksonException
 
         // Act & Assert
         assertThrows(IllegalStateException.class, () -> bitvavoApiClient.post(endpoint, invalidBody, Object.class, apiKey, apiSecret));

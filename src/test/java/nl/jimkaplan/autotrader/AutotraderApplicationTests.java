@@ -21,7 +21,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * expect.</p>
  */
 @SpringBootTest(properties = {
-        "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-context-test",
+        "spring.mongodb.uri=mongodb://localhost:27017/autotrader-context-test",
         "bitvavo.api.url=http://localhost:9999",
         "encryption.master-key=dGVzdC1rZXk=",
         "openapi.export-dir=target/context-test-openapi",

@@ -4,8 +4,8 @@ import nl.jimkaplan.autotrader.strategy.service.LedgerService;
 import nl.jimkaplan.autotrader.strategy.service.TradeHistoryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @AutoConfigureMockMvc(addFilters = false)
 @WebMvcTest(controllers = HistoryUiController.class, properties = {
-        "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-test",
+        "spring.mongodb.uri=mongodb://localhost:27017/autotrader-test",
         "bitvavo.api.url=http://localhost:9999",
         "encryption.master-key=dGVzdC1rZXk=",
         "autotrader.ui.time-zone=UTC"

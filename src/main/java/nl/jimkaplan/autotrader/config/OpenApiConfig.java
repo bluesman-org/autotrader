@@ -1,16 +1,16 @@
 package nl.jimkaplan.autotrader.config;
 
-import com.fasterxml.jackson.core.util.DefaultIndenter;
-import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
-import com.fasterxml.jackson.core.util.Separators;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
+import tools.jackson.core.util.DefaultIndenter;
+import tools.jackson.core.util.DefaultPrettyPrinter;
+import tools.jackson.core.util.Separators;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.dataformat.yaml.YAMLFactory;
+import tools.jackson.dataformat.yaml.YAMLWriteFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.web.context.WebServerInitializedEvent;
+import org.springframework.boot.web.server.context.WebServerInitializedEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -103,8 +103,8 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
             ObjectMapper jsonMapper = new ObjectMapper();
             Object jsonObject = jsonMapper.readValue(jsonSpec, Object.class);
             Separators separators = Separators.createDefaultInstance()
-                    .withObjectFieldValueSpacing(Separators.Spacing.AFTER);
-            String prettyJson = jsonMapper.writer(new DefaultPrettyPrinter()
+                    .withObjectNameValueSpacing(Separators.Spacing.AFTER);
+            String prettyJson = jsonMapper.writer().with(new DefaultPrettyPrinter()
                             .withSeparators(separators)
                             .withArrayIndenter(new DefaultIndenter("  ", DefaultIndenter.SYS_LF)))
                     .writeValueAsString(jsonObject);
@@ -113,8 +113,9 @@ public class OpenApiConfig implements ApplicationListener<WebServerInitializedEv
 
             // Export OpenAPI specification to YAML file; sequences are indented like the committed spec
             Path yamlFilePath = exportDirPath.resolve(OPENAPI_YAML_FILENAME);
-            YAMLFactory yamlFactory = new YAMLFactory();
-            yamlFactory.enable(YAMLGenerator.Feature.INDENT_ARRAYS_WITH_INDICATOR);
+            YAMLFactory yamlFactory = YAMLFactory.builder()
+                    .enable(YAMLWriteFeature.INDENT_ARRAYS_WITH_INDICATOR)
+                    .build();
             ObjectMapper yamlMapper = new ObjectMapper(yamlFactory);
             String yamlSpec = yamlMapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonObject);
             Files.writeString(yamlFilePath, yamlSpec);

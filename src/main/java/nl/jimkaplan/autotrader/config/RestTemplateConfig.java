@@ -1,16 +1,17 @@
 package nl.jimkaplan.autotrader.config;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.interceptor.CurlLoggingInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Configuration for the app's RestTemplate beans.
@@ -74,12 +75,16 @@ public class RestTemplateConfig {
      * @param restTemplate The client whose Jackson converter reads Bitvavo responses
      */
     private static void configureJackson(RestTemplate restTemplate) {
-        ObjectMapper mapper = Jackson2ObjectMapperBuilder.json()
-                .featuresToDisable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
+        JsonMapper mapper = JsonMapper.builder()
+                .disable(DateTimeFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
                 .build();
-        restTemplate.getMessageConverters().stream()
-                .filter(MappingJackson2HttpMessageConverter.class::isInstance)
-                .map(MappingJackson2HttpMessageConverter.class::cast)
-                .forEach(converter -> converter.setObjectMapper(mapper));
+        // The converter takes its mapper at construction in Spring Framework 7; there is no
+        // setter, so the one RestTemplate registered is replaced in place.
+        List<HttpMessageConverter<?>> converters = restTemplate.getMessageConverters();
+        for (int i = 0; i < converters.size(); i++) {
+            if (converters.get(i) instanceof JacksonJsonHttpMessageConverter) {
+                converters.set(i, new JacksonJsonHttpMessageConverter(mapper));
+            }
+        }
     }
 }

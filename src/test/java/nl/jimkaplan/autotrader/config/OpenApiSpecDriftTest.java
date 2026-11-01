@@ -1,13 +1,14 @@
 package nl.jimkaplan.autotrader.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import nl.jimkaplan.autotrader.strategy.live.LiveStrategyStarter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -25,13 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the committed JSON. Only the runtime-specific {@code servers} block is ignored.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-openapi-test",
+        "spring.mongodb.uri=mongodb://localhost:27017/autotrader-openapi-test",
         "bitvavo.api.url=http://localhost:9999",
         "encryption.master-key=dGVzdC1rZXk=",
         "openapi.export-enabled=false",
         "openapi.export-dir=target/openapi-drift-check",
         "openapi.export-startup-delay-ms=0"
 })
+@AutoConfigureTestRestTemplate
 class OpenApiSpecDriftTest {
 
     @LocalServerPort

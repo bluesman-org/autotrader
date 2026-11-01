@@ -12,7 +12,7 @@ import nl.jimkaplan.autotrader.strategy.service.PushSettingsService;
 import nl.jimkaplan.autotrader.strategy.service.PushSubscriptionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.userdetails.User;
@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * takes Basic, the webhook and the sign-in pages stay open, and a protected form needs its token.
  */
 @WebMvcTest(controllers = {AuthController.class, SettingsUiController.class}, properties = {
-        "spring.data.mongodb.uri=mongodb://localhost:27017/autotrader-test",
+        "spring.mongodb.uri=mongodb://localhost:27017/autotrader-test",
         "bitvavo.api.url=http://localhost:9999",
         "encryption.master-key=dGVzdC1rZXk=",
         "autotrader.ui.time-zone=UTC"
@@ -74,14 +74,14 @@ class SecurityConfigTest {
     void aPageSendsAnAnonymousReaderToTheSignInPage() throws Exception {
         mockMvc.perform(get("/ui/live"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("http://localhost/login"));
+                .andExpect(redirectedUrl("/login"));
     }
 
     @Test
     void theHelpPageNeedsASignIn() throws Exception {
         mockMvc.perform(get("/ui/help"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("http://localhost/login"));
+                .andExpect(redirectedUrl("/login"));
     }
 
     @Test
@@ -155,7 +155,7 @@ class SecurityConfigTest {
                     return request;
                 }))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("http://localhost/login"));
+                .andExpect(redirectedUrl("/login"));
     }
 
     @Test
@@ -172,7 +172,7 @@ class SecurityConfigTest {
                             return request;
                         }))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("http://localhost/login"));
+                .andExpect(redirectedUrl("/login"));
     }
 
     @Test

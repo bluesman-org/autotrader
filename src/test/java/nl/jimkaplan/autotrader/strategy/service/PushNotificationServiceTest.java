@@ -1,6 +1,6 @@
 package nl.jimkaplan.autotrader.strategy.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.zerodeplibs.webpush.VAPIDKeyPair;
 import com.zerodeplibs.webpush.VAPIDKeyPairs;
 import com.zerodeplibs.webpush.key.PrivateKeySources;

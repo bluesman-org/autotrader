@@ -1,7 +1,7 @@
 package nl.jimkaplan.autotrader.bitvavo.client;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.bitvavo.model.BitvavoAuthHeaders;
 import nl.jimkaplan.autotrader.bitvavo.service.BitvavoAuthenticationService;
 import org.slf4j.Logger;
@@ -128,7 +128,7 @@ public class BitvavoApiClient {
 
             log.debug("Received response from Bitvavo API: {} with status {}", endpoint, response.getStatusCode());
             return response.getBody();
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Error serializing request body", e);
         }
     }

@@ -1,13 +1,13 @@
 package nl.jimkaplan.autotrader.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.interceptor.CurlLoggingInterceptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.client.AbstractClientHttpRequestFactoryWrapper;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -67,9 +67,9 @@ class RestTemplateConfigTest {
 
     private static Instant read(RestTemplate restTemplate) throws Exception {
         ObjectMapper mapper = restTemplate.getMessageConverters().stream()
-                .filter(MappingJackson2HttpMessageConverter.class::isInstance)
-                .map(MappingJackson2HttpMessageConverter.class::cast)
-                .map(MappingJackson2HttpMessageConverter::getObjectMapper)
+                .filter(JacksonJsonHttpMessageConverter.class::isInstance)
+                .map(JacksonJsonHttpMessageConverter.class::cast)
+                .map(JacksonJsonHttpMessageConverter::getMapper)
                 .findFirst()
                 .orElseThrow();
         return mapper.readValue("{\"executedAt\":1706100650751,\"newField\":true}", Transaction.class)
