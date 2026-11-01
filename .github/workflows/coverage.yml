@@ -20,26 +20,24 @@ jobs:
       # The repository queries execute against a real server: a document Mongo accepts can still
       # name the wrong field or carry the wrong bound, and only execution shows it. The suite is
       # skipped without MONGODB_TEST_URI, so this service is what makes it run in CI.
+      #
+      # 7.0 rather than the 8.0 the box runs: MongoDB 8.0+ refuses to start on the runner's
+      # 7.0.0-azure kernel, whose Ubuntu-style uname misses the 7.0.14+ exemption (SERVER-121912,
+      # SERVER-136848). The queries exercised here are plain find and update predicates, whose
+      # semantics are the same on both majors.
       mongo:
-        image: mongo:8.0
+        image: mongo:7.0
         ports:
           - 27017:27017
     steps:
       - uses: actions/checkout@v7
       - name: Wait for the Mongo service
-        # The service container reports "healthy" without a health check, so this waits for mongod
-        # itself and dumps the container's state and log when it never comes up.
+        # GitHub reports a service container "healthy" without a health check, so this waits for
+        # mongod itself and dumps the container's state and log when it never comes up.
         run: |
           container=$(docker ps --all --quiet --filter "name=mongo" | head -1)
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 60); do
             if docker exec "$container" mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
-              echo "mongod answers inside the container"
-              docker port "$container"
-              if timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/27017' 2>/dev/null; then
-                echo "the published port answers on the host"
-              else
-                echo "the published port does not answer on the host"
-              fi
               exit 0
             fi
             sleep 1
