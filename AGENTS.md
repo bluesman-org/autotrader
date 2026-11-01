@@ -150,11 +150,19 @@ setup instead, before that check can run.
 ## Testing
 
 1. Test Environment Setup:
-   The project uses a separate test environment configuration:
-    - `src/test/resources/.env.test` - Contains test values for environment variables
-    - `src/test/resources/application-test.yml` - Test-specific application configuration
-
-   The test environment is automatically activated when running tests with the `test` profile.
+   Unit tests mock their dependencies and need no environment. `AutotraderApplicationTests`
+   overrides the properties it needs inline, so no test profile or `.env.test` file exists.
+   `MongoQueryExecutionTest` runs the repository queries against a real MongoDB and is skipped
+   unless `MONGODB_TEST_URI` points at a database whose name ends in `_test` (the suite drops it
+   before every test):
+   ```bash
+   docker run -d --rm -p 127.0.0.1:27018:27017 mongo:7.0
+   MONGODB_TEST_URI=mongodb://127.0.0.1:27018/autotrader_query_test ./mvnw test -Dtest=MongoQueryExecutionTest
+   ```
+   The coverage workflow provides the same through a Mongo 7.0 service container, so the queries
+   are executed on every PR. 7.0 rather than the 8.0 the box runs: MongoDB 8.0 and later refuse to
+   start on the runner's kernel (SERVER-121912), and the queries are plain find and update
+   predicates either way.
 
 2. Run all tests:
    ```bash

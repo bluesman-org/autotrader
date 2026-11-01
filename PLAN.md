@@ -37,6 +37,7 @@ last evaluated candle current on 2026-11-01; the closed round trips are still fe
 is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12;
 `docs/tradingview.md`); next: compare the dry strategies, with the live trial user-triggered.
 Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
+The repository queries now execute against a real MongoDB in CI (item 22, PR #72).
 
 ## Objective
 
@@ -245,13 +246,19 @@ Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migr
     whole round-trip history in memory on every 10-second refresh (the orders query is already
     bounded in the database). Aggregate count, sum, win count and the averages Mongo-side (flagged
     in the PR #30 review).
-22. ⬜ Cover Mongo query execution in CI: the history page's range queries failed only at deploy —
+22. ✅ Cover Mongo query execution in CI: the history page's range queries failed only at deploy —
     two conditions on one field cannot be written as a derived method name, and the second bound is
     rejected when the query document is built, which neither the mocked tests nor the context test
     (which mocks the startup runners, so CI needs no database) can see. PR #35 added a test that
     builds the repository proxies and materializes each query document without a database, so a
-    malformed query now fails in CI; executing the queries against real documents still needs a
-    Mongo service in the coverage workflow (flagged after PR #34)
+    malformed query fails in CI; the coverage workflow now also runs a Mongo 7.0 service container
+    (8.0 and later refuse to start on the runner's kernel, SERVER-121912)
+    and `MongoQueryExecutionTest` executes the queries against real documents — the history page's
+    two range queries, the candle range query with its sort, the live page's eight-newest read, the
+    manual-close check and the targeted updates (the anchor is fixed by the first writer, the order
+    sequence never moves backwards, the last-started time stores as an instant). The class is
+    skipped locally without `MONGODB_TEST_URI`, which must name a database ending in `_test` because
+    the suite drops it (PR #72)
 23. ⬜ Keep the ledger's reads flat as the account grows: the ledger's ten-second refresh re-reads
     the market's whole buy/sell history from the account's start on every tick, because the
     average-cost walk needs it; a long-lived account makes that many pages. Cache the walk and

@@ -16,6 +16,29 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    services:
+      # The repository queries execute against a real server: a document Mongo accepts can still
+      # name the wrong field or carry the wrong bound, and only execution shows it. The suite is
+      # skipped without MONGODB_TEST_URI, so this service is what makes it run in CI.
+      #
+      # 7.0 rather than the 8.0 the box runs: MongoDB 8.0+ refuses to start on the runner's
+      # 7.0.0-azure kernel, whose Ubuntu-style uname misses the 7.0.14+ exemption (SERVER-121912,
+      # SERVER-136848). The queries exercised here are plain find and update predicates, whose
+      # semantics are the same on both majors.
+      #
+      # The health check is what makes the runner wait for mongod itself: without one it starts the
+      # steps as soon as the container is running, which says nothing about the server.
+      mongo:
+        image: mongo:7.0
+        ports:
+          # Loopback only: the tests connect over 127.0.0.1, so the unauthenticated server has no
+          # reason to listen on the runner's network interface.
+          - 127.0.0.1:27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 21
@@ -25,4 +48,7 @@ jobs:
           java-version: '21'
           cache: 'maven'
       - name: Run tests and enforce coverage thresholds
+        env:
+          # A database ending in _test is required: the suite drops it before every test.
+          MONGODB_TEST_URI: mongodb://127.0.0.1:27017/autotrader_query_test
         run: ./mvnw -B verify -Ddocker.skip=true
