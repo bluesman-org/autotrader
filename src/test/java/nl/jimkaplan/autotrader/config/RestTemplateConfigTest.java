@@ -1,6 +1,7 @@
 package nl.jimkaplan.autotrader.config;
 
 import tools.jackson.databind.ObjectMapper;
+import nl.jimkaplan.autotrader.bitvavo.model.GetMarketResponse;
 import nl.jimkaplan.autotrader.bitvavo.model.Transaction;
 import nl.jimkaplan.autotrader.interceptor.CurlLoggingInterceptor;
 import org.junit.jupiter.api.Test;
@@ -65,15 +66,28 @@ class RestTemplateConfigTest {
         assertEquals(Instant.parse("2024-01-24T12:50:50.751Z"), read(restTemplateConfig.publicRestTemplate()));
     }
 
+    @Test
+    void theTradingClientIgnoresFieldsTheExchangeAdds() throws Exception {
+        GetMarketResponse market = jacksonMapperOf(restTemplateConfig.restTemplate()).readValue(
+                "{\"market\":\"BTC-EUR\",\"price\":\"76328\",\"status\":\"trading\",\"unknownFutureField\":1}",
+                GetMarketResponse.class);
+
+        assertEquals("BTC-EUR", market.getMarket());
+    }
+
     private static Instant read(RestTemplate restTemplate) throws Exception {
-        ObjectMapper mapper = restTemplate.getMessageConverters().stream()
+        return jacksonMapperOf(restTemplate)
+                .readValue("{\"executedAt\":1706100650751,\"newField\":true}", Transaction.class)
+                .getExecutedAt();
+    }
+
+    private static ObjectMapper jacksonMapperOf(RestTemplate restTemplate) {
+        return restTemplate.getMessageConverters().stream()
                 .filter(JacksonJsonHttpMessageConverter.class::isInstance)
                 .map(JacksonJsonHttpMessageConverter.class::cast)
                 .map(JacksonJsonHttpMessageConverter::getMapper)
                 .findFirst()
                 .orElseThrow();
-        return mapper.readValue("{\"executedAt\":1706100650751,\"newField\":true}", Transaction.class)
-                .getExecutedAt();
     }
 
     /**
