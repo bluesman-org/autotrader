@@ -251,7 +251,8 @@ The repository queries now execute against a real MongoDB in CI (item 22, PR #72
     rejected when the query document is built, which neither the mocked tests nor the context test
     (which mocks the startup runners, so CI needs no database) can see. PR #35 added a test that
     builds the repository proxies and materializes each query document without a database, so a
-    malformed query fails in CI; the coverage workflow now also runs a Mongo 8.0 service container
+    malformed query fails in CI; the coverage workflow now also runs a Mongo 7.0 service container
+    (8.0 and later refuse to start on the runner's kernel, SERVER-121912)
     and `MongoQueryExecutionTest` executes the queries against real documents — the history page's
     two range queries, the candle range query with its sort, the live page's eight-newest read, the
     manual-close check and the targeted updates (the anchor is fixed by the first writer, the order
