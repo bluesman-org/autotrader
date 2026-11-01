@@ -156,11 +156,13 @@ setup instead, before that check can run.
    unless `MONGODB_TEST_URI` points at a database whose name ends in `_test` (the suite drops it
    before every test):
    ```bash
-   docker run -d --rm -p 27018:27017 mongo:8.0
+   docker run -d --rm -p 127.0.0.1:27018:27017 mongo:7.0
    MONGODB_TEST_URI=mongodb://127.0.0.1:27018/autotrader_query_test ./mvnw test -Dtest=MongoQueryExecutionTest
    ```
-   The coverage workflow provides the same through a Mongo service container, so the queries are
-   executed on every PR.
+   The coverage workflow provides the same through a Mongo 7.0 service container, so the queries
+   are executed on every PR. 7.0 rather than the 8.0 the box runs: MongoDB 8.0 and later refuse to
+   start on the runner's kernel (SERVER-121912), and the queries are plain find and update
+   predicates either way.
 
 2. Run all tests:
    ```bash

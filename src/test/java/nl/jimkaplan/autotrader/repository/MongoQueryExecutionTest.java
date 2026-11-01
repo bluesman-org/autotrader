@@ -37,15 +37,16 @@ import static org.springframework.data.mongodb.core.query.Criteria.where;
  *
  * <p>The suite is skipped unless {@code MONGODB_TEST_URI} names a database whose name ends with
  * {@code _test}; it drops that database before every test. CI provides one through the coverage
- * workflow's service container. Locally:</p>
+ * workflow's service container, which runs MongoDB 7.0 because 8.0 and later refuse to start on
+ * the runner's kernel (SERVER-121912). Locally:</p>
  *
  * <pre>{@code
- * docker run -d --rm -p 27018:27017 mongo:8.0
+ * docker run -d --rm -p 127.0.0.1:27018:27017 mongo:7.0
  * MONGODB_TEST_URI=mongodb://127.0.0.1:27018/autotrader_query_test ./mvnw test -Dtest=MongoQueryExecutionTest
  * }</pre>
  */
 @DataMongoTest
-@EnabledIfEnvironmentVariable(named = "MONGODB_TEST_URI", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "MONGODB_TEST_URI", matches = ".*\\S.*")
 class MongoQueryExecutionTest {
 
     @Autowired
@@ -119,13 +120,14 @@ class MongoQueryExecutionTest {
     }
 
     @Test
-    void theCandleRangeQueryReturnsOneMarketInOpenTimeOrder() {
+    void theCandleRangeQueryReturnsOneMarketAndIntervalInOpenTimeOrder() {
         candles.saveAll(List.of(
-                candle("BTC-EUR", 200),
-                candle("BTC-EUR", 100),
-                candle("BTC-EUR", 99),
-                candle("BTC-EUR", 201),
-                candle("ETH-EUR", 150)));
+                candle("BTC-EUR", "1h", 200),
+                candle("BTC-EUR", "1h", 100),
+                candle("BTC-EUR", "1h", 99),
+                candle("BTC-EUR", "1h", 201),
+                candle("BTC-EUR", "5m", 150),
+                candle("ETH-EUR", "1h", 150)));
 
         List<Long> openTimes = candles.findCandlesInRange("BTC-EUR", "1h", 100, 200).stream()
                 .map(Candle::getOpenTime)
@@ -165,6 +167,19 @@ class MongoQueryExecutionTest {
                 "s1", "SELL", "FILLED", 101));
         assertFalse(orders.existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
                 "s1", "BUY", "FILLED", 100));
+
+        // A simulated sell in the same position: side, status and signal time all match, so only
+        // the real-order term can keep this false.
+        orders.save(LiveOrder.builder()
+                .strategyId("s1")
+                .market("BTC-EUR")
+                .side("SELL")
+                .status("FILLED")
+                .dryRun(true)
+                .signalOpenTime(200)
+                .build());
+        assertFalse(orders.existsByStrategyIdAndDryRunFalseAndSideAndStatusAndSignalOpenTimeGreaterThanEqual(
+                "s1", "SELL", "FILLED", 150));
     }
 
     @Test
@@ -234,10 +249,10 @@ class MongoQueryExecutionTest {
                 .build();
     }
 
-    private static Candle candle(String market, long openTime) {
+    private static Candle candle(String market, String interval, long openTime) {
         return Candle.builder()
                 .market(market)
-                .interval("1h")
+                .interval(interval)
                 .openTime(openTime)
                 .open(BigDecimal.valueOf(50_000))
                 .high(BigDecimal.valueOf(50_100))

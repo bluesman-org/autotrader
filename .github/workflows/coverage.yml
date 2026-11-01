@@ -25,27 +25,22 @@ jobs:
       # 7.0.0-azure kernel, whose Ubuntu-style uname misses the 7.0.14+ exemption (SERVER-121912,
       # SERVER-136848). The queries exercised here are plain find and update predicates, whose
       # semantics are the same on both majors.
+      #
+      # The health check is what makes the runner wait for mongod itself: without one it starts the
+      # steps as soon as the container is running, which says nothing about the server.
       mongo:
         image: mongo:7.0
         ports:
-          - 27017:27017
+          # Loopback only: the tests connect over 127.0.0.1, so the unauthenticated server has no
+          # reason to listen on the runner's network interface.
+          - 127.0.0.1:27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v7
-      - name: Wait for the Mongo service
-        # GitHub reports a service container "healthy" without a health check, so this waits for
-        # mongod itself and dumps the container's state and log when it never comes up.
-        run: |
-          container=$(docker ps --all --quiet --filter "name=mongo" | head -1)
-          for attempt in $(seq 1 60); do
-            if docker exec "$container" mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "mongod did not answer inside the container"
-          docker ps --all
-          docker logs "$container"
-          exit 1
       - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
