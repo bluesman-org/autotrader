@@ -37,7 +37,8 @@ last evaluated candle current on 2026-11-01; the closed round trips are still fe
 is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12;
 `docs/tradingview.md`); next: compare the dry strategies, with the live trial user-triggered.
 Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
-The repository queries now execute against a real MongoDB in CI (item 22, PR #72).
+The repository queries now execute against a real MongoDB in CI (item 22, PR #72), and
+the app runs Spring Boot 4.1.2 on JDK 25 (item 11, PR #73).
 
 ## Objective
 
@@ -195,15 +196,20 @@ The repository queries now execute against a real MongoDB in CI (item 22, PR #72
     shared 2026-10-13. The live page landed (PR #30, its "last refresh" indicator in PR #33), the
     engine-trades tab (PR #34) and the Bitvavo ledger tab (PR #36); the follow-ups made the two tabs'
     filter bars share their mechanics and the ledger's type and status filters multi-value (PR #44) ✅
-11. ⬜ Investigate upgrading to Spring Boot 4.1.x with JDK 25 (issue #18): the runtime JDK bump
-    belongs with the framework upgrade, which is why Dependabot's `eclipse-temurin` bump (PR #17)
-    was closed. Dependabot's unguarded `spring-boot-starter-parent` 4.1.2 bump (PR #68) was closed
-    too: it does not compile — Spring Security 7 removed `AntPathRequestMatcher` and Boot 4 moved
-    `WebServerInitializedEvent` — and springdoc 2.x does not support Boot 4. The Maven ecosystem now
-    ignores major `spring-boot-starter-parent` updates so the same PR does not return before this
-    item lands; take 4.1.2 or later, with the JDK 25 build/runtime image, springdoc 3.x, and the
-    regenerated OpenAPI spec in one change, and lift the `ignore` entry in `.github/dependabot.yml`
-    in that same PR so later Boot majors reach the queue again
+11. ✅ Upgrade to Spring Boot 4.1.2 with JDK 25 (issue #18): the runtime JDK moved with the
+    framework in one change — `java.version`, the `eclipse-temurin:25-jre-alpine` image, and both
+    workflows. Spring Security 7 replaced `AntPathRequestMatcher` with `PathPatternRequestMatcher`;
+    the web-server event moved to `org.springframework.boot.web.server.context`; the test slices
+    split into their own starters (`spring-boot-starter-webmvc-test`,
+    `spring-boot-starter-data-mongodb-test`) with `TestRestTemplate` in `spring-boot-resttestclient`;
+    the Mongo connection properties became `spring.mongodb.*`, since Boot 4 rejects the old
+    `spring.data.mongodb.uri` and `database`; `HttpHeaders` no longer exposes `entrySet()`; and the
+    anonymous-page redirects are relative now. The application also moved from Jackson 2 to
+    Jackson 3 (`tools.jackson.*`), including the OpenAPI export — the regenerated JSON and YAML are
+    byte-identical to the committed files. springdoc is 3.2.0, and the Maven `ignore` for major Boot
+    bumps is lifted so later majors reach the queue again. The image was built and booted against a
+    scratch Mongo: sign-in pages, the API's 401 and the startup export all work; switching the box's
+    stack to it is the operator's step (PR #73)
 12. ✅ Duplicate `botId` on create returns a clear 400 (PR #4)
 13. ✅ Inclusive boundary records for order/alert time-range queries (PR #4)
 14. ✅ `target/autotrader.jar` refreshes on incremental builds — the antrun copy now overwrites

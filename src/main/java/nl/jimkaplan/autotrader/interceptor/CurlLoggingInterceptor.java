@@ -50,7 +50,7 @@ public class CurlLoggingInterceptor implements ClientHttpRequestInterceptor {
 
         // Add headers
         HttpHeaders headers = request.getHeaders();
-        for (Map.Entry<String, List<String>> header : headers.entrySet()) {
+        for (Map.Entry<String, List<String>> header : headers.headerSet()) {
             for (String value : header.getValue()) {
                 String key = header.getKey();
                 if (key.contains("Key") || key.contains("Secret")) {

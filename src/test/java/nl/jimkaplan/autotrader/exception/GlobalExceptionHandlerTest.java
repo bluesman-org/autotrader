@@ -4,6 +4,7 @@ import nl.jimkaplan.autotrader.model.ErrorResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.mock.http.MockHttpInputMessage;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -120,7 +121,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleMessageNotReadableException_returnsBadRequest() {
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleMessageNotReadableException(
-                new HttpMessageNotReadableException("unknown enum value"), request());
+                new HttpMessageNotReadableException("unknown enum value", new MockHttpInputMessage(new byte[0])), request());
 
         assertError(response, HttpStatus.BAD_REQUEST, "Malformed request body");
     }
@@ -207,7 +208,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleNoResourceFoundException_returnsNotFound() {
         ResponseEntity<ErrorResponse> response = globalExceptionHandler.handleNoResourceFoundException(
-                new NoResourceFoundException(HttpMethod.GET, "/api/nope"), request());
+                new NoResourceFoundException(HttpMethod.GET, "/api/nope", "api/nope"), request());
 
         assertError(response, HttpStatus.NOT_FOUND, "Resource not found");
     }

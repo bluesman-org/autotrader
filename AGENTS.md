@@ -12,8 +12,8 @@ application also provides a REST API for interacting with the exchange.
 
 ## Tech Stack
 
-- **Java 21**: The project uses Java 21 as the programming language
-- **Spring Boot 3.4.4**: Framework for building web applications
+- **Java 25**: The project uses Java 25 as the programming language
+- **Spring Boot 4.1.2**: Framework for building web applications
 - **Maven**: Build and dependency management tool
 - **Lombok**: Reduces boilerplate code
 - **MongoDB**: NoSQL database for data storage
@@ -106,7 +106,7 @@ gitignored.
 
 ```bash
 docker compose -f docker-compose.local.yml up -d
-export SPRING_DATA_MONGODB_URI="mongodb://autotrader:<MONGO_APP_PASSWORD>@127.0.0.1:27017/autotrader"
+export SPRING_MONGODB_URI="mongodb://autotrader:<MONGO_APP_PASSWORD>@127.0.0.1:27017/autotrader"
 export MONGODB_SSL_ENABLED=false
 export ENCRYPTION_MASTER_KEY="$(grep -m1 '^ENCRYPTION_MASTER_KEY=' .env | cut -d= -f2-)"
 ```

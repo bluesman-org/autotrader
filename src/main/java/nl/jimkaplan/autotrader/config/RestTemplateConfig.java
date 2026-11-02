@@ -1,16 +1,19 @@
 package nl.jimkaplan.autotrader.config;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.interceptor.CurlLoggingInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Configuration for the app's RestTemplate beans.
@@ -74,12 +77,24 @@ public class RestTemplateConfig {
      * @param restTemplate The client whose Jackson converter reads Bitvavo responses
      */
     private static void configureJackson(RestTemplate restTemplate) {
-        ObjectMapper mapper = Jackson2ObjectMapperBuilder.json()
-                .featuresToDisable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
+        JsonMapper mapper = JsonMapper.builder()
+                .disable(DateTimeFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
+                // Jackson 3 ignores unknown fields by default, like the Jackson2ObjectMapperBuilder
+                // this replaced; keep it explicit so a future default cannot make every Bitvavo
+                // response strict the day the exchange adds a field.
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .build();
-        restTemplate.getMessageConverters().stream()
-                .filter(MappingJackson2HttpMessageConverter.class::isInstance)
-                .map(MappingJackson2HttpMessageConverter.class::cast)
-                .forEach(converter -> converter.setObjectMapper(mapper));
+        // Framework 7's converter takes its mapper at construction and offers no setter, so the
+        // registered converter is replaced. The list goes back through the setter, and a missing
+        // converter fails loudly: the framework's mapper reads epoch milliseconds as nanoseconds.
+        List<HttpMessageConverter<?>> converters = new ArrayList<>(restTemplate.getMessageConverters());
+        for (int i = 0; i < converters.size(); i++) {
+            if (converters.get(i) instanceof JacksonJsonHttpMessageConverter) {
+                converters.set(i, new JacksonJsonHttpMessageConverter(mapper));
+                restTemplate.setMessageConverters(converters);
+                return;
+            }
+        }
+        throw new IllegalStateException("No Jackson JSON converter on the Bitvavo RestTemplate");
     }
 }

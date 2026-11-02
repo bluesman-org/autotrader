@@ -134,7 +134,9 @@ the API and the pages alike — its Basic auth over http is why that port stays 
 3. The box's `.env` carries `SESSION_COOKIE_SECURE=true` and
    `AUTOTRADER_PUBLIC_URL=https://at.bluris.nl/autotrader`; deploying is
    `./mvnw package -DskipTests -Ddocker.skip=true` followed by
-   `docker compose -f docker-compose.dev.yml up -d --build` on the box.
+   `docker compose -f docker-compose.dev.yml up -d --build` on the box. Boot 4 renamed the Mongo
+   connection property, so a shell or unit that exports `SPRING_DATA_MONGODB_URI` must rename it to
+   `SPRING_MONGODB_URI`; the compose file already passes the new name.
 4. Create the account: open `https://at.bluris.nl/autotrader/` and sign up (the first signup). Note
    the username and password somewhere safe — recovery needs the email address on the account.
 5. Settings → **Mail**: store the SMTP server, then use "Forgot your password?" once and confirm the

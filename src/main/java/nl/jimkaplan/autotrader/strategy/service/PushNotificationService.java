@@ -1,7 +1,7 @@
 package nl.jimkaplan.autotrader.strategy.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.zerodeplibs.webpush.PushSubscription;
 import com.zerodeplibs.webpush.VAPIDKeyPair;
 import com.zerodeplibs.webpush.httpclient.StandardHttpClientRequestPreparer;
@@ -164,7 +164,7 @@ public class PushNotificationService {
         payload.put("tag", tag == null || tag.isBlank() ? DEFAULT_TAG : tag);
         try {
             return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Could not encode the Web Push payload", ex);
         }
     }

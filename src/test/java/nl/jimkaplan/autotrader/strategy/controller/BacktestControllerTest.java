@@ -1,7 +1,7 @@
 package nl.jimkaplan.autotrader.strategy.controller;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestEvaluation;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestMetrics;
@@ -85,7 +85,7 @@ class BacktestControllerTest {
     }
 
     @Test
-    void recentResponse_omitsTheNullEntriesOfSummaries() throws JsonProcessingException {
+    void recentResponse_omitsTheNullEntriesOfSummaries() throws JacksonException {
         BacktestRun summary = BacktestRun.builder().build();
         summary.setId("run-1");
         when(backtestService.recent(5)).thenReturn(List.of(summary));
@@ -98,7 +98,7 @@ class BacktestControllerTest {
     }
 
     @Test
-    void storedRun_omitsTheUnknownSkippedCount() throws JsonProcessingException {
+    void storedRun_omitsTheUnknownSkippedCount() throws JacksonException {
         BacktestRun run = BacktestRun.builder()
                 .entries(List.of(BacktestRunEntry.builder()
                         .train(BacktestRunMetrics.builder().build())
@@ -114,7 +114,7 @@ class BacktestControllerTest {
     }
 
     @Test
-    void storedRun_includesTheSkippedCountWhenKnown() throws JsonProcessingException {
+    void storedRun_includesTheSkippedCountWhenKnown() throws JacksonException {
         BacktestRun run = BacktestRun.builder()
                 .entries(List.of(BacktestRunEntry.builder()
                         .train(BacktestRunMetrics.builder().skippedSignals(3).build())

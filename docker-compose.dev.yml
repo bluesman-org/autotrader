@@ -31,7 +31,7 @@ services:
       # Development settings only: the local Mongo over the compose network, no production
       # credentials. The encryption key is the same one the Maven loop uses, so data written
       # through either path stays readable through the other.
-      SPRING_DATA_MONGODB_URI: mongodb://autotrader:${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}@mongo:27017/autotrader
+      SPRING_MONGODB_URI: mongodb://autotrader:${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}@mongo:27017/autotrader
       MONGODB_SSL_ENABLED: "false"
       ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:?set ENCRYPTION_MASTER_KEY in .env}
       BITVAVO_API_URL: ${BITVAVO_API_URL:-https://api.bitvavo.com/v2}
