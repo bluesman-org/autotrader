@@ -14,7 +14,7 @@ user would have nothing of their own.
 | `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password` | anyone |
 | `/css/**`, `/js/**`, `/images/**`, `/favicon.ico`, `/error` | anyone |
 | `/service-worker.js`, `/manifest.json`, `/icon.svg` | anyone — static Web Push assets, no account data |
-| `/actuator/health` | anyone (the monitoring probe) |
+| `/actuator/health` | anyone (the monitoring probe); the body carries the status only, no component details |
 | `/webhook/**` | anyone — the TradingView webhook authenticates itself with its own key |
 | `/v3/api-docs/**` | a signed-in account, and the machine itself (the specification exporter fetches it over the loopback at startup) |
 | `/ui/**`, `/api/**`, `/swagger-ui/**`, everything else | a signed-in account |

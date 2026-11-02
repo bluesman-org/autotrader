@@ -44,7 +44,9 @@ management:
         include: health, info, env, loggers
   endpoint:
     health:
-      show-details: always
+      # The health path is public (the monitoring probe), so its component details — disk free
+      # space, SSL chain expiry — stay in the process: the probe only needs the status.
+      show-details: never
 #    env:
 #      show-values: always
 
