@@ -30,7 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
         "encryption.master-key=dGVzdC1rZXk=",
         "openapi.export-enabled=false",
         "openapi.export-dir=target/health-endpoint-check",
-        "openapi.export-startup-delay-ms=0"
+        "openapi.export-startup-delay-ms=0",
+        // The aggregate status must not depend on the machine running the test: a full disk or a
+        // missing certificate would answer 503 and fail a check about the response's shape.
+        "management.health.diskspace.enabled=false",
+        "management.health.ssl.enabled=false",
+        "management.health.mongo.enabled=false"
 })
 @AutoConfigureTestRestTemplate
 class HealthEndpointExposureTest {
