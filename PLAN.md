@@ -39,7 +39,7 @@ is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of
 Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
 The repository queries now execute against a real MongoDB in CI (item 22, PR #72), and
 the app runs Spring Boot 4.1.2 on JDK 25 (item 11, PR #73), and the public health body
-is status-only (item 40, this PR).
+is status-only (item 40, PR #74).
 
 ## Objective
 
@@ -375,7 +375,7 @@ is status-only (item 40, this PR).
     disk figures, the SSL chain and every component name into a body anyone can read. The probe
     needs only the status, so `show-details` is `never` now, pinned by a request-level test that
     boots the app on a random port and reads the endpoint the way a probe does — anonymously
-    (this PR)
+    (PR #74)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
