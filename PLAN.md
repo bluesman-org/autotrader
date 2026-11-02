@@ -38,7 +38,8 @@ is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of
 `docs/tradingview.md`); next: compare the dry strategies, with the live trial user-triggered.
 Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
 The repository queries now execute against a real MongoDB in CI (item 22, PR #72), and
-the app runs Spring Boot 4.1.2 on JDK 25 (item 11, PR #73).
+the app runs Spring Boot 4.1.2 on JDK 25 (item 11, PR #73), and the public health body
+is status-only (item 40, PR #74).
 
 ## Objective
 
@@ -369,6 +370,12 @@ the app runs Spring Boot 4.1.2 on JDK 25 (item 11, PR #73).
     would have rewritten the file. The wrapper file is exempted with a later `/mvnw.cmd -text` line,
     which keeps its committed bytes and leaves a fresh clone clean, while other `.cmd` files keep
     the `text eol=crlf` normalization (PR #66).
+
+40. ✅ The public health endpoint reports only its status: `show-details: always` put the host's
+    disk figures, the SSL chain and every component name into a body anyone can read. The probe
+    needs only the status, so `show-details` is `never` now, pinned by a request-level test that
+    boots the app on a random port and reads the endpoint the way a probe does — anonymously
+    (PR #74)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
