@@ -140,6 +140,12 @@ public class LedgerService {
      */
     private static final long GENESIS_MILLIS = Instant.parse("2020-01-01T00:00:00Z").toEpochMilli();
 
+    /**
+     * The last stretch re-read on a refresh, so a fill the exchange records with a slightly older
+     * timestamp is still picked up. Duplicates are dropped by transaction id.
+     */
+    private static final long HISTORY_OVERLAP_MILLIS = 5 * 60_000L;
+
     private final BitvavoApiClient bitvavoApiClient;
     private final BitvavoCredentialsService credentialsService;
     private final LiveStrategyService liveStrategyService;
@@ -147,6 +153,13 @@ public class LedgerService {
     private final DisplayZone display;
     private final HistoryPeriods periods;
     private final Clock clock;
+
+    /** The cached account history and the point it reaches; guarded by {@link #fillsLock}. */
+    private final Object fillsLock = new Object();
+    private final Map<String, List<Transaction>> cachedFills = new TreeMap<>();
+    private final Set<String> cachedTransactionIds = new HashSet<>();
+    private String cachedFillsKey;
+    private long cachedFillsTo = Long.MIN_VALUE;
 
     @Autowired
     public LedgerService(BitvavoApiClient bitvavoApiClient,
@@ -453,21 +466,59 @@ public class LedgerService {
      * bitcoin — so a transaction joins both currencies' lists, whatever the trade's quote. The
      * balance walks use every movement; the euro cost walk filters to entries the history prices
      * in euro (see {@link #bases}).
+     *
+     * <p>The walk is cached per account: the first read still pages from genesis, but every later
+     * refresh reads only the few minutes since the last one, so the page's ten-second timer no
+     * longer makes the exchange serve the account's whole history each tick. The cached lists are
+     * copied before they leave the lock, because two open tabs refresh independently.</p>
      */
     private Map<String, List<Transaction>> fillsByBase(BitvavoCredentials credentials,
                                                        long toMillis) {
-        Map<String, List<Transaction>> byBase = new TreeMap<>();
+        synchronized (fillsLock) {
+            String key = credentials.getId() + "|" + credentials.getUpdatedTime();
+            if (!key.equals(cachedFillsKey)) {
+                cachedFills.clear();
+                cachedTransactionIds.clear();
+                cachedFillsTo = Long.MIN_VALUE;
+                cachedFillsKey = key;
+            }
+            if (cachedFillsTo == Long.MIN_VALUE) {
+                readFills(credentials, GENESIS_MILLIS, toMillis);
+            } else if (toMillis > cachedFillsTo) {
+                readFills(credentials, Math.max(GENESIS_MILLIS, cachedFillsTo - HISTORY_OVERLAP_MILLIS),
+                        toMillis);
+            }
+            cachedFillsTo = Math.max(cachedFillsTo, toMillis);
+            Map<String, List<Transaction>> snapshot = new TreeMap<>();
+            cachedFills.forEach((currency, fills) -> snapshot.put(currency, List.copyOf(fills)));
+            return snapshot;
+        }
+    }
+
+    /**
+     * Appends the buys and sells in [fromMillis, toMillis] that the cache has not seen yet. Ids
+     * are the dedupe key; an entry without one (older fixtures, a shape the exchange does not send)
+     * is kept, since dropping it would silently change the balances.
+     */
+    private void readFills(BitvavoCredentials credentials, long fromMillis, long toMillis) {
+        boolean added = false;
         for (String type : List.of("buy", "sell")) {
-            for (Transaction entry : history(credentials, type, GENESIS_MILLIS, toMillis)) {
-                addFill(byBase, entry.getReceivedCurrency(), entry);
-                addFill(byBase, entry.getSentCurrency(), entry);
+            for (Transaction entry : history(credentials, type, fromMillis, toMillis)) {
+                if (entry.getTransactionId() != null
+                        && !cachedTransactionIds.add(entry.getTransactionId())) {
+                    continue;
+                }
+                addFill(cachedFills, entry.getReceivedCurrency(), entry);
+                addFill(cachedFills, entry.getSentCurrency(), entry);
+                added = true;
             }
         }
-        for (List<Transaction> fills : byBase.values()) {
-            fills.sort(Comparator.comparing(Transaction::getExecutedAt,
-                    Comparator.nullsLast(Comparator.naturalOrder())));
+        if (added) {
+            for (List<Transaction> fills : cachedFills.values()) {
+                fills.sort(Comparator.comparing(Transaction::getExecutedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+            }
         }
-        return byBase;
     }
 
     private static void addFill(Map<String, List<Transaction>> byBase, String currency,

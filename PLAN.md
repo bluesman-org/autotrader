@@ -41,7 +41,8 @@ The repository queries now execute against a real MongoDB in CI (item 22, PR #72
 Spring Boot 4.1.2 on JDK 25 (item 11, PR #73) and is deployed on the box; the public health body is
 status-only (item 40, PR #74). The live page's statistics and order results are now aggregated and
 looked up in the database instead of walking the whole round-trip history on every refresh (item 21,
-this PR).
+this PR). The ledger's cost walk is cached per account and extended with the window since the last
+read, so its ten-second refresh no longer pages the whole history (item 23, this PR).
 
 ## Objective
 
@@ -269,10 +270,13 @@ this PR).
     sequence never moves backwards, the last-started time stores as an instant). The class is
     skipped locally without `MONGODB_TEST_URI`, which must name a database ending in `_test` because
     the suite drops it (PR #72)
-23. ⬜ Keep the ledger's reads flat as the account grows: the ledger's ten-second refresh re-reads
-    the market's whole buy/sell history from the account's start on every tick, because the
-    average-cost walk needs it; a long-lived account makes that many pages. Cache the walk and
-    extend it with the new fills, or bound the look-back with a stated rule (flagged in PR #36)
+23. ✅ Keep the ledger's reads flat as the account grows: the buy/sell walk is cached per account
+    (`id|updatedTime`), read from genesis once and then extended with only the window since the
+    last read — five minutes of overlap, deduplicated by transaction id — so the ten-second refresh
+    is a couple of bounded pages instead of the whole history. The cached lists are copied out of
+    the lock because two tabs refresh independently, and a changed key reloads from the start. The
+    first read after a start still pages from genesis under the existing 25-page cap; tests cover
+    both the cached tick and the later window (this PR).
 24. ✅ Move the Bitvavo key out of the bot configurations: the engine and the ledger sign with one
     system-wide credential, stored encrypted and managed on `/ui/settings` (or through
     `/api/bitvavo-credentials`); a startup copy takes the key an installation already stored inside

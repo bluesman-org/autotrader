@@ -28,6 +28,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
@@ -42,6 +43,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -1399,6 +1401,76 @@ class LedgerServiceTest {
         when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
                 .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
         when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+    }
+
+    /**
+     * The page refreshes every ten seconds; the account history behind the cost walk must not be
+     * re-read from genesis each time.
+     */
+    @Test
+    void theAccountHistoryIsReadOncePerRefreshWindow() {
+        accountReadable();
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+
+        cached.view(new LedgerRequest());
+        cached.view(new LedgerRequest());
+
+        verify(client, times(2)).get(anyString(), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString());
+    }
+
+    @Test
+    void aLaterRefreshReadsOnlyTheWindowSinceTheLastOne() {
+        accountReadable();
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+        cached.view(new LedgerRequest());
+
+        clock.advance(Duration.ofMinutes(10));
+        cached.view(new LedgerRequest());
+
+        ArgumentCaptor<String> uris = ArgumentCaptor.forClass(String.class);
+        verify(client, times(4)).get(uris.capture(), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString());
+        List<String> later = uris.getAllValues().subList(2, 4);
+        for (String uri : later) {
+            long from = Long.parseLong(UriComponentsBuilder.fromUriString(uri).build()
+                    .getQueryParams().getFirst("fromDate"));
+            // Five minutes of overlap, not the account's start.
+            assertTrue(from >= NOW.minus(Duration.ofMinutes(5)).toEpochMilli(),
+                    "the later read must start at the overlap, not at genesis: " + from);
+        }
+    }
+
+    /** A clock the cache tests can move between refreshes. */
+    private static final class MovableClock extends Clock {
+        private Instant now;
+
+        MovableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration by) {
+            now = now.plus(by);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneId.of("UTC");
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
     }
 
     private void accountReadable() {
