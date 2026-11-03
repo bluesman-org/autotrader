@@ -73,8 +73,7 @@ class LiveViewServiceTest {
                 .thenReturn(Optional.of(open));
         when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID))
                 .thenReturn(List.of(stats(1, 0.12, 1, 0.12)));
-        when(livePositionRepository.findAllByStrategyIdAndStatusAndExitTimeIn(eq(STRATEGY_ID), eq("CLOSED"),
-                any())).thenReturn(List.of(closed));
+        when(livePositionRepository.findAllByStrategyIdAndExitTimeIn(eq(STRATEGY_ID), any())).thenReturn(List.of(closed));
         when(bitvavoApiClient.getPublic(eq("/ticker/book?market=BTC-EUR"), eq(GetBookResponse.class)))
                 .thenReturn(new GetBookResponse("BTC-EUR", new BigDecimal("74562"),
                         BigDecimal.ONE, new BigDecimal("74578"), BigDecimal.ONE));

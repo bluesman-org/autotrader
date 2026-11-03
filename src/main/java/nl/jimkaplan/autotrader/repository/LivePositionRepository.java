@@ -48,17 +48,19 @@ public interface LivePositionRepository extends MongoRepository<LivePosition, St
     List<RoundTripStats> aggregateRoundTrips(String strategyId);
 
     /**
-     * A strategy's closed positions whose exit signal is one of the given candle open times, for
-     * the live page's order rows: only the newest eight orders are shown, so only their results
-     * are needed rather than the whole history.
+     * A strategy's positions whose exit signal is one of the given candle open times, for the live
+     * page's order rows: only the newest eight orders are shown, so only their results are needed
+     * rather than the whole history.
+     *
+     * <p>No status parameter: only a closed position carries an exit time, so an open one can
+     * never match — the aggregation above states its closed condition in the pipeline instead,
+     * and both reads share the {@code strategy_id, status, exit_time} index.</p>
      *
      * @param strategyId The strategy ID
-     * @param status     "CLOSED"
      * @param exitTimes  The exit signal open times to look up
      * @return The matching positions, in no particular order
      */
-    List<LivePosition> findAllByStrategyIdAndStatusAndExitTimeIn(String strategyId, String status,
-                                                                 Collection<Long> exitTimes);
+    List<LivePosition> findAllByStrategyIdAndExitTimeIn(String strategyId, Collection<Long> exitTimes);
 
     /**
      * Whether the strategy has any recorded positions, so a strategy with a history is archived

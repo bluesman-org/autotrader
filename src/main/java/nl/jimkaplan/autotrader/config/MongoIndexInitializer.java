@@ -72,9 +72,13 @@ public class MongoIndexInitializer implements ApplicationRunner {
         ensureIndex(LiveOrder.class, new Index()
                 .on("strategyId", Sort.Direction.ASC)
                 .on("createdTime", Sort.Direction.DESC));
+        // One index serves both of the live page's closed-position reads: the realised-totals
+        // aggregation matches the first two keys, and the trailing exit_time turns the order
+        // results' $in into index seeks instead of a scan of the strategy's closed history.
         ensureIndex(LivePosition.class, new Index()
                 .on("strategyId", Sort.Direction.ASC)
-                .on("status", Sort.Direction.ASC));
+                .on("status", Sort.Direction.ASC)
+                .on("exitTime", Sort.Direction.ASC));
         // The history page reads orders by signal time and positions by status plus entry time.
         ensureIndex(LiveOrder.class, new Index()
                 .on("signalOpenTime", Sort.Direction.ASC));

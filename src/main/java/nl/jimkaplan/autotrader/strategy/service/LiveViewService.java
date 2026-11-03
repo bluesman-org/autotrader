@@ -249,7 +249,7 @@ public class LiveViewService {
         }
         Map<Long, Double> resultByExitSignal = new HashMap<>();
         for (LivePosition position : livePositionRepository
-                .findAllByStrategyIdAndStatusAndExitTimeIn(strategyId, "CLOSED", signalTimes)) {
+                .findAllByStrategyIdAndExitTimeIn(strategyId, signalTimes)) {
             if (position.getExitTime() != null) {
                 resultByExitSignal.put(position.getExitTime(), profit(position));
             }

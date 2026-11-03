@@ -118,9 +118,10 @@ class MongoIndexInitializerTest {
         assertEquals(-1, liveOrderIndex.getIndexKeys().get("createdTime"));
 
         Index livePositionIndex = indexes.get(8);
-        assertEquals(2, livePositionIndex.getIndexKeys().size());
+        assertEquals(3, livePositionIndex.getIndexKeys().size());
         assertEquals(1, livePositionIndex.getIndexKeys().get("strategyId"));
         assertEquals(1, livePositionIndex.getIndexKeys().get("status"));
+        assertEquals(1, livePositionIndex.getIndexKeys().get("exitTime"));
 
         Index liveOrderSignalIndex = indexes.get(9);
         assertEquals(1, liveOrderSignalIndex.getIndexKeys().size());
