@@ -165,7 +165,10 @@ class MongoQueryExecutionTest {
                 closedPosition("s1", 1.0, 100),
                 closedPosition("s1", 2.0, 200),
                 closedPosition("s1", 3.0, 300),
-                closedPosition("s2", 4.0, 100)));
+                closedPosition("s2", 4.0, 100),
+                // Only a closed position can carry an exit time, but the query states the status
+                // itself: a row that broke that rule must still stay out of the result.
+                openPositionWithExitTime("s1", 300)));
 
         List<Long> exitTimes = positions
                 .findAllByStrategyIdAndExitTimeIn("s1", List.of(100L, 300L)).stream()
@@ -287,6 +290,19 @@ class MongoQueryExecutionTest {
                 .exitPrice(50_000.0)
                 .exitTime(exitTime)
                 .profit(profit)
+                .dryRun(true)
+                .build();
+    }
+
+    private static LivePosition openPositionWithExitTime(String strategyId, long exitTime) {
+        return LivePosition.builder()
+                .strategyId(strategyId)
+                .market("BTC-EUR")
+                .status("OPEN")
+                .quantity(0.01)
+                .entryPrice(50_000)
+                .entryTime(exitTime - 3_600_000)
+                .exitTime(exitTime)
                 .dryRun(true)
                 .build();
     }
