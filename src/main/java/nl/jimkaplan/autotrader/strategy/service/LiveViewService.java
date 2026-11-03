@@ -6,6 +6,7 @@ import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.RoundTripStats;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.controller.LiveCardView;
 import nl.jimkaplan.autotrader.strategy.model.CandleInterval;
@@ -23,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -111,20 +113,22 @@ public class LiveViewService {
         boolean running = liveStrategyService.isRunning(strategy.getId());
         boolean connected = running && liveStrategyService.isConnected(strategy.getId());
         String lastError = running ? liveStrategyService.lastError(strategy.getId()) : null;
-        List<LivePosition> closed = livePositionRepository
-                .findAllByStrategyIdAndStatus(strategy.getId(), "CLOSED");
+        Optional<RoundTripStats> stats = roundTrips(strategy.getId());
         LivePosition position = livePositionRepository
                 .findByStrategyIdAndStatus(strategy.getId(), "OPEN").orElse(null);
         String name = strategy.getName() == null || strategy.getName().isBlank()
                 ? strategy.getMarket() + " " + strategy.getInterval()
                 : strategy.getName();
-        List<LiveCardView.OrderView> orderViews = orders(strategy.getId(), position, closed);
-        boolean started = strategy.hasStarted() || position != null || !closed.isEmpty()
-                || !orderViews.isEmpty();
+        List<LiveOrder> recentOrders = liveOrderRepository
+                .findTop8ByStrategyIdOrderByCreatedTimeDesc(strategy.getId());
+        List<LiveCardView.OrderView> orderViews = orders(recentOrders, position,
+                exitResults(strategy.getId(), recentOrders));
+        boolean started = strategy.hasStarted() || position != null
+                || stats.map(RoundTripStats::getCount).orElse(0L) > 0 || !orderViews.isEmpty();
         return new LiveCardView(strategy.getId(), name, strategy.getMarket(), strategy.getInterval(),
                 started, running, connected, strategy.isDryRun(),
                 parameters(strategy), statusLine(strategy, running, lastError, now),
-                position(position, book, strategy), statsLine(closed), orderViews);
+                position(position, book, strategy), statsLine(stats), orderViews);
     }
 
     private String statusLine(LiveStrategy strategy, boolean running, String lastError, Instant now) {
@@ -203,31 +207,25 @@ public class LiveViewService {
                 position.getEntryFee() == null ? DASH : euro(position.getEntryFee()));
     }
 
-    private String statsLine(List<LivePosition> closed) {
-        // The whole round-trip history is walked in memory here, four passes over one document per
-        // round trip. Fine while it is tens of rows — a 1m strategy does tens per day — but the
-        // read grows with the strategy's age; the Mongo-side aggregation that keeps it flat is
-        // PLAN item 21.
-        if (closed.isEmpty()) {
+    private Optional<RoundTripStats> roundTrips(String strategyId) {
+        return livePositionRepository.aggregateRoundTrips(strategyId).stream().findFirst();
+    }
+
+    private String statsLine(Optional<RoundTripStats> aggregate) {
+        if (aggregate.isEmpty()) {
             return "No completed round trips yet.";
         }
-        double total = closed.stream().mapToDouble(LiveViewService::profit).sum();
-        long wins = closed.stream().filter(position -> profit(position) >= 0).count();
-        long losses = closed.size() - wins;
+        RoundTripStats stats = aggregate.get();
+        long wins = stats.getWins();
+        long losses = stats.getCount() - wins;
         StringBuilder line = new StringBuilder("Realised since start: ")
-                .append(closed.size()).append(" round trips · ").append(signed(total));
-        if (wins > 0 || losses > 0) {
-            line.append(" · ").append(wins).append(" wins / ").append(losses).append(" losses");
-            if (wins > 0) {
-                line.append(" · avg win ").append(signed(closed.stream()
-                        .filter(position -> profit(position) >= 0).mapToDouble(LiveViewService::profit)
-                        .average().orElse(0)));
-            }
-            if (losses > 0) {
-                line.append(" · avg loss ").append(signed(closed.stream()
-                        .filter(position -> profit(position) < 0).mapToDouble(LiveViewService::profit)
-                        .average().orElse(0)));
-            }
+                .append(stats.getCount()).append(" round trips · ").append(signed(stats.getTotal()))
+                .append(" · ").append(wins).append(" wins / ").append(losses).append(" losses");
+        if (wins > 0) {
+            line.append(" · avg win ").append(signed(stats.getWinTotal() / wins));
+        }
+        if (losses > 0) {
+            line.append(" · avg loss ").append(signed((stats.getTotal() - stats.getWinTotal()) / losses));
         }
         return line.toString();
     }
@@ -236,15 +234,32 @@ public class LiveViewService {
         return position.getProfit() == null ? 0 : position.getProfit();
     }
 
-    private List<LiveCardView.OrderView> orders(String strategyId, LivePosition openPosition,
-                                                List<LivePosition> closed) {
+    /**
+     * The realised result of each of the recent orders' exit signals. Only the newest eight orders
+     * are shown, so only their signal times are looked up: the rest of the strategy's history is
+     * not read at all.
+     */
+    private Map<Long, Double> exitResults(String strategyId, List<LiveOrder> recentOrders) {
+        List<Long> signalTimes = recentOrders.stream()
+                .map(LiveOrder::getSignalOpenTime)
+                .distinct()
+                .toList();
+        if (signalTimes.isEmpty()) {
+            return Map.of();
+        }
         Map<Long, Double> resultByExitSignal = new HashMap<>();
-        for (LivePosition position : closed) {
+        for (LivePosition position : livePositionRepository
+                .findAllByStrategyIdAndStatusAndExitTimeIn(strategyId, "CLOSED", signalTimes)) {
             if (position.getExitTime() != null) {
                 resultByExitSignal.put(position.getExitTime(), profit(position));
             }
         }
-        return liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(strategyId).stream()
+        return resultByExitSignal;
+    }
+
+    private List<LiveCardView.OrderView> orders(List<LiveOrder> recentOrders, LivePosition openPosition,
+                                                Map<Long, Double> resultByExitSignal) {
+        return recentOrders.stream()
                 .map(order -> orderView(order, openPosition, resultByExitSignal))
                 .toList();
     }

@@ -137,6 +137,43 @@ class MongoQueryExecutionTest {
     }
 
     @Test
+    void theRoundTripAggregateCountsWinsAndSumsProfit() {
+        positions.saveAll(List.of(
+                closedPosition("s1", 2.0, 100),
+                closedPosition("s1", -3.0, 200),
+                // Zero counts as a win on the live page, so it must count here too.
+                closedPosition("s1", 0.0, 300),
+                closedPosition("s1", -1.0, 400),
+                closedPosition("s2", 9.0, 500),
+                position("OPEN", 600)));
+
+        RoundTripStats stats = positions.aggregateRoundTrips("s1").get(0);
+
+        assertEquals(4, stats.getCount());
+        assertEquals(-2.0, stats.getTotal(), 1e-9);
+        assertEquals(2, stats.getWins());
+        assertEquals(2.0, stats.getWinTotal(), 1e-9);
+        assertTrue(positions.aggregateRoundTrips("no-such-strategy").isEmpty());
+    }
+
+    @Test
+    void theExitLookupReadsOnlyTheRequestedSignals() {
+        positions.saveAll(List.of(
+                closedPosition("s1", 1.0, 100),
+                closedPosition("s1", 2.0, 200),
+                closedPosition("s1", 3.0, 300),
+                closedPosition("s2", 4.0, 100)));
+
+        List<Long> exitTimes = positions
+                .findAllByStrategyIdAndStatusAndExitTimeIn("s1", "CLOSED", List.of(100L, 300L)).stream()
+                .map(LivePosition::getExitTime)
+                .sorted()
+                .toList();
+
+        assertEquals(List.of(100L, 300L), exitTimes);
+    }
+
+    @Test
     void theLivePageReturnsTheEightNewestOrdersOfItsOwnStrategy() {
         for (int i = 1; i <= 10; i++) {
             orders.save(order("s1", i));
@@ -232,6 +269,21 @@ class MongoQueryExecutionTest {
                 .quantity(0.01)
                 .entryPrice(50_000)
                 .entryTime(entryTime)
+                .dryRun(true)
+                .build();
+    }
+
+    private static LivePosition closedPosition(String strategyId, double profit, long exitTime) {
+        return LivePosition.builder()
+                .strategyId(strategyId)
+                .market("BTC-EUR")
+                .status("CLOSED")
+                .quantity(0.01)
+                .entryPrice(50_000)
+                .entryTime(exitTime - 3_600_000)
+                .exitPrice(50_000.0)
+                .exitTime(exitTime)
+                .profit(profit)
                 .dryRun(true)
                 .build();
     }

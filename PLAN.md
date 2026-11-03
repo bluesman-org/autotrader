@@ -5,7 +5,7 @@ indicators. TradingView is kept as a legacy fallback (Phase 6 records that decis
 file with every PR**: check off completed steps, add new follow-ups, and keep the status line
 current.
 
-**Status (2026-11-01):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
+**Status (2026-11-03):** Phases 1–5 complete (PRs #4–#12): candle store, indicators and rules,
 backtester and sweep, REST API, in-app UI, Docker development stack, live engine (dry-run by
 default, replay gate); the live series is anchored to a fixed start (PR #27) and the anchored
 design is verified live — restarts kept the same anchor and the engine's trades matched a
@@ -37,9 +37,11 @@ last evaluated candle current on 2026-11-01; the closed round trips are still fe
 is only starting. TradingView is kept as a legacy fallback (Phase 6, decision of 2026-10-12;
 `docs/tradingview.md`); next: compare the dry strategies, with the live trial user-triggered.
 Dependabot's unguarded Boot 4.1.2 bump (PR #68) was closed in favour of the migration in item 11.
-The repository queries now execute against a real MongoDB in CI (item 22, PR #72), and
-the app runs Spring Boot 4.1.2 on JDK 25 (item 11, PR #73), and the public health body
-is status-only (item 40, PR #74).
+The repository queries now execute against a real MongoDB in CI (item 22, PR #72). The app runs
+Spring Boot 4.1.2 on JDK 25 (item 11, PR #73) and is deployed on the box; the public health body is
+status-only (item 40, PR #74). The live page's statistics and order results are now aggregated and
+looked up in the database instead of walking the whole round-trip history on every refresh (item 21,
+this PR).
 
 ## Objective
 
@@ -249,10 +251,11 @@ is status-only (item 40, PR #74).
     real strategy is a copy whose name ends `-REAL` and whose anchor is fresh. Each ranked backtest
     row has a **Use live** link that prefills the form. Edits require the strategy to be stopped
     (PR #58)
-21. ⬜ Keep the live page's reads flat as histories grow: the statistics line walks a strategy's
-    whole round-trip history in memory on every 10-second refresh (the orders query is already
-    bounded in the database). Aggregate count, sum, win count and the averages Mongo-side (flagged
-    in the PR #30 review).
+21. ✅ Keep the live page's reads flat as histories grow: `aggregateRoundTrips` computes the
+    count, total, win count and the wins' sum in one Mongo aggregation (zero counts as a win, as the
+    page states), and the order rows' results come from a lookup bounded to the newest eight
+    orders' signal times instead of the strategy's whole closed history. The unit tests mock the
+    aggregate; `MongoQueryExecutionTest` executes both queries against seeded documents (this PR).
 22. ✅ Cover Mongo query execution in CI: the history page's range queries failed only at deploy —
     two conditions on one field cannot be written as a derived method name, and the second bound is
     rejected when the query document is built, which neither the mocked tests nor the context test

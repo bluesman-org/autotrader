@@ -4,6 +4,7 @@ import nl.jimkaplan.autotrader.bitvavo.client.BitvavoApiClient;
 import nl.jimkaplan.autotrader.bitvavo.model.GetBookResponse;
 import nl.jimkaplan.autotrader.repository.LiveOrderRepository;
 import nl.jimkaplan.autotrader.repository.LivePositionRepository;
+import nl.jimkaplan.autotrader.repository.RoundTripStats;
 import nl.jimkaplan.autotrader.strategy.controller.LiveCardView;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
@@ -70,8 +71,10 @@ class LiveViewServiceTest {
         when(liveStrategyService.lastError(STRATEGY_ID)).thenReturn(null);
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(open));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
-                .thenReturn(List.of(closed));
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID))
+                .thenReturn(List.of(stats(1, 0.12, 1, 0.12)));
+        when(livePositionRepository.findAllByStrategyIdAndStatusAndExitTimeIn(eq(STRATEGY_ID), eq("CLOSED"),
+                any())).thenReturn(List.of(closed));
         when(bitvavoApiClient.getPublic(eq("/ticker/book?market=BTC-EUR"), eq(GetBookResponse.class)))
                 .thenReturn(new GetBookResponse("BTC-EUR", new BigDecimal("74562"),
                         BigDecimal.ONE, new BigDecimal("74578"), BigDecimal.ONE));
@@ -130,7 +133,7 @@ class LiveViewServiceTest {
         when(liveStrategyService.lastError(STRATEGY_ID)).thenReturn("errorCode 205: Invalid market");
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition()));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID)).thenReturn(List.of());
         when(bitvavoApiClient.getPublic(any(), eq(GetBookResponse.class)))
                 .thenThrow(new RestClientException("connect timed out"));
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
@@ -149,7 +152,7 @@ class LiveViewServiceTest {
     @Test
     void cards_showAStoppedStrategyWithoutARunner() {
         when(liveStrategyService.active()).thenReturn(List.of(strategy()));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID)).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
 
@@ -169,8 +172,8 @@ class LiveViewServiceTest {
         strategy.setSeriesStartTime(0);
         strategy.setLastEvaluatedOpenTime(0);
         when(liveStrategyService.active()).thenReturn(List.of(strategy));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
-                .thenReturn(List.of(closedPosition(0.12)));
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID))
+                .thenReturn(List.of(stats(1, 0.12, 1, 0.12)));
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
 
@@ -185,8 +188,8 @@ class LiveViewServiceTest {
     @Test
     void statsLine_reportsWinsLossesAndTheirAverages() {
         when(liveStrategyService.active()).thenReturn(List.of(strategy()));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED"))
-                .thenReturn(List.of(closedPosition(0.12), closedPosition(-0.11)));
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID))
+                .thenReturn(List.of(stats(2, 0.01, 1, 0.12)));
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
 
@@ -203,7 +206,7 @@ class LiveViewServiceTest {
         strategy.setSeriesStartTime(0);
         strategy.setLastEvaluatedOpenTime(0);
         when(liveStrategyService.active()).thenReturn(List.of(strategy));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID)).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition()));
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
@@ -222,7 +225,7 @@ class LiveViewServiceTest {
         strategy.setSeriesStartTime(0);
         strategy.setLastEvaluatedOpenTime(0);
         when(liveStrategyService.active()).thenReturn(List.of(strategy));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID)).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID))
                 .thenReturn(List.of(order("BUY", SIGNAL_ENTRY, Instant.parse("2026-10-11T20:20:02Z"),
@@ -241,7 +244,7 @@ class LiveViewServiceTest {
         stopped.setCreatedTime(Instant.parse("2026-10-14T09:20:00Z"));
         when(liveStrategyService.active()).thenReturn(List.of(stopped, strategy()));
         when(liveStrategyService.isRunning(STRATEGY_ID)).thenReturn(true);
-        when(livePositionRepository.findAllByStrategyIdAndStatus(any(), eq("CLOSED"))).thenReturn(List.of());
+        when(livePositionRepository.aggregateRoundTrips(any())).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(any(), eq("OPEN"))).thenReturn(Optional.empty());
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(any())).thenReturn(List.of());
         when(bitvavoApiClient.getPublic(any(), eq(GetBookResponse.class)))
@@ -264,7 +267,7 @@ class LiveViewServiceTest {
         strategy.setSeriesStartTime(0);
         strategy.setLastEvaluatedOpenTime(0);
         when(liveStrategyService.active()).thenReturn(List.of(strategy));
-        when(livePositionRepository.findAllByStrategyIdAndStatus(STRATEGY_ID, "CLOSED")).thenReturn(List.of());
+        when(livePositionRepository.aggregateRoundTrips(STRATEGY_ID)).thenReturn(List.of());
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN")).thenReturn(Optional.empty());
         when(liveOrderRepository.findTop8ByStrategyIdOrderByCreatedTimeDesc(STRATEGY_ID)).thenReturn(List.of());
         when(bitvavoApiClient.getPublic(any(), eq(GetBookResponse.class)))
@@ -280,6 +283,30 @@ class LiveViewServiceTest {
     void zoneLabel_namesTheDisplayZone() {
         assertEquals("UTC", service.zoneLabel());
         assertEquals("UTC", service.zoneId());
+    }
+
+    private static RoundTripStats stats(long count, double total, long wins, double winTotal) {
+        return new RoundTripStats() {
+            @Override
+            public long getCount() {
+                return count;
+            }
+
+            @Override
+            public double getTotal() {
+                return total;
+            }
+
+            @Override
+            public long getWins() {
+                return wins;
+            }
+
+            @Override
+            public double getWinTotal() {
+                return winTotal;
+            }
+        };
     }
 
     private static LivePosition closedPosition(double profit) {
