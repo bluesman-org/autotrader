@@ -532,12 +532,18 @@ public class LedgerService {
     private void merge(List<Transaction> entries) {
         boolean changed = false;
         for (Transaction entry : entries) {
-            Transaction previous = cachedById.put(entryKey(entry), entry);
+            String key = entryKey(entry);
+            Transaction previous = cachedById.get(key);
             if (previous == null) {
+                cachedById.put(key, entry);
                 addFill(cachedFills, entry.getReceivedCurrency(), entry);
                 addFill(cachedFills, entry.getSentCurrency(), entry);
                 changed = true;
-            } else if (previous != entry && !previous.equals(entry)) {
+            } else if (!previous.equals(entry)) {
+                // The map must keep pointing at the instance the lists hold: an identical
+                // re-delivery is a new object every tick, so putting it would leave the lists on
+                // the old one and a later correction would match nothing.
+                cachedById.put(key, entry);
                 for (List<Transaction> fills : cachedFills.values()) {
                     fills.replaceAll(fill -> fill == previous ? entry : fill);
                 }

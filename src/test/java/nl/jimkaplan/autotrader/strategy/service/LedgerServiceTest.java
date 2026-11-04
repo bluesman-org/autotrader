@@ -1451,8 +1451,10 @@ class LedgerServiceTest {
     }
 
     /**
-     * The overlap can return a fill the cache already holds; when the exchange has corrected it
-     * under the same id, the newer version must win rather than the first one living forever.
+     * The overlap returns fresh Transaction objects for fills the cache already holds. An identical
+     * re-delivery must not move the cache onto the new instance — the lists still hold the old one —
+     * or a later correction has nothing to replace. This is the sequence: read, re-delivery,
+     * correction.
      */
     @Test
     void aCorrectedFillUnderTheSameIdReplacesTheCachedOne() {
@@ -1464,17 +1466,22 @@ class LedgerServiceTest {
         when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
         Transaction original = buy("2026-10-13T10:00:00Z", "0.001", "74.00", "74000", "0.15");
         original.setTransactionId("t1");
+        Transaction reDelivered = buy("2026-10-13T10:00:00Z", "0.001", "74.00", "74000", "0.15");
+        reDelivered.setTransactionId("t1");
         Transaction corrected = buy("2026-10-13T10:00:00Z", "0.001", "100.00", "100000", "0.15");
         corrected.setTransactionId("t1");
         long genesis = Instant.parse("2020-01-01T00:00:00Z").toEpochMilli();
+        long firstReRead = NOW.plus(Duration.ofMinutes(10)).toEpochMilli();
         when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
                 .thenAnswer(invocation -> {
                     String uri = invocation.getArgument(0);
-                    long from = Long.parseLong(UriComponentsBuilder.fromUriString(uri).build()
-                            .getQueryParams().getFirst("fromDate"));
+                    var params = UriComponentsBuilder.fromUriString(uri).build().getQueryParams();
+                    long from = Long.parseLong(params.getFirst("fromDate"));
                     if (from > genesis) {
+                        boolean firstWindow = Long.parseLong(params.getFirst("toDate")) == firstReRead;
+                        Transaction inWindow = firstWindow ? reDelivered : corrected;
                         return new GetAccountHistoryResponse(
-                                uri.contains("type=buy") ? List.of(corrected) : List.of(), 1, 1, 100);
+                                uri.contains("type=buy") ? List.of(inWindow) : List.of(), 1, 1, 100);
                     }
                     List<Transaction> items = uri.contains("type=buy")
                             ? List.of(original)
@@ -1487,11 +1494,16 @@ class LedgerServiceTest {
 
         LedgerView first = cached.view(new LedgerRequest());
         clock.advance(Duration.ofMinutes(10));
-        LedgerView second = cached.view(new LedgerRequest());
+        LedgerView reDeliveredView = cached.view(new LedgerRequest());
+        clock.advance(Duration.ofMinutes(10));
+        LedgerView correctedView = cached.view(new LedgerRequest());
 
-        assertNotEquals(first.rows().get(1).pnlText(), second.rows().get(1).pnlText(),
+        assertEquals(first.rows().get(1).pnlText(), reDeliveredView.rows().get(1).pnlText(),
+                "an identical re-delivery must not change the result");
+        assertNotEquals(reDeliveredView.rows().get(1).pnlText(),
+                correctedView.rows().get(1).pnlText(),
                 "the corrected cost must change the sell's result");
-        assertEquals("neg", second.rows().get(1).pnlClass());
+        assertEquals("neg", correctedView.rows().get(1).pnlClass());
     }
 
     /**
