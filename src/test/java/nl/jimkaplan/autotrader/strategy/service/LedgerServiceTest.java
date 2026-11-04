@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1447,6 +1448,50 @@ class LedgerServiceTest {
         assertEquals(first.rows().size(), second.rows().size());
         assertEquals(first.rows().get(1).pnlText(), second.rows().get(1).pnlText());
         assertEquals(first.totals().realisedText(), second.totals().realisedText());
+    }
+
+    /**
+     * The overlap can return a fill the cache already holds; when the exchange has corrected it
+     * under the same id, the newer version must win rather than the first one living forever.
+     */
+    @Test
+    void aCorrectedFillUnderTheSameIdReplacesTheCachedOne() {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{openOrder(), sellOrder(), buyOrder()});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+        Transaction original = buy("2026-10-13T10:00:00Z", "0.001", "74.00", "74000", "0.15");
+        original.setTransactionId("t1");
+        Transaction corrected = buy("2026-10-13T10:00:00Z", "0.001", "100.00", "100000", "0.15");
+        corrected.setTransactionId("t1");
+        long genesis = Instant.parse("2020-01-01T00:00:00Z").toEpochMilli();
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String uri = invocation.getArgument(0);
+                    long from = Long.parseLong(UriComponentsBuilder.fromUriString(uri).build()
+                            .getQueryParams().getFirst("fromDate"));
+                    if (from > genesis) {
+                        return new GetAccountHistoryResponse(
+                                uri.contains("type=buy") ? List.of(corrected) : List.of(), 1, 1, 100);
+                    }
+                    List<Transaction> items = uri.contains("type=buy")
+                            ? List.of(original)
+                            : List.of(sell("2026-10-14T09:00:00Z", "0.0005", "38.00", "76000", "0.08"));
+                    return new GetAccountHistoryResponse(items, 1, 1, 100);
+                });
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+
+        LedgerView first = cached.view(new LedgerRequest());
+        clock.advance(Duration.ofMinutes(10));
+        LedgerView second = cached.view(new LedgerRequest());
+
+        assertNotEquals(first.rows().get(1).pnlText(), second.rows().get(1).pnlText(),
+                "the corrected cost must change the sell's result");
+        assertEquals("neg", second.rows().get(1).pnlClass());
     }
 
     /**

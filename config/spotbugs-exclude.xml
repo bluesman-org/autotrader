@@ -14,7 +14,9 @@
          and the run is already published through the API as-is. The auth and settings controllers
          hold Spring-managed service collaborators for the same reason the two service-shaped
          classes do, as do the live page's controller and view service and the Web Push notifier
-         with its subscription service and Spring's ObjectMapper. -->
+         with its subscription service and Spring's ObjectMapper. HistoryUiController joins them
+         because LedgerService now carries the per-account history cache: SpotBugs reports
+         EI_EXPOSE_REP2 at its constructor (line 27) for storing that bean. -->
     <Match>
         <Or>
             <Class name="nl.jimkaplan.autotrader.strategy.backtest.BacktestEntryTrades"/>
@@ -56,7 +58,6 @@
             <Class name="nl.jimkaplan.autotrader.strategy.service.LiveStrategyService"/>
             <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveStrategyController"/>
             <Class name="nl.jimkaplan.autotrader.strategy.controller.LiveUiController"/>
-            <Class name="nl.jimkaplan.autotrader.strategy.controller.HistoryUiController"/>
         </Or>
         <Bug pattern="CRLF_INJECTION_LOGS"/>
     </Match>

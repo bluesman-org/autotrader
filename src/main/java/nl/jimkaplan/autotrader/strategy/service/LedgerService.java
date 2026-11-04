@@ -157,7 +157,7 @@ public class LedgerService {
     /** The cached account history and the point it reaches; guarded by {@link #fillsLock}. */
     private final Object fillsLock = new Object();
     private final Map<String, List<Transaction>> cachedFills = new TreeMap<>();
-    private final Set<String> cachedTransactionIds = new HashSet<>();
+    private final Map<String, Transaction> cachedById = new HashMap<>();
     private String cachedFillsKey;
     private long cachedFillsTo = Long.MIN_VALUE;
 
@@ -519,24 +519,32 @@ public class LedgerService {
 
     private void clearFills() {
         cachedFills.clear();
-        cachedTransactionIds.clear();
+        cachedById.clear();
         cachedFillsTo = Long.MIN_VALUE;
     }
 
     /**
-     * Appends the entries the cache has not seen, ordered by execution time for the two walks.
+     * Appends the entries the cache has not seen and replaces the ones it has seen with the newest
+     * version, ordered by execution time for the two walks. A fill the exchange corrects under the
+     * same id — a provisional fee or size fixed seconds later — must not stay at its first value
+     * for the life of the process.
      */
     private void merge(List<Transaction> entries) {
-        boolean added = false;
+        boolean changed = false;
         for (Transaction entry : entries) {
-            if (!cachedTransactionIds.add(entryKey(entry))) {
-                continue;
+            Transaction previous = cachedById.put(entryKey(entry), entry);
+            if (previous == null) {
+                addFill(cachedFills, entry.getReceivedCurrency(), entry);
+                addFill(cachedFills, entry.getSentCurrency(), entry);
+                changed = true;
+            } else if (previous != entry && !previous.equals(entry)) {
+                for (List<Transaction> fills : cachedFills.values()) {
+                    fills.replaceAll(fill -> fill == previous ? entry : fill);
+                }
+                changed = true;
             }
-            addFill(cachedFills, entry.getReceivedCurrency(), entry);
-            addFill(cachedFills, entry.getSentCurrency(), entry);
-            added = true;
         }
-        if (added) {
+        if (changed) {
             for (List<Transaction> fills : cachedFills.values()) {
                 fills.sort(Comparator.comparing(Transaction::getExecutedAt,
                         Comparator.nullsLast(Comparator.naturalOrder())));
