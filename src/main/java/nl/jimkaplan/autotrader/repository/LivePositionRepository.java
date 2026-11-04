@@ -1,10 +1,12 @@
 package nl.jimkaplan.autotrader.repository;
 
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
+import org.springframework.data.mongodb.repository.Aggregation;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,13 +26,44 @@ public interface LivePositionRepository extends MongoRepository<LivePosition, St
     Optional<LivePosition> findByStrategyIdAndStatus(String strategyId, String status);
 
     /**
-     * A strategy's positions in the given state, for aggregating its round trips.
+     * The realised totals of a strategy's closed round trips, computed in the database: the live
+     * page refreshes every ten seconds and used to load and walk the whole history for this line.
+     * Zero counts as a win, matching the page's wording.
      *
      * @param strategyId The strategy ID
-     * @param status     "OPEN" or "CLOSED"
-     * @return The positions, in no particular order
+     * @return One row with count, total profit, win count and the wins' profit sum; empty when the
+     *         strategy has no closed positions
      */
-    List<LivePosition> findAllByStrategyIdAndStatus(String strategyId, String status);
+    @Aggregation(pipeline = {
+            "{ $match: { 'strategy_id': ?0, 'status': 'CLOSED' } }",
+            "{ $group: {"
+                    + " _id: null,"
+                    + " count: { $sum: 1 },"
+                    + " total: { $sum: { $ifNull: ['$profit', 0] } },"
+                    + " wins: { $sum: { $cond: [ { $gte: [ { $ifNull: ['$profit', 0] }, 0 ] }, 1, 0 ] } },"
+                    + " winTotal: { $sum: { $cond: [ { $gte: [ { $ifNull: ['$profit', 0] }, 0 ] },"
+                    + " { $ifNull: ['$profit', 0] }, 0 ] } }"
+                    + " } }"
+    })
+    List<RoundTripStats> aggregateRoundTrips(String strategyId);
+
+    /**
+     * A strategy's closed positions whose exit signal is one of the given candle open times, for
+     * the live page's order rows: only the newest eight orders are shown, so only their results
+     * are needed rather than the whole history.
+     *
+     * <p>No status parameter: only a closed position carries an exit time, so the condition is
+     * stated here instead. That matters for the index — {@code (strategy_id, status, exit_time)}
+     * can only bound the trailing key when both leading keys are fixed; leave {@code status} free
+     * and Mongo scans every index entry of the strategy and filters the exit times afterwards,
+     * which is the read this method exists to avoid.</p>
+     *
+     * @param strategyId The strategy ID
+     * @param exitTimes  The exit signal open times to look up
+     * @return The matching positions, in no particular order
+     */
+    @Query("{ 'strategy_id': ?0, 'status': 'CLOSED', 'exit_time': { $in: ?1 } }")
+    List<LivePosition> findAllByStrategyIdAndExitTimeIn(String strategyId, Collection<Long> exitTimes);
 
     /**
      * Whether the strategy has any recorded positions, so a strategy with a history is archived

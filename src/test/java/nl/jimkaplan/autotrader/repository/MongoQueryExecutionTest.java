@@ -137,6 +137,49 @@ class MongoQueryExecutionTest {
     }
 
     @Test
+    void theRoundTripAggregateCountsWinsAndSumsProfit() {
+        positions.saveAll(List.of(
+                closedPosition("s1", 2.0, 100),
+                closedPosition("s1", -3.0, 200),
+                // Zero counts as a win on the live page, so it must count here too.
+                closedPosition("s1", 0.0, 300),
+                closedPosition("s1", -1.0, 400),
+                closedPosition("s2", 9.0, 500),
+                position("OPEN", 600),
+                // The field is absent, not zero: the old in-memory code read it as 0 and counted a
+                // win, so the pipeline's $ifNull must keep the totals unchanged and the win up.
+                closedPositionWithoutProfit("s1", 700)));
+
+        RoundTripStats stats = positions.aggregateRoundTrips("s1").get(0);
+
+        assertEquals(5, stats.getCount());
+        assertEquals(-2.0, stats.getTotal(), 1e-9);
+        assertEquals(3, stats.getWins());
+        assertEquals(2.0, stats.getWinTotal(), 1e-9);
+        assertTrue(positions.aggregateRoundTrips("no-such-strategy").isEmpty());
+    }
+
+    @Test
+    void theExitLookupReadsOnlyTheRequestedSignals() {
+        positions.saveAll(List.of(
+                closedPosition("s1", 1.0, 100),
+                closedPosition("s1", 2.0, 200),
+                closedPosition("s1", 3.0, 300),
+                closedPosition("s2", 4.0, 100),
+                // Only a closed position can carry an exit time, but the query states the status
+                // itself: a row that broke that rule must still stay out of the result.
+                openPositionWithExitTime("s1", 300)));
+
+        List<Long> exitTimes = positions
+                .findAllByStrategyIdAndExitTimeIn("s1", List.of(100L, 300L)).stream()
+                .map(LivePosition::getExitTime)
+                .sorted()
+                .toList();
+
+        assertEquals(List.of(100L, 300L), exitTimes);
+    }
+
+    @Test
     void theLivePageReturnsTheEightNewestOrdersOfItsOwnStrategy() {
         for (int i = 1; i <= 10; i++) {
             orders.save(order("s1", i));
@@ -232,6 +275,48 @@ class MongoQueryExecutionTest {
                 .quantity(0.01)
                 .entryPrice(50_000)
                 .entryTime(entryTime)
+                .dryRun(true)
+                .build();
+    }
+
+    private static LivePosition closedPosition(String strategyId, double profit, long exitTime) {
+        return LivePosition.builder()
+                .strategyId(strategyId)
+                .market("BTC-EUR")
+                .status("CLOSED")
+                .quantity(0.01)
+                .entryPrice(50_000)
+                .entryTime(exitTime - 3_600_000)
+                .exitPrice(50_000.0)
+                .exitTime(exitTime)
+                .profit(profit)
+                .dryRun(true)
+                .build();
+    }
+
+    private static LivePosition openPositionWithExitTime(String strategyId, long exitTime) {
+        return LivePosition.builder()
+                .strategyId(strategyId)
+                .market("BTC-EUR")
+                .status("OPEN")
+                .quantity(0.01)
+                .entryPrice(50_000)
+                .entryTime(exitTime - 3_600_000)
+                .exitTime(exitTime)
+                .dryRun(true)
+                .build();
+    }
+
+    private static LivePosition closedPositionWithoutProfit(String strategyId, long exitTime) {
+        return LivePosition.builder()
+                .strategyId(strategyId)
+                .market("BTC-EUR")
+                .status("CLOSED")
+                .quantity(0.01)
+                .entryPrice(50_000)
+                .entryTime(exitTime - 3_600_000)
+                .exitPrice(50_000.0)
+                .exitTime(exitTime)
                 .dryRun(true)
                 .build();
     }
