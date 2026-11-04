@@ -42,7 +42,7 @@ Spring Boot 4.1.2 on JDK 25 (item 11, PR #73) and is deployed on the box; the pu
 status-only (item 40, PR #74). The live page's statistics and order results are now aggregated and
 looked up in the database instead of walking the whole round-trip history on every refresh (item 21,
 this PR). The ledger's cost walk is cached per account and extended with the window since the last
-read, so its ten-second refresh no longer pages the whole history (item 23, this PR).
+read, so its ten-second refresh no longer pages the whole history (item 23, PR #76).
 
 ## Objective
 
