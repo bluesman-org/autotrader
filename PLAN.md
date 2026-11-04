@@ -384,6 +384,11 @@ read, so its ten-second refresh no longer pages the whole history (item 23, this
     boots the app on a random port and reads the endpoint the way a probe does — anonymously
     (PR #74)
 
+41. ⬜ Drop the superseded `(strategy_id, status)` index on `live_positions`: the live page's two
+    reads share `(strategy_id, status, exit_time)` now, so the older two-key index only costs
+    writes. The initializer only ensures what it declares, so a short migration in the style of the
+    `botId` one removes it (flagged in the PR #75 review)
+
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
 suppresses the list marker, so the numbers vanish.
