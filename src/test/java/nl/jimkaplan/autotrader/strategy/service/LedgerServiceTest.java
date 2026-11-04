@@ -28,12 +28,14 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,6 +44,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -1399,6 +1402,165 @@ class LedgerServiceTest {
         when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
                 .thenAnswer(invocation -> new GetAccountHistoryResponse(List.of(), 1, 1, 200));
         when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+    }
+
+    /**
+     * The page refreshes every ten seconds; the account history behind the cost walk must not be
+     * re-read from genesis each time.
+     */
+    @Test
+    void theAccountHistoryIsReadOncePerRefreshWindow() {
+        accountReadable();
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+
+        cached.view(new LedgerRequest());
+        cached.view(new LedgerRequest());
+
+        verify(client, times(2)).get(anyString(), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString());
+    }
+
+    @Test
+    void aLaterRefreshReadsOnlyTheOverlapWindowAndMergesNothingTwice() {
+        accountReadable();
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+        LedgerView first = cached.view(new LedgerRequest());
+
+        clock.advance(Duration.ofMinutes(10));
+        LedgerView second = cached.view(new LedgerRequest());
+
+        ArgumentCaptor<String> uris = ArgumentCaptor.forClass(String.class);
+        verify(client, times(4)).get(uris.capture(), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString());
+        for (String uri : uris.getAllValues().subList(2, 4)) {
+            var params = UriComponentsBuilder.fromUriString(uri).build().getQueryParams();
+            // Exactly the five-minute overlap, and the refresh's own end.
+            assertEquals(NOW.minus(Duration.ofMinutes(5)).toEpochMilli(),
+                    Long.parseLong(params.getFirst("fromDate")), "fromDate: " + uri);
+            assertEquals(NOW.plus(Duration.ofMinutes(10)).toEpochMilli(),
+                    Long.parseLong(params.getFirst("toDate")), "toDate: " + uri);
+        }
+        // The overlap re-reads the same fills; without the dedupe they would be counted twice.
+        assertEquals(first.rows().size(), second.rows().size());
+        assertEquals(first.rows().get(1).pnlText(), second.rows().get(1).pnlText());
+        assertEquals(first.totals().realisedText(), second.totals().realisedText());
+    }
+
+    /**
+     * The overlap returns fresh Transaction objects for fills the cache already holds. An identical
+     * re-delivery must not move the cache onto the new instance — the lists still hold the old one —
+     * or a later correction has nothing to replace. This is the sequence: read, re-delivery,
+     * correction.
+     */
+    @Test
+    void aCorrectedFillUnderTheSameIdReplacesTheCachedOne() {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{openOrder(), sellOrder(), buyOrder()});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+        Transaction original = buy("2026-10-13T10:00:00Z", "0.001", "74.00", "74000", "0.15");
+        original.setTransactionId("t1");
+        Transaction reDelivered = buy("2026-10-13T10:00:00Z", "0.001", "74.00", "74000", "0.15");
+        reDelivered.setTransactionId("t1");
+        Transaction corrected = buy("2026-10-13T10:00:00Z", "0.001", "100.00", "100000", "0.15");
+        corrected.setTransactionId("t1");
+        long genesis = Instant.parse("2020-01-01T00:00:00Z").toEpochMilli();
+        long firstReRead = NOW.plus(Duration.ofMinutes(10)).toEpochMilli();
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String uri = invocation.getArgument(0);
+                    var params = UriComponentsBuilder.fromUriString(uri).build().getQueryParams();
+                    long from = Long.parseLong(params.getFirst("fromDate"));
+                    if (from > genesis) {
+                        boolean firstWindow = Long.parseLong(params.getFirst("toDate")) == firstReRead;
+                        Transaction inWindow = firstWindow ? reDelivered : corrected;
+                        return new GetAccountHistoryResponse(
+                                uri.contains("type=buy") ? List.of(inWindow) : List.of(), 1, 1, 100);
+                    }
+                    List<Transaction> items = uri.contains("type=buy")
+                            ? List.of(original)
+                            : List.of(sell("2026-10-14T09:00:00Z", "0.0005", "38.00", "76000", "0.08"));
+                    return new GetAccountHistoryResponse(items, 1, 1, 100);
+                });
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+
+        LedgerView first = cached.view(new LedgerRequest());
+        clock.advance(Duration.ofMinutes(10));
+        LedgerView reDeliveredView = cached.view(new LedgerRequest());
+        clock.advance(Duration.ofMinutes(10));
+        LedgerView correctedView = cached.view(new LedgerRequest());
+
+        assertEquals(first.rows().get(1).pnlText(), reDeliveredView.rows().get(1).pnlText(),
+                "an identical re-delivery must not change the result");
+        assertNotEquals(reDeliveredView.rows().get(1).pnlText(),
+                correctedView.rows().get(1).pnlText(),
+                "the corrected cost must change the sell's result");
+        assertEquals("neg", correctedView.rows().get(1).pnlClass());
+    }
+
+    /**
+     * A walk that hits the page cap has not seen the whole history. Recording it as the cache's
+     * floor would hide the missing pages until the next process start, so the cache stays empty
+     * and the next refresh reads from genesis again — the pre-cache behaviour for a truncated read.
+     */
+    @Test
+    void aTruncatedWalkIsNotCachedAsComplete() {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenReturn(new GetAccountHistoryResponse(
+                        List.of(buy("2026-10-01T00:00:00Z", "0.001", "74.00", "74000", "0.15")),
+                        1, 99, 100));
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+
+        cached.view(new LedgerRequest());
+        cached.view(new LedgerRequest());
+
+        // 25 pages per type, twice per refresh: the second view did not trust the cut-off read.
+        verify(client, times(100)).get(anyString(), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString());
+    }
+
+    /** A clock the cache tests can move between refreshes. */
+    private static final class MovableClock extends Clock {
+        private Instant now;
+
+        MovableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration by) {
+            now = now.plus(by);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneId.of("UTC");
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
     }
 
     private void accountReadable() {
