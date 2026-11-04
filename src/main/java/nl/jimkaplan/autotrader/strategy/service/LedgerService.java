@@ -274,7 +274,8 @@ public class LedgerService {
                     results.getOrDefault(order, Double.NaN), moments.get(order)));
         }
 
-        List<Transaction> rawEntries = raw ? history(credentials, null, range.fromMillis(), range.toMillis())
+        List<Transaction> rawEntries = raw
+                ? readHistory(credentials, null, range.fromMillis(), range.toMillis()).entries()
                 : List.of();
         // The order summary above filters on the request's order types; the raw table below uses
         // the rebuilt options, which also name the transaction types this period actually contains.
@@ -469,49 +470,71 @@ public class LedgerService {
      *
      * <p>The walk is cached per account: the first read still pages from genesis, but every later
      * refresh reads only the few minutes since the last one, so the page's ten-second timer no
-     * longer makes the exchange serve the account's whole history each tick. The cached lists are
-     * copied before they leave the lock, because two open tabs refresh independently.</p>
+     * longer makes the exchange serve the account's whole history each tick. The exchange calls run
+     * outside the lock — a first load is up to {@link #MAX_HISTORY_PAGES} pages per type, and
+     * another tab must not queue behind it — and nothing is merged until the whole window has been
+     * read, so a failed read leaves the last consistent state.</p>
+     *
+     * <p>The snapshot is the cache's whole content, not a window: every caller passes the refresh
+     * clock (currently the only call site), so the high-water mark is the caller's cutoff.</p>
      */
     private Map<String, List<Transaction>> fillsByBase(BitvavoCredentials credentials,
                                                        long toMillis) {
+        String key = credentials.getId() + "|" + credentials.getUpdatedTime();
+        long from;
         synchronized (fillsLock) {
-            String key = credentials.getId() + "|" + credentials.getUpdatedTime();
             if (!key.equals(cachedFillsKey)) {
-                cachedFills.clear();
-                cachedTransactionIds.clear();
-                cachedFillsTo = Long.MIN_VALUE;
+                clearFills();
                 cachedFillsKey = key;
             }
             if (cachedFillsTo == Long.MIN_VALUE) {
-                readFills(credentials, GENESIS_MILLIS, toMillis);
+                from = GENESIS_MILLIS;
             } else if (toMillis > cachedFillsTo) {
-                readFills(credentials, Math.max(GENESIS_MILLIS, cachedFillsTo - HISTORY_OVERLAP_MILLIS),
-                        toMillis);
+                from = Math.max(GENESIS_MILLIS, cachedFillsTo - HISTORY_OVERLAP_MILLIS);
+            } else {
+                return snapshot();
             }
-            cachedFillsTo = Math.max(cachedFillsTo, toMillis);
-            Map<String, List<Transaction>> snapshot = new TreeMap<>();
-            cachedFills.forEach((currency, fills) -> snapshot.put(currency, List.copyOf(fills)));
-            return snapshot;
+        }
+        List<Transaction> entries = new ArrayList<>();
+        boolean complete = true;
+        for (String type : List.of("buy", "sell")) {
+            HistoryRead read = readHistory(credentials, type, from, toMillis);
+            entries.addAll(read.entries());
+            complete &= read.complete();
+        }
+        synchronized (fillsLock) {
+            if (!key.equals(cachedFillsKey)) {
+                // The account changed while the read was in flight: these entries are the old one's.
+                return snapshot();
+            }
+            merge(entries);
+            // A truncated walk must not become the cache's floor: the next refresh reads genesis
+            // again, as it did before the cache, instead of treating the cut-off pages as seen.
+            if (complete) {
+                cachedFillsTo = Math.max(cachedFillsTo, toMillis);
+            }
+            return snapshot();
         }
     }
 
+    private void clearFills() {
+        cachedFills.clear();
+        cachedTransactionIds.clear();
+        cachedFillsTo = Long.MIN_VALUE;
+    }
+
     /**
-     * Appends the buys and sells in [fromMillis, toMillis] that the cache has not seen yet. Ids
-     * are the dedupe key; an entry without one (older fixtures, a shape the exchange does not send)
-     * is kept, since dropping it would silently change the balances.
+     * Appends the entries the cache has not seen, ordered by execution time for the two walks.
      */
-    private void readFills(BitvavoCredentials credentials, long fromMillis, long toMillis) {
+    private void merge(List<Transaction> entries) {
         boolean added = false;
-        for (String type : List.of("buy", "sell")) {
-            for (Transaction entry : history(credentials, type, fromMillis, toMillis)) {
-                if (entry.getTransactionId() != null
-                        && !cachedTransactionIds.add(entry.getTransactionId())) {
-                    continue;
-                }
-                addFill(cachedFills, entry.getReceivedCurrency(), entry);
-                addFill(cachedFills, entry.getSentCurrency(), entry);
-                added = true;
+        for (Transaction entry : entries) {
+            if (!cachedTransactionIds.add(entryKey(entry))) {
+                continue;
             }
+            addFill(cachedFills, entry.getReceivedCurrency(), entry);
+            addFill(cachedFills, entry.getSentCurrency(), entry);
+            added = true;
         }
         if (added) {
             for (List<Transaction> fills : cachedFills.values()) {
@@ -519,6 +542,28 @@ public class LedgerService {
                         Comparator.nullsLast(Comparator.naturalOrder())));
             }
         }
+    }
+
+    /**
+     * The dedupe key: the exchange's transaction id, or — when an entry carries none — its own
+     * shape, so a fill returned again in the overlap window is not counted twice.
+     */
+    private static String entryKey(Transaction entry) {
+        if (entry.getTransactionId() != null) {
+            return entry.getTransactionId();
+        }
+        return String.join("|",
+                String.valueOf(entry.getType()),
+                String.valueOf(entry.getSentCurrency()), String.valueOf(entry.getSentAmount()),
+                String.valueOf(entry.getReceivedCurrency()), String.valueOf(entry.getReceivedAmount()),
+                String.valueOf(entry.getPriceCurrency()), String.valueOf(entry.getPriceAmount()),
+                String.valueOf(entry.getExecutedAt()));
+    }
+
+    private Map<String, List<Transaction>> snapshot() {
+        Map<String, List<Transaction>> copy = new TreeMap<>();
+        cachedFills.forEach((currency, fills) -> copy.put(currency, List.copyOf(fills)));
+        return copy;
     }
 
     private static void addFill(Map<String, List<Transaction>> byBase, String currency,
@@ -562,8 +607,15 @@ public class LedgerService {
         return ALL.equals(market) ? DEFAULT_MARKET : market;
     }
 
-    private List<Transaction> history(BitvavoCredentials credentials, String type, long fromMillis,
-                                      long toMillis) {
+    /**
+     * One walk's entries and whether it reached the end of its window. The page cap stops a long
+     * walk early, so the caller must not record a truncated read as complete.
+     */
+    private record HistoryRead(List<Transaction> entries, boolean complete) {
+    }
+
+    private HistoryRead readHistory(BitvavoCredentials credentials, String type, long fromMillis,
+                                    long toMillis) {
         List<Transaction> entries = new ArrayList<>();
         for (int page = 1; page <= MAX_HISTORY_PAGES; page++) {
             UriComponentsBuilder endpoint = UriComponentsBuilder.fromPath("/account/history")
@@ -577,21 +629,20 @@ public class LedgerService {
             GetAccountHistoryResponse response = bitvavoApiClient.get(endpoint.build().encode().toUriString(),
                     GetAccountHistoryResponse.class, credentials.getApiKey(), credentials.getApiSecret());
             if (response == null || response.getItems() == null || response.getItems().isEmpty()) {
-                break;
+                return new HistoryRead(entries, true);
             }
             entries.addAll(response.getItems());
             if (response.getTotalPages() == null || page >= response.getTotalPages()) {
-                break;
+                return new HistoryRead(entries, true);
             }
             if (page == MAX_HISTORY_PAGES) {
                 // The walk would be silently incomplete past this page count (roughly 25 × 100
-                // entries per read), so the truncation is at least visible. PLAN item 23 covers
-                // bounding or caching the read itself.
+                // entries per read), so the truncation is at least visible.
                 log.warn("Account history read stopped at {} entries (type {}); the average-cost walk "
                         + "may be incomplete", entries.size(), type == null ? "all" : type);
             }
         }
-        return entries;
+        return new HistoryRead(entries, false);
     }
 
     /**

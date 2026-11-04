@@ -1422,27 +1422,60 @@ class LedgerServiceTest {
     }
 
     @Test
-    void aLaterRefreshReadsOnlyTheWindowSinceTheLastOne() {
+    void aLaterRefreshReadsOnlyTheOverlapWindowAndMergesNothingTwice() {
         accountReadable();
         MovableClock clock = new MovableClock(NOW);
         LedgerService cached = new LedgerService(client, credentials, strategies, markets,
                 new DisplayZone(ZoneId.of("UTC")), clock);
-        cached.view(new LedgerRequest());
+        LedgerView first = cached.view(new LedgerRequest());
 
         clock.advance(Duration.ofMinutes(10));
-        cached.view(new LedgerRequest());
+        LedgerView second = cached.view(new LedgerRequest());
 
         ArgumentCaptor<String> uris = ArgumentCaptor.forClass(String.class);
         verify(client, times(4)).get(uris.capture(), eq(GetAccountHistoryResponse.class),
                 anyString(), anyString());
-        List<String> later = uris.getAllValues().subList(2, 4);
-        for (String uri : later) {
-            long from = Long.parseLong(UriComponentsBuilder.fromUriString(uri).build()
-                    .getQueryParams().getFirst("fromDate"));
-            // Five minutes of overlap, not the account's start.
-            assertTrue(from >= NOW.minus(Duration.ofMinutes(5)).toEpochMilli(),
-                    "the later read must start at the overlap, not at genesis: " + from);
+        for (String uri : uris.getAllValues().subList(2, 4)) {
+            var params = UriComponentsBuilder.fromUriString(uri).build().getQueryParams();
+            // Exactly the five-minute overlap, and the refresh's own end.
+            assertEquals(NOW.minus(Duration.ofMinutes(5)).toEpochMilli(),
+                    Long.parseLong(params.getFirst("fromDate")), "fromDate: " + uri);
+            assertEquals(NOW.plus(Duration.ofMinutes(10)).toEpochMilli(),
+                    Long.parseLong(params.getFirst("toDate")), "toDate: " + uri);
         }
+        // The overlap re-reads the same fills; without the dedupe they would be counted twice.
+        assertEquals(first.rows().size(), second.rows().size());
+        assertEquals(first.rows().get(1).pnlText(), second.rows().get(1).pnlText());
+        assertEquals(first.totals().realisedText(), second.totals().realisedText());
+    }
+
+    /**
+     * A walk that hits the page cap has not seen the whole history. Recording it as the cache's
+     * floor would hide the missing pages until the next process start, so the cache stays empty
+     * and the next refresh reads from genesis again — the pre-cache behaviour for a truncated read.
+     */
+    @Test
+    void aTruncatedWalkIsNotCachedAsComplete() {
+        accountReadableWithoutOrders();
+        when(client.get(anyString(), eq(OrderResponse[].class), anyString(), anyString()))
+                .thenReturn(new OrderResponse[]{});
+        when(client.get(anyString(), eq(GetAccountBalanceResponse[].class), anyString(), anyString()))
+                .thenReturn(balances());
+        when(client.getPublic(anyString(), eq(GetBookResponse.class))).thenReturn(book());
+        when(client.get(anyString(), eq(GetAccountHistoryResponse.class), anyString(), anyString()))
+                .thenReturn(new GetAccountHistoryResponse(
+                        List.of(buy("2026-10-01T00:00:00Z", "0.001", "74.00", "74000", "0.15")),
+                        1, 99, 100));
+        MovableClock clock = new MovableClock(NOW);
+        LedgerService cached = new LedgerService(client, credentials, strategies, markets,
+                new DisplayZone(ZoneId.of("UTC")), clock);
+
+        cached.view(new LedgerRequest());
+        cached.view(new LedgerRequest());
+
+        // 25 pages per type, twice per refresh: the second view did not trust the cut-off read.
+        verify(client, times(100)).get(anyString(), eq(GetAccountHistoryResponse.class),
+                anyString(), anyString());
     }
 
     /** A clock the cache tests can move between refreshes. */
