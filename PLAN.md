@@ -41,8 +41,10 @@ The repository queries now execute against a real MongoDB in CI (item 22, PR #72
 Spring Boot 4.1.2 on JDK 25 (item 11, PR #73) and is deployed on the box; the public health body is
 status-only (item 40, PR #74). The live page's statistics and order results are now aggregated and
 looked up in the database instead of walking the whole round-trip history on every refresh (item 21,
-this PR). The ledger's cost walk is cached per account and extended with the window since the last
-read, so its ten-second refresh no longer pages the whole history (item 23, PR #76).
+PR #75). The ledger's cost walk is cached per account and extended with the window since the last
+read, so its ten-second refresh no longer pages the whole history (item 23, PR #76). The live
+engine's indicators now stream, so a decision costs one step instead of a full series walk (item 18,
+this PR).
 
 ## Objective
 
@@ -232,12 +234,14 @@ read, so its ten-second refresh no longer pages the whole history (item 23, PR #
     engine's decisions bar for bar (it does not replay the seed range or downtime, so after a gap
     the position path can differ), and the convergence claims in `docs/live-engine.md` now carry the
     right scope (PR #27)
-18. ⬜ Bound the live series' per-decision cost: it is append-only by design (the fixed anchor), so
-    every closed candle re-evaluates the whole history — linear per decision, quadratic over uptime,
-    with the retained heap growing the same way (about 8.8k candles a year on `1h`, 525k on `1m`).
-    Carry the indicator state forward (both recursions stream) or find another way to bound
-    `decide` while keeping the anchor semantics; the seed line logs the series length (flagged in
-    the PR #27 review)
+18. ✅ Bound the live series' per-decision cost: `MacdState` and `SarState` carry both recursions,
+    and the batch calculation drives the same state, so a streamed value is the batch value by
+    construction (the frozen fixtures still pin it). `StrategyStream` evaluates the rules through
+    the existing evaluator on the two-bar window, and `LiveTradingService` caches one stream per
+    strategy, fed only the candles it has not seen — a decision costs one step instead of a walk
+    over the whole history, with the definition in the cache entry so an edit cannot keep stale
+    signals. The runner still retains its anchored series for the prefix check; that heap is item 42
+    (this PR)
 19. ✅ Make the TradingView webhook's timestamp contract honest: validation accepted a `Z`-less
     offset (`DateTimeFormatter.ISO_OFFSET_DATE_TIME`), but `saveAlert` then parsed with
     `Instant.parse`, so `2026-10-04T12:00:00+02:00` failed later as a 500 instead of the promised
@@ -388,6 +392,11 @@ read, so its ten-second refresh no longer pages the whole history (item 23, PR #
     reads share `(strategy_id, status, exit_time)` now, so the older two-key index only costs
     writes. The initializer only ensures what it declares, so a short migration in the style of the
     `botId` one removes it (flagged in the PR #75 review)
+
+42. ⬜ Bound the retained live series: the runner keeps every candle since the anchor for the
+    decision path, so the heap still grows with uptime even though each decision is now a constant
+    number of steps. Moving the stream into the runner and dropping the list would fix it, at the
+    cost of reworking the runner tests' captured series (flagged in the item 18 PR)
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox

@@ -25,6 +25,7 @@ import nl.jimkaplan.autotrader.strategy.rule.ParabolicSarParameters;
 import nl.jimkaplan.autotrader.strategy.rule.RuleCondition;
 import nl.jimkaplan.autotrader.strategy.rule.RuleGroup;
 import nl.jimkaplan.autotrader.strategy.rule.StrategyDefinition;
+import nl.jimkaplan.autotrader.strategy.rule.StrategyStream;
 import nl.jimkaplan.autotrader.strategy.rule.StrategyEvaluator;
 import nl.jimkaplan.autotrader.strategy.rule.StrategySignals;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -83,6 +85,7 @@ public class LiveTradingService {
      * unsettled order.
      */
     private final Set<String> standDownWarned = ConcurrentHashMap.newKeySet();
+    private final Map<String, CachedEvaluation> evaluations = new ConcurrentHashMap<>();
 
     /**
      * One lock per strategy, held by the trading path and by an operator close. A strategy can be
@@ -104,13 +107,11 @@ public class LiveTradingService {
         if (series.isEmpty()) {
             return null;
         }
-        CandleSeries candleSeries = CandleSeries.of(series);
         StrategyDefinition definition = definition(strategy);
-        StrategySignals signals = StrategyEvaluator.evaluate(candleSeries, definition);
-        int index = candleSeries.length() - 1;
+        int index = series.size() - 1;
         if (index < strategy.getWarmUpCandles()) {
             log.debug("{} has {} bars; still inside the {}-candle warm-up",
-                    strategy.getId(), candleSeries.length(), strategy.getWarmUpCandles());
+                    strategy.getId(), series.size(), strategy.getWarmUpCandles());
             return null;
         }
         if (liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(strategy.getId())) {
@@ -121,16 +122,52 @@ public class LiveTradingService {
             return null;
         }
         standDownWarned.remove(strategy.getId());
-        Candle candle = series.get(series.size() - 1);
+        Candle candle = series.get(index);
+        StrategyStream stream = streamFor(strategy.getId(), definition, series);
         boolean open = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN").isPresent();
         if (open) {
-            return signals.exit()[index]
+            return stream.exitFired()
                     ? new LiveDecision("SELL", reason("exit", definition.exitRules()), candle.getOpenTime())
                     : null;
         }
-        return signals.entry()[index]
+        return stream.entryFired()
                 ? new LiveDecision("BUY", reason("entry", definition.entryRules()), candle.getOpenTime())
                 : null;
+    }
+
+    /**
+     * The strategy's streaming evaluation, fed only the candles it has not seen. The runner's
+     * series is append-only, so a call with the same prefix and one more candle costs one step;
+     * a rebuilt or reordered series starts the stream again. The definition is part of the cache
+     * entry, so editing a strategy's parameters or rules cannot keep stale signals.
+     */
+    private StrategyStream streamFor(String strategyId, StrategyDefinition definition,
+                                     List<Candle> series) {
+        CachedEvaluation cached = evaluations.get(strategyId);
+        if (cached != null && cached.definition().equals(definition)
+                && cached.consumed() <= series.size()
+                && (cached.consumed() == 0
+                || series.get(cached.consumed() - 1).getOpenTime() == cached.lastOpenTime())) {
+            for (int i = cached.consumed(); i < series.size(); i++) {
+                cached.stream().accept(series.get(i));
+            }
+            Candle appended = series.get(series.size() - 1);
+            evaluations.put(strategyId, new CachedEvaluation(definition, cached.stream(),
+                    series.size(), appended.getOpenTime()));
+            return cached.stream();
+        }
+        StrategyStream stream = new StrategyStream(definition);
+        for (Candle candle : series) {
+            stream.accept(candle);
+        }
+        Candle last = series.get(series.size() - 1);
+        evaluations.put(strategyId, new CachedEvaluation(definition, stream, series.size(),
+                last.getOpenTime()));
+        return stream;
+    }
+
+    private record CachedEvaluation(StrategyDefinition definition, StrategyStream stream,
+                                    int consumed, long lastOpenTime) {
     }
 
     private ReentrantLock lockFor(String strategyId) {
