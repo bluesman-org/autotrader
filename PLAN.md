@@ -44,7 +44,7 @@ looked up in the database instead of walking the whole round-trip history on eve
 PR #75). The ledger's cost walk is cached per account and extended with the window since the last
 read, so its ten-second refresh no longer pages the whole history (item 23, PR #76). The live
 engine's indicators now stream, so a decision costs one step instead of a full series walk (item 18,
-this PR).
+PR #77).
 
 ## Objective
 
