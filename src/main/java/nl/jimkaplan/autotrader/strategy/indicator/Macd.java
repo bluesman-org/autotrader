@@ -61,51 +61,14 @@ public final class Macd {
         Arrays.fill(signal, Double.NaN);
         Arrays.fill(histogram, Double.NaN);
 
-        // Widened so the sum cannot wrap even at the maximum periods
-        long minimumLength = (long) slowPeriod + signalPeriod - 1;
-        if (length < minimumLength) {
-            return new MacdResult(macd, signal, histogram);
-        }
-
-        double fastK = 2.0 / (fastPeriod + 1);
-        double slowK = 2.0 / (slowPeriod + 1);
-        double signalK = 2.0 / (signalPeriod + 1);
-
-        // Each price EMA is seeded with the average of its own first window, placed so the
-        // windows end on the slow EMA's first valid bar (this is the reference's bootstrap).
-        double prevSlow = average(closes, 0, slowPeriod);
-        double prevFast = average(closes, slowPeriod - fastPeriod, fastPeriod);
-
-        int today = slowPeriod;
-        double macdValue = prevFast - prevSlow;
-        double prevSignal = macdValue;
-        for (int i = 0; i < signalPeriod - 1; i++) {
-            double value = closes[today++];
-            prevFast = Math.fma(value - prevFast, fastK, prevFast);
-            prevSlow = Math.fma(value - prevSlow, slowK, prevSlow);
-            macdValue = prevFast - prevSlow;
-            prevSignal += macdValue;
-        }
-        prevSignal /= signalPeriod;
-
-        int outputIndex = slowPeriod + signalPeriod - 2;
-        macd[outputIndex] = macdValue;
-        signal[outputIndex] = prevSignal;
-        histogram[outputIndex] = macdValue - prevSignal;
-        outputIndex++;
-
-        while (today < length) {
-            double value = closes[today++];
-            prevFast = Math.fma(value - prevFast, fastK, prevFast);
-            prevSlow = Math.fma(value - prevSlow, slowK, prevSlow);
-            macdValue = prevFast - prevSlow;
-            prevSignal = (signalPeriod == 1)
-                    ? macdValue
-                    : Math.fma(macdValue - prevSignal, signalK, prevSignal);
-            macd[outputIndex] = macdValue;
-            signal[outputIndex] = prevSignal;
-            histogram[outputIndex] = macdValue - prevSignal;
-            outputIndex++;
+        // One definition of the recursion: the batch walk and the live engine's stream both drive
+        // this state, so the two cannot drift apart.
+        MacdState state = new MacdState(fastPeriod, slowPeriod, signalPeriod);
+        for (int i = 0; i < length; i++) {
+            state.accept(closes[i]);
+            macd[i] = state.macd();
+            signal[i] = state.signal();
+            histogram[i] = state.histogram();
         }
         return new MacdResult(macd, signal, histogram);
     }
@@ -130,11 +93,4 @@ public final class Macd {
         }
     }
 
-    private static double average(double[] values, int from, int count) {
-        double sum = 0.0;
-        for (int i = from; i < from + count; i++) {
-            sum += values[i];
-        }
-        return sum / count;
-    }
 }
