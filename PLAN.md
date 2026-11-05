@@ -241,7 +241,7 @@ this PR).
     strategy, fed only the candles it has not seen — a decision costs one step instead of a walk
     over the whole history, with the definition in the cache entry so an edit cannot keep stale
     signals. The runner still retains its anchored series for the prefix check; that heap is item 42
-    (this PR)
+    (PR #77)
 19. ✅ Make the TradingView webhook's timestamp contract honest: validation accepted a `Z`-less
     offset (`DateTimeFormatter.ISO_OFFSET_DATE_TIME`), but `saveAlert` then parsed with
     `Instant.parse`, so `2026-10-04T12:00:00+02:00` failed later as a 500 instead of the promised
