@@ -123,14 +123,17 @@ public class LiveTradingService {
         }
         standDownWarned.remove(strategy.getId());
         Candle candle = series.get(index);
-        StrategyStream stream = streamFor(strategy.getId(), definition, series);
+        // The signals are read inside the same lock that feeds the stream: the stream itself is
+        // mutable, and returning it would let two decisions interleave between feeding the next
+        // bar and reading the one this decision is based on.
+        StreamSignal signal = signalsFor(strategy.getId(), definition, series);
         boolean open = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN").isPresent();
         if (open) {
-            return stream.exitFired()
+            return signal.exit()
                     ? new LiveDecision("SELL", reason("exit", definition.exitRules()), candle.getOpenTime())
                     : null;
         }
-        return stream.entryFired()
+        return signal.entry()
                 ? new LiveDecision("BUY", reason("entry", definition.entryRules()), candle.getOpenTime())
                 : null;
     }
@@ -141,8 +144,8 @@ public class LiveTradingService {
      * a rebuilt or reordered series starts the stream again. The definition is part of the cache
      * entry, so editing a strategy's parameters or rules cannot keep stale signals.
      */
-    private StrategyStream streamFor(String strategyId, StrategyDefinition definition,
-                                     List<Candle> series) {
+    private StreamSignal signalsFor(String strategyId, StrategyDefinition definition,
+                                    List<Candle> series) {
         // The stream is mutated in place, so the cache read-modify-write must not interleave two
         // decisions for the same strategy; the lock is reentrant for a caller that already holds it.
         ReentrantLock lock = lockFor(strategyId);
@@ -166,7 +169,7 @@ public class LiveTradingService {
                 Candle appended = series.get(series.size() - 1);
                 evaluations.put(strategyId, new CachedEvaluation(definition, cached.stream(),
                         series.size(), appended.getOpenTime()));
-                return cached.stream();
+                return new StreamSignal(cached.stream().entryFired(), cached.stream().exitFired());
             }
             StrategyStream stream = new StrategyStream(definition);
             for (Candle candle : series) {
@@ -175,7 +178,7 @@ public class LiveTradingService {
             Candle last = series.get(series.size() - 1);
             evaluations.put(strategyId, new CachedEvaluation(definition, stream, series.size(),
                     last.getOpenTime()));
-            return stream;
+            return new StreamSignal(stream.entryFired(), stream.exitFired());
         } finally {
             lock.unlock();
         }
@@ -183,6 +186,9 @@ public class LiveTradingService {
 
     private record CachedEvaluation(StrategyDefinition definition, StrategyStream stream,
                                     int consumed, long lastOpenTime) {
+    }
+
+    private record StreamSignal(boolean entry, boolean exit) {
     }
 
     private ReentrantLock lockFor(String strategyId) {
