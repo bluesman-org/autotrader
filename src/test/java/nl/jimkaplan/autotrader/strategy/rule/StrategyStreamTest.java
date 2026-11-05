@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The live engine decides from a stream, not from a fresh evaluation of the whole series. The two
@@ -30,6 +31,8 @@ class StrategyStreamTest {
         StrategySignals batch = StrategyEvaluator.evaluate(CandleSeries.of(candles), DEFINITION);
         StrategyStream stream = new StrategyStream(DEFINITION);
 
+        int entries = 0;
+        int exits = 0;
         for (int i = 0; i < candles.size(); i++) {
             stream.accept(candles.get(i));
             if (i == 0) {
@@ -38,6 +41,44 @@ class StrategyStreamTest {
             assertEquals(batch.entry()[i], stream.entryFired(), "entry signal at bar " + i);
             assertEquals(batch.exit()[i], stream.exitFired(), "exit signal at bar " + i);
             assertEquals(i + 1, stream.bars());
+            if (batch.entry()[i]) {
+                entries++;
+            }
+            if (batch.exit()[i]) {
+                exits++;
+            }
+        }
+        // Without this the comparison is vacuous when no rule fires.
+        assertTrue(entries > 0, "the fixture must produce entry signals");
+        assertTrue(exits > 0, "the fixture must produce exit signals");
+    }
+
+    /**
+     * The two-bar window is only valid while every condition looks back at most one bar. This walks
+     * every condition in the enum through both paths, so a future condition that needs more history
+     * fails here instead of silently never firing in the live engine.
+     */
+    @Test
+    void everyConditionAgreesBetweenTheStreamAndTheBatch() {
+        List<Candle> candles = candles(120);
+        CandleSeries series = CandleSeries.of(candles);
+        for (RuleCondition condition : RuleCondition.values()) {
+            StrategyDefinition definition = new StrategyDefinition(
+                    DEFINITION.macd(), DEFINITION.sar(),
+                    new RuleGroup(LogicalOperator.ALL, List.of(condition)),
+                    new RuleGroup(LogicalOperator.ALL, List.of(condition)));
+            StrategySignals batch = StrategyEvaluator.evaluate(series, definition);
+            StrategyStream stream = new StrategyStream(definition);
+            for (int i = 0; i < candles.size(); i++) {
+                stream.accept(candles.get(i));
+                if (i == 0) {
+                    continue;
+                }
+                assertEquals(batch.entry()[i], stream.entryFired(),
+                        condition + " entry at bar " + i);
+                assertEquals(batch.exit()[i], stream.exitFired(),
+                        condition + " exit at bar " + i);
+            }
         }
     }
 

@@ -93,6 +93,38 @@ class LiveTradingServiceTest {
     }
 
     @Test
+    void aSecondDecisionMatchesAFreshEvaluationOfTheExtendedSeries() {
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        List<Candle> series = vUpToCrossover();
+
+        LiveDecision first = liveTradingService.decide(strategy, series);
+        assertEquals("BUY", first.side());
+
+        List<Candle> extended = new ArrayList<>(series);
+        extended.add(candle(42, 65.0));
+        LiveDecision incremental = liveTradingService.decide(strategy, extended);
+
+        LiveTradingService fresh = new LiveTradingService(credentialsService, bitvavoApiClient,
+                liveOrderRepository, livePositionRepository, liveStrategyRepository, alerts);
+        LiveDecision rebuilt = fresh.decide(strategy, extended);
+
+        assertEquals(rebuilt, incremental);
+    }
+
+    @Test
+    void changingTheParametersRebuildsTheStreamInsteadOfKeepingItsSignals() {
+        List<Candle> series = vUpToCrossover();
+        LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
+        assertEquals("BUY", liveTradingService.decide(strategy, series).side());
+
+        // The definition is part of the cache key: a stream kept from the old rules would still
+        // answer BUY here, because the MACD crossover is what fired for that definition.
+        strategy.setEntryConditions(List.of("MACD_BELOW_SIGNAL"));
+
+        assertNull(liveTradingService.decide(strategy, series));
+    }
+
+    @Test
     void decide_returnsNullWithoutASignal() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_BELOW_SAR);
 

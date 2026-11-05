@@ -143,27 +143,42 @@ public class LiveTradingService {
      */
     private StrategyStream streamFor(String strategyId, StrategyDefinition definition,
                                      List<Candle> series) {
-        CachedEvaluation cached = evaluations.get(strategyId);
-        if (cached != null && cached.definition().equals(definition)
-                && cached.consumed() <= series.size()
-                && (cached.consumed() == 0
-                || series.get(cached.consumed() - 1).getOpenTime() == cached.lastOpenTime())) {
-            for (int i = cached.consumed(); i < series.size(); i++) {
-                cached.stream().accept(series.get(i));
+        // The stream is mutated in place, so the cache read-modify-write must not interleave two
+        // decisions for the same strategy; the lock is reentrant for a caller that already holds it.
+        ReentrantLock lock = lockFor(strategyId);
+        lock.lock();
+        try {
+            CachedEvaluation cached = evaluations.get(strategyId);
+            if (cached != null && cached.definition().equals(definition)
+                    && cached.consumed() <= series.size()
+                    && (cached.consumed() == 0
+                    || series.get(cached.consumed() - 1).getOpenTime() == cached.lastOpenTime())) {
+                try {
+                    for (int i = cached.consumed(); i < series.size(); i++) {
+                        cached.stream().accept(series.get(i));
+                    }
+                } catch (RuntimeException e) {
+                    // The stream has already consumed part of the window: drop the entry so the
+                    // next decision rebuilds instead of feeding those bars a second time.
+                    evaluations.remove(strategyId);
+                    throw e;
+                }
+                Candle appended = series.get(series.size() - 1);
+                evaluations.put(strategyId, new CachedEvaluation(definition, cached.stream(),
+                        series.size(), appended.getOpenTime()));
+                return cached.stream();
             }
-            Candle appended = series.get(series.size() - 1);
-            evaluations.put(strategyId, new CachedEvaluation(definition, cached.stream(),
-                    series.size(), appended.getOpenTime()));
-            return cached.stream();
+            StrategyStream stream = new StrategyStream(definition);
+            for (Candle candle : series) {
+                stream.accept(candle);
+            }
+            Candle last = series.get(series.size() - 1);
+            evaluations.put(strategyId, new CachedEvaluation(definition, stream, series.size(),
+                    last.getOpenTime()));
+            return stream;
+        } finally {
+            lock.unlock();
         }
-        StrategyStream stream = new StrategyStream(definition);
-        for (Candle candle : series) {
-            stream.accept(candle);
-        }
-        Candle last = series.get(series.size() - 1);
-        evaluations.put(strategyId, new CachedEvaluation(definition, stream, series.size(),
-                last.getOpenTime()));
-        return stream;
     }
 
     private record CachedEvaluation(StrategyDefinition definition, StrategyStream stream,
