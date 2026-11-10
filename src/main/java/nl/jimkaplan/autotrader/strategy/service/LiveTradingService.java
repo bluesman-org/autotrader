@@ -95,23 +95,25 @@ public class LiveTradingService {
     /**
      * Decide what the last candle fed into the stream asks for.
      *
-     * <p>The runner owns the stream — it feeds the seed and every closed candle — so this method
-     * reads the signal the stream already holds and never mutates it. The stream is built from the
-     * strategy's definition by {@link #definition(LiveStrategy)}, and the runner is recreated when
-     * the strategy is stopped and restarted.</p>
+     * <p>The runner owns the stream: it feeds the seed and every closed candle, and takes the
+     * immutable {@link StrategyStream.Signal} snapshot on that same delivery thread right after the
+     * feed. This method reads the snapshot only, so it can never observe a half-fed stream, and the
+     * definition it reports is the one the signals were evaluated with. A running strategy cannot
+     * be edited ({@link LiveStrategyService#update} refuses while its runner exists), and a restart
+     * creates a new runner and stream.</p>
      *
      * @param strategy The live strategy
-     * @param stream   Its stream, fed up to and including the closed candle being decided
+     * @param signal   The stream's signals for the closed candle being decided
      * @return The decision to fill at the next candle's open, or null when no signal fired or a
      *         real order is still awaiting reconciliation
      */
-    public LiveDecision decide(LiveStrategy strategy, StrategyStream stream) {
-        if (stream.bars() == 0) {
+    public LiveDecision decide(LiveStrategy strategy, StrategyStream.Signal signal) {
+        if (signal.bars() == 0) {
             return null;
         }
-        if (stream.bars() - 1 < strategy.getWarmUpCandles()) {
+        if (signal.bars() - 1 < strategy.getWarmUpCandles()) {
             log.debug("{} has {} bars; still inside the {}-candle warm-up",
-                    strategy.getId(), stream.bars(), strategy.getWarmUpCandles());
+                    strategy.getId(), signal.bars(), strategy.getWarmUpCandles());
             return null;
         }
         if (liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(strategy.getId())) {
@@ -122,15 +124,14 @@ public class LiveTradingService {
             return null;
         }
         standDownWarned.remove(strategy.getId());
-        StrategyDefinition definition = definition(strategy);
         boolean open = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN").isPresent();
         if (open) {
-            return stream.exitFired()
-                    ? new LiveDecision("SELL", reason("exit", definition.exitRules()), stream.openTime())
+            return signal.exit()
+                    ? new LiveDecision("SELL", reason("exit", signal.definition().exitRules()), signal.openTime())
                     : null;
         }
-        return stream.entryFired()
-                ? new LiveDecision("BUY", reason("entry", definition.entryRules()), stream.openTime())
+        return signal.entry()
+                ? new LiveDecision("BUY", reason("entry", signal.definition().entryRules()), signal.openTime())
                 : null;
     }
 

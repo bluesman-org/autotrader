@@ -82,7 +82,7 @@ class LiveTradingServiceTest {
         List<Candle> series = vUpToCrossover();
         LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
 
-        LiveDecision decision = liveTradingService.decide(strategy, stream(strategy, series));
+        LiveDecision decision = liveTradingService.decide(strategy, signal(strategy, series));
 
         assertNotNull(decision);
         assertEquals("BUY", decision.side());
@@ -99,17 +99,17 @@ class LiveTradingServiceTest {
         List<Candle> series = vUpToCrossover();
         StrategyStream stream = stream(strategy, series);
 
-        LiveDecision first = liveTradingService.decide(strategy, stream);
+        LiveDecision first = liveTradingService.decide(strategy, stream.signal());
         assertEquals("BUY", first.side());
 
         // The runner feeds the next closed candle into the same stream; the decision on the
         // extended state must equal a fresh service's evaluation of the extended history.
         stream.accept(candle(42, 65.0));
-        LiveDecision incremental = liveTradingService.decide(strategy, stream);
+        LiveDecision incremental = liveTradingService.decide(strategy, stream.signal());
 
         LiveTradingService fresh = new LiveTradingService(credentialsService, bitvavoApiClient,
                 liveOrderRepository, livePositionRepository, liveStrategyRepository, alerts);
-        LiveDecision rebuilt = fresh.decide(strategy, stream(strategy, extended(series)));
+        LiveDecision rebuilt = fresh.decide(strategy, signal(strategy, extended(series)));
 
         assertEquals(rebuilt, incremental);
     }
@@ -118,40 +118,44 @@ class LiveTradingServiceTest {
     void aStreamUsesTheStrategysDefinitionWhenItIsBuilt() {
         List<Candle> series = vUpToCrossover();
         LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        assertEquals("BUY", liveTradingService.decide(strategy, stream(strategy, series)).side());
+        assertEquals("BUY", liveTradingService.decide(strategy, signal(strategy, series)).side());
 
         // The stream belongs to the runner, so an edited strategy gets a new one when it starts;
         // a stream built from the edited definition must not carry the old rules' signal.
         strategy.setEntryConditions(List.of("MACD_BELOW_SIGNAL"));
 
-        assertNull(liveTradingService.decide(strategy, stream(strategy, series)));
+        assertNull(liveTradingService.decide(strategy, signal(strategy, series)));
     }
 
     @Test
     void decide_returnsNullWithoutACandle() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
 
-        assertNull(liveTradingService.decide(strategy, stream(strategy, List.of())));
+        assertNull(liveTradingService.decide(strategy, signal(strategy, List.of())));
         verifyNoInteractions(liveOrderRepository, livePositionRepository);
     }
 
     @Test
-    void decide_readsTheStreamWithoutFeedingIt() {
+    void aSignalIsAnImmutableSnapshotOfItsBar() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
         StrategyStream stream = stream(strategy, vUpToCrossover());
-        int bars = stream.bars();
 
-        liveTradingService.decide(strategy, stream);
+        StrategyStream.Signal snapshot = stream.signal();
+        stream.accept(candle(42, 65.0));
 
-        assertEquals(bars, stream.bars());
-        assertEquals(START + 41 * HOUR, stream.openTime());
+        // The runner decides on the snapshot it took right after the feed; feeding the next bar
+        // must not change the decision's bar, its count or its definition.
+        assertEquals(42, snapshot.bars());
+        assertEquals(START + 41 * HOUR, snapshot.openTime());
+        assertEquals(LiveTradingService.definition(strategy), snapshot.definition());
+        assertEquals(43, stream.bars());
     }
 
     @Test
     void decide_returnsNullWithoutASignal() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_BELOW_SAR);
 
-        assertNull(liveTradingService.decide(strategy, stream(strategy, rising(60))));
+        assertNull(liveTradingService.decide(strategy, signal(strategy, rising(60))));
 
         verify(liveOrderRepository).existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID);
         verify(liveOrderRepository, never()).save(any());
@@ -164,9 +168,9 @@ class LiveTradingServiceTest {
         when(liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(STRATEGY_ID))
                 .thenReturn(true);
 
-        StrategyStream stream = stream(strategy, vUpToCrossover());
-        assertNull(liveTradingService.decide(strategy, stream));
-        assertNull(liveTradingService.decide(strategy, stream));
+        StrategyStream.Signal snapshot = signal(strategy, vUpToCrossover());
+        assertNull(liveTradingService.decide(strategy, snapshot));
+        assertNull(liveTradingService.decide(strategy, snapshot));
 
         verify(livePositionRepository, never()).findByStrategyIdAndStatus(any(), any());
     }
@@ -175,7 +179,7 @@ class LiveTradingServiceTest {
     void decide_respectsTheWarmUp() {
         LiveStrategy strategy = strategy(true, 200, RuleCondition.SAR_BEARISH_CROSSOVER);
 
-        assertNull(liveTradingService.decide(strategy, stream(strategy, vUpToCrossover())));
+        assertNull(liveTradingService.decide(strategy, signal(strategy, vUpToCrossover())));
     }
 
     @Test
@@ -185,7 +189,7 @@ class LiveTradingServiceTest {
                 .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
 
         List<Candle> series = rising(60);
-        LiveDecision decision = liveTradingService.decide(strategy, stream(strategy, series));
+        LiveDecision decision = liveTradingService.decide(strategy, signal(strategy, series));
 
         assertNotNull(decision);
         assertEquals("SELL", decision.side());
@@ -201,21 +205,21 @@ class LiveTradingServiceTest {
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
 
-        assertNull(liveTradingService.decide(strategy, stream(strategy, vUpToCrossover())));
+        assertNull(liveTradingService.decide(strategy, signal(strategy, vUpToCrossover())));
     }
 
     @Test
     void decide_ignoresExitSignalsWhileFlat() {
         LiveStrategy strategy = strategy(true, 0, RuleCondition.PRICE_ABOVE_SAR);
 
-        assertNull(liveTradingService.decide(strategy, stream(strategy, rising(60))));
+        assertNull(liveTradingService.decide(strategy, signal(strategy, rising(60))));
     }
 
     @Test
     void fill_buysAtTheDecisionMomentsPriceInDryRun() {
         List<Candle> series = vUpToCrossover();
         LiveStrategy strategy = strategy(true, 0, RuleCondition.SAR_BEARISH_CROSSOVER);
-        LiveDecision decision = liveTradingService.decide(strategy, stream(strategy, series));
+        LiveDecision decision = liveTradingService.decide(strategy, signal(strategy, series));
 
         liveTradingService.fill(strategy, decision, 62.0);
 
@@ -246,7 +250,7 @@ class LiveTradingServiceTest {
         when(livePositionRepository.findByStrategyIdAndStatus(STRATEGY_ID, "OPEN"))
                 .thenReturn(Optional.of(openPosition(0.5, 200.0, 0.1)));
 
-        LiveDecision decision = liveTradingService.decide(strategy, stream(strategy, rising(60)));
+        LiveDecision decision = liveTradingService.decide(strategy, signal(strategy, rising(60)));
 
         liveTradingService.fill(strategy, decision, 160.0);
 
@@ -990,6 +994,10 @@ class LiveTradingServiceTest {
             stream.accept(candle);
         }
         return stream;
+    }
+
+    private static StrategyStream.Signal signal(LiveStrategy strategy, List<Candle> candles) {
+        return stream(strategy, candles).signal();
     }
 
     private static List<Candle> extended(List<Candle> series) {

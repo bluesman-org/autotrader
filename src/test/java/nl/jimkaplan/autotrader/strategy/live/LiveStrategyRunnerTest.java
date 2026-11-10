@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
@@ -62,7 +61,7 @@ class LiveStrategyRunnerTest {
     private BitvavoCandleStream stream;
 
     private ArgumentCaptor<BitvavoCandleStream.CandleListener> listenerCaptor;
-    private final List<DecisionInput> decisions = new ArrayList<>();
+    private final List<StrategyStream.Signal> decisions = new ArrayList<>();
     private LiveStrategy strategy;
     private LiveStrategyRunner runner;
 
@@ -74,18 +73,13 @@ class LiveStrategyRunnerTest {
                 .thenReturn(stream);
         lenient().when(liveStrategyRepository.updateSeriesStartTime(any(), anyLong()))
                 .thenReturn(1L);
-        // Record the stream's state at the moment of the decision: the runner owns one mutable
-        // stream, so a later capture would otherwise show the bars appended after this call.
+        // Record the immutable snapshot taken at the decision: a later stream state cannot change it.
         lenient().when(liveTradingService.decide(any(), any())).thenAnswer(invocation -> {
-            StrategyStream stream = invocation.getArgument(1);
-            decisions.add(new DecisionInput(stream, stream.bars(), stream.openTime()));
+            decisions.add(invocation.getArgument(1));
             return null;
         });
         runner = new LiveStrategyRunner(strategy, CandleInterval.ONE_HOUR, candleHistoryService,
                 liveTradingService, liveStrategyRepository, streamFactory);
-    }
-
-    private record DecisionInput(StrategyStream stream, int bars, long openTime) {
     }
 
     @Test
@@ -160,12 +154,15 @@ class LiveStrategyRunnerTest {
         listenerCaptor.getValue().onCandleClosed(boundary, 0);
 
         assertEquals(3, decisions.size());
-        DecisionInput keptRunningDecision = decisions.get(1);
-        DecisionInput restartedDecision = decisions.get(2);
-        assertEquals(keptRunningDecision.bars(), restartedDecision.bars());
-        assertEquals(keptRunningDecision.openTime(), restartedDecision.openTime());
+        StrategyStream.Signal keptRunningDecision = decisions.get(1);
+        StrategyStream.Signal restartedDecision = decisions.get(2);
+        assertEquals(8, keptRunningDecision.bars());
         assertEquals(8, restartedDecision.bars());
         assertEquals(boundary, restartedDecision.openTime());
+        // The same boundary on the same anchored history must produce the same signals.
+        assertEquals(keptRunningDecision.definition(), restartedDecision.definition());
+        assertEquals(keptRunningDecision.entry(), restartedDecision.entry());
+        assertEquals(keptRunningDecision.exit(), restartedDecision.exit());
     }
 
     @Test
@@ -339,7 +336,6 @@ class LiveStrategyRunnerTest {
             assertEquals(i + 1, decisions.get(i).bars());
             assertEquals(START + i * HOUR, decisions.get(i).openTime());
         }
-        assertSame(decisions.get(0).stream(), decisions.get(10).stream());
     }
 
     @Test

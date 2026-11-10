@@ -94,10 +94,29 @@ public final class StrategyStream {
     }
 
     /**
-     * @return The open time of the last candle fed, the bar a decision is taken on
+     * An immutable view of the last fed candle: the signals the rules fired on it, the definition
+     * they were evaluated with, and the bar they belong to. A decision reads this instead of the
+     * mutable stream, so it cannot observe a half-fed state, and the reason it records always names
+     * the definition the signals came from.
+     *
+     * @param definition The definition the signals were evaluated with
+     * @param bars       The number of candles fed when the snapshot was taken
+     * @param openTime   The open time of the candle the signals belong to
+     * @param entry      Whether the entry rules fired on that candle
+     * @param exit       Whether the exit rules fired on that candle
      */
-    public long openTime() {
-        return time;
+    public record Signal(StrategyDefinition definition, int bars, long openTime,
+                         boolean entry, boolean exit) {
+    }
+
+    /**
+     * Take the signals of the last fed candle. Call it on the thread that feeds the stream, right
+     * after the candle was accepted, so the snapshot belongs to that bar.
+     *
+     * @return The immutable signal snapshot
+     */
+    public Signal signal() {
+        return new Signal(definition, bars, time, entryFired(), exitFired());
     }
 
     /**

@@ -62,7 +62,9 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
     /**
      * The strategy's evaluation state, fed every candle since the anchor and never rebuilt while
      * the runner runs. It keeps constant state — the indicator recursions and the last two bars —
-     * instead of the candles themselves.
+     * instead of the candles themselves. The definition is fixed when the runner is created: a
+     * running strategy cannot be edited ({@code LiveStrategyService.update} refuses while its
+     * runner exists), so only stopping and starting again builds a stream from new parameters.
      */
     private final StrategyStream decisionStream;
     private long lastAppendedOpenTime = Long.MIN_VALUE;
@@ -182,7 +184,7 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
         strategy.setLastEvaluatedOpenTime(openTime);
         liveStrategyRepository.updateLastEvaluatedOpenTime(strategy.getId(), openTime);
 
-        LiveDecision decision = liveTradingService.decide(strategy, decisionStream);
+        LiveDecision decision = liveTradingService.decide(strategy, decisionStream.signal());
         if (decision != null) {
             liveTradingService.fill(strategy, decision, fillPrice(openTime, nextOpen, candle));
         }

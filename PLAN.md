@@ -399,7 +399,13 @@ constant instead of growing with uptime (item 42).
     candle, and passes it to `decide`, which only reads the signal — so the retained state is the
     indicator recursions and two bars instead of every candle since the anchor. The service-side
     cache, its stream feeding and the runner's `List<Candle>` are gone; the anchored start and the
-    replay gate are unchanged, and the seed log still reports the candles fed.
+    replay gate are unchanged, and the seed log still reports the candles fed. The seed still reads
+    the anchored range as one transient `List<Candle>` (item 43).
+
+43. ⬜ Chunk the live runner's seed: it still fetches the whole anchored range as one
+    `List<Candle>`, so a `1m` strategy anchored a year back allocates roughly 525k candles at
+    startup, once. The retained state is constant (item 42); a page-by-page fetch and feed would
+    bound the startup spike too.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
