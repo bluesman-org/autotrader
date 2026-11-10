@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -136,6 +137,48 @@ class MongoIndexInitializerTest {
         assertEquals(1, pushSubscriptionIndex.getIndexKeys().size());
         assertEquals(1, pushSubscriptionIndex.getIndexKeys().get("endpoint"));
         assertEquals(Boolean.TRUE, pushSubscriptionIndex.getIndexOptions().get("unique"));
+    }
+
+    @Test
+    void withTheSupersededLivePositionIndex_dropsIt() {
+        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
+                .thenReturn(aggregationResults());
+        when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(true);
+        when(mongoTemplate.collectionExists(LivePosition.class)).thenReturn(true);
+        when(mongoTemplate.indexOps(any(Class.class))).thenReturn(indexOperations);
+        when(indexOperations.getIndexInfo()).thenReturn(List.of(
+                new IndexInfo(List.of(IndexField.create("strategy_id", Sort.Direction.ASC),
+                        IndexField.create("status", Sort.Direction.ASC)),
+                        "strategy_id_1_status_1", false, false, null),
+                new IndexInfo(List.of(IndexField.create("strategy_id", Sort.Direction.ASC),
+                        IndexField.create("status", Sort.Direction.ASC),
+                        IndexField.create("exit_time", Sort.Direction.ASC)),
+                        "strategy_id_1_status_1_exit_time_1", false, false, null)));
+        when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
+
+        mongoIndexInitializer.run(new DefaultApplicationArguments());
+
+        verify(indexOperations).dropIndex("strategy_id_1_status_1");
+        verify(indexOperations, never()).dropIndex("strategy_id_1_status_1_exit_time_1");
+    }
+
+    @Test
+    void withoutTheSupersededLivePositionIndex_dropsNothing() {
+        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
+                .thenReturn(aggregationResults());
+        when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(true);
+        when(mongoTemplate.collectionExists(LivePosition.class)).thenReturn(true);
+        when(mongoTemplate.indexOps(any(Class.class))).thenReturn(indexOperations);
+        when(indexOperations.getIndexInfo()).thenReturn(List.of(
+                new IndexInfo(List.of(IndexField.create("strategy_id", Sort.Direction.ASC),
+                        IndexField.create("status", Sort.Direction.ASC),
+                        IndexField.create("exit_time", Sort.Direction.ASC)),
+                        "strategy_id_1_status_1_exit_time_1", false, false, null)));
+        when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
+
+        mongoIndexInitializer.run(new DefaultApplicationArguments());
+
+        verify(indexOperations, never()).dropIndex(anyString());
     }
 
     @Test

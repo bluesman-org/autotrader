@@ -18,6 +18,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.index.Index;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.mongodb.core.index.IndexInfo;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Component;
@@ -79,6 +80,9 @@ public class MongoIndexInitializer implements ApplicationRunner {
                 .on("strategyId", Sort.Direction.ASC)
                 .on("status", Sort.Direction.ASC)
                 .on("exitTime", Sort.Direction.ASC));
+        // Only after the replacement exists: a failure above must not leave the collection with
+        // neither index while the server is already accepting requests.
+        dropSupersededLivePositionIndex();
         // The history page reads orders by signal time and positions by status plus entry time.
         ensureIndex(LiveOrder.class, new Index()
                 .on("signalOpenTime", Sort.Direction.ASC));
@@ -89,6 +93,32 @@ public class MongoIndexInitializer implements ApplicationRunner {
         // document, so the endpoint is the natural unique key.
         ensureIndex(PushSubscriptionDocument.class,
                 new Index().on("endpoint", Sort.Direction.ASC).unique());
+    }
+
+    /**
+     * The two-key {@code (strategyId, status)} index is superseded by the three-key one: the server
+     * keeps an index the initializer no longer declares, so it is dropped here once instead of
+     * costing writes for the life of the database.
+     */
+    private void dropSupersededLivePositionIndex() {
+        if (!mongoTemplate.collectionExists(LivePosition.class)) {
+            return;
+        }
+        for (IndexInfo indexInfo : mongoTemplate.indexOps(LivePosition.class).getIndexInfo()) {
+            // IndexInfo reports the persisted field names (@Field values), not the Java properties.
+            boolean superseded = indexInfo.getIndexFields().size() == 2
+                    && "strategy_id".equals(indexInfo.getIndexFields().get(0).getKey())
+                    && "status".equals(indexInfo.getIndexFields().get(1).getKey());
+            if (superseded) {
+                log.info("Dropping superseded index '{}' on live_positions", indexInfo.getName());
+                try {
+                    mongoTemplate.indexOps(LivePosition.class).dropIndex(indexInfo.getName());
+                } catch (DataAccessException e) {
+                    // Another instance (or an operator) dropped it between the read and the call.
+                    log.debug("Index '{}' was already gone: {}", indexInfo.getName(), e.getMessage());
+                }
+            }
+        }
     }
 
     /**
