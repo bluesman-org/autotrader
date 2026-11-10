@@ -45,7 +45,7 @@ PR #75). The ledger's cost walk is cached per account and extended with the wind
 read, so its ten-second refresh no longer pages the whole history (item 23, PR #76). The live
 engine's indicators now stream, so a decision costs one step instead of a full series walk (item 18,
 PR #77). The runner now owns that stream and keeps no candle list, so the live engine's memory stays
-constant instead of growing with uptime (item 42).
+constant instead of growing with uptime (item 42, PR #79).
 
 ## Objective
 
@@ -399,8 +399,8 @@ constant instead of growing with uptime (item 42).
     candle, and passes it to `decide`, which only reads the signal — so the retained state is the
     indicator recursions and two bars instead of every candle since the anchor. The service-side
     cache, its stream feeding and the runner's `List<Candle>` are gone; the anchored start and the
-    replay gate are unchanged, and the seed log still reports the candles fed. The seed still reads
-    the anchored range as one transient `List<Candle>` (item 43).
+    replay gate are unchanged, and the seed log still reports the candles fed (PR #79). The seed
+    still reads the anchored range as one transient `List<Candle>` (item 43).
 
 43. ⬜ Chunk the live runner's seed: it still fetches the whole anchored range as one
     `List<Candle>`, so a `1m` strategy anchored a year back allocates roughly 525k candles at
