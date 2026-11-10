@@ -139,6 +139,28 @@ class MongoIndexInitializerTest {
     }
 
     @Test
+    void withTheSupersededLivePositionIndex_dropsIt() {
+        when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
+                .thenReturn(aggregationResults());
+        when(mongoTemplate.collectionExists(BotConfiguration.class)).thenReturn(true);
+        when(mongoTemplate.collectionExists(LivePosition.class)).thenReturn(true);
+        when(mongoTemplate.indexOps(any(Class.class))).thenReturn(indexOperations);
+        when(indexOperations.getIndexInfo()).thenReturn(List.of(
+                new IndexInfo(List.of(IndexField.create("strategyId", Sort.Direction.ASC),
+                        IndexField.create("status", Sort.Direction.ASC)),
+                        "strategy_id_1_status_1", false, false, null),
+                new IndexInfo(List.of(IndexField.create("strategyId", Sort.Direction.ASC),
+                        IndexField.create("status", Sort.Direction.ASC),
+                        IndexField.create("exitTime", Sort.Direction.ASC)),
+                        "strategy_id_1_status_1_exit_time_1", false, false, null)));
+        when(indexOperations.ensureIndex(any(Index.class))).thenReturn("test-index");
+
+        mongoIndexInitializer.run(new DefaultApplicationArguments());
+
+        verify(indexOperations).dropIndex("strategy_id_1_status_1");
+    }
+
+    @Test
     void withLegacyBotIdIndexName_dropsItAndRecreatesUnderTheCanonicalName() {
         when(mongoTemplate.aggregate(any(Aggregation.class), eq(BotConfiguration.class), eq(Document.class)))
                 .thenReturn(aggregationResults());

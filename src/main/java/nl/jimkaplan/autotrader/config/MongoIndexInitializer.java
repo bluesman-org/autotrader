@@ -75,6 +75,7 @@ public class MongoIndexInitializer implements ApplicationRunner {
         // One index serves both of the live page's closed-position reads: the realised-totals
         // aggregation matches the first two keys, and the trailing exit_time turns the order
         // results' $in into index seeks instead of a scan of the strategy's closed history.
+        dropSupersededLivePositionIndex();
         ensureIndex(LivePosition.class, new Index()
                 .on("strategyId", Sort.Direction.ASC)
                 .on("status", Sort.Direction.ASC)
@@ -89,6 +90,26 @@ public class MongoIndexInitializer implements ApplicationRunner {
         // document, so the endpoint is the natural unique key.
         ensureIndex(PushSubscriptionDocument.class,
                 new Index().on("endpoint", Sort.Direction.ASC).unique());
+    }
+
+    /**
+     * The two-key {@code (strategyId, status)} index is superseded by the three-key one: the server
+     * keeps an index the initializer no longer declares, so it is dropped here once instead of
+     * costing writes for the life of the database.
+     */
+    private void dropSupersededLivePositionIndex() {
+        if (!mongoTemplate.collectionExists(LivePosition.class)) {
+            return;
+        }
+        for (IndexInfo indexInfo : mongoTemplate.indexOps(LivePosition.class).getIndexInfo()) {
+            boolean superseded = indexInfo.getIndexFields().size() == 2
+                    && "strategyId".equals(indexInfo.getIndexFields().get(0).getKey())
+                    && "status".equals(indexInfo.getIndexFields().get(1).getKey());
+            if (superseded) {
+                log.info("Dropping superseded index '{}' on live_positions", indexInfo.getName());
+                mongoTemplate.indexOps(LivePosition.class).dropIndex(indexInfo.getName());
+            }
+        }
     }
 
     /**
