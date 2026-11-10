@@ -11,8 +11,9 @@ import nl.jimkaplan.autotrader.strategy.model.document.Candle;
  * <p>The indicator state streams (see {@link MacdState} and {@link SarState}), and the rules are
  * the same ones the backtester uses: each readiness check builds the two-bar window the conditions
  * look at — the bar being decided and its predecessor — and runs the existing evaluator on it. The
- * live engine still decides on the anchored series, but at a constant cost per candle instead of a
- * walk over the whole history.</p>
+ * live runner holds one instance per strategy and feeds it every candle since the anchor, so a
+ * decision costs one step and the retained state stays constant instead of a series that grows
+ * with uptime.</p>
  */
 public final class StrategyStream {
 
@@ -90,6 +91,13 @@ public final class StrategyStream {
      */
     public int bars() {
         return bars;
+    }
+
+    /**
+     * @return The open time of the last candle fed, the bar a decision is taken on
+     */
+    public long openTime() {
+        return time;
     }
 
     /**

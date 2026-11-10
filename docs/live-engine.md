@@ -27,27 +27,27 @@ candle channel of its market and interval. Our own policies:
 
 ## Deciding and trading
 
-- The decision bar is the candle that just closed. The engine evaluates an **anchored series** for
+- The decision bar is the candle that just closed. The engine evaluates an **anchored stream** for
   its market and interval: on the first start it fixes the series start at the strategy's start
   minus the seed window (warm-up plus the MACD slow and signal periods plus a 1,000-candle margin),
-  persists it as `seriesStartTime`, and from then on only appends closed candles — never truncating.
-  The anchor matters because the Parabolic SAR's flip timing is start-sensitive (the rehearsal of
-  2026-10-13 showed two near-identical backtests exiting on different candles): an append-only,
-  fixed-start series makes restarts replay the identical decisions, and a backtest started at the
-  same anchor with `warmUp` set to the window length reproduces them bar for bar on every bar the
-  engine evaluated. It does not reproduce a gap: a backtest acts on every bar after its warm-up,
-  while the engine never replays the seed or downtime (a boundary without a candle becomes a
-  `SKIPPED` row), so after a gap the backtest can hold a position the engine never opened. If the
-  store cannot reach back to the anchor (old data unavailable, e.g. right after a restore), the
-  series starts later and a warning says so. The replay gate (`LiveSignalReplayTest`) still pins
-  the evaluator: one case asserts candle-by-candle (prefix) equality of the signals and the
-  MACD/SAR values, another that a front-truncated series matches the whole series for a benign
+  persists it as `seriesStartTime`, and from then on only feeds closed candles into the same
+  stream — never re-seeding or truncating it. The anchor matters because the Parabolic SAR's flip
+  timing is start-sensitive (the rehearsal of 2026-10-13 showed two near-identical backtests exiting
+  on different candles): a fixed-start stream makes restarts replay the identical decisions, and a
+  backtest started at the same anchor with `warmUp` set to the window length reproduces them bar for
+  bar on every bar the engine evaluated. It does not reproduce a gap: a backtest acts on every bar
+  after its warm-up, while the engine never replays the seed or downtime (a boundary without a
+  candle becomes a `SKIPPED` row), so after a gap the backtest can hold a position the engine never
+  opened. If the store cannot reach back to the anchor (old data unavailable, e.g. right after a
+  restore), the stream starts later and a warning says so. The replay gate (`LiveSignalReplayTest`)
+  still pins the evaluator: one case asserts candle-by-candle (prefix) equality of the signals and
+  the MACD/SAR values, another that a front-truncated series matches the whole series for a benign
   fixture, and a third quantifies the same truncation on the frozen real fixture — a different start
   changes decisions there, which is the evidence this anchor exists for.
-- The series is append-only, so it grows with uptime — one candle per interval, about 8.8k a year
-  on `1h` and 525k on `1m` — and each decision re-evaluates it end to end. On long intervals that
-  is invisible; on `1m` a strategy that runs for months should be watched (each seed logs the
-  series length).
+- The runner keeps no candle list: it holds one `StrategyStream` per strategy — the MACD and
+  Parabolic SAR recursions plus the last two bars the rules look at — and feeds it every candle
+  since the anchor, so a decision costs one step and the retained state stays constant however long
+  the strategy runs. Each seed logs how many candles it fed.
 - Signals inside the warm-up (`warmUpCandles`, default 200, as in a backtest) are ignored.
 - **No stale replay**: only candles that close while the strategy runs are acted on. The seed
   itself is never traded, so downtime is not replayed; a candle that closes during a brief stream

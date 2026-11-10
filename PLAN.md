@@ -44,7 +44,8 @@ looked up in the database instead of walking the whole round-trip history on eve
 PR #75). The ledger's cost walk is cached per account and extended with the window since the last
 read, so its ten-second refresh no longer pages the whole history (item 23, PR #76). The live
 engine's indicators now stream, so a decision costs one step instead of a full series walk (item 18,
-PR #77).
+PR #77). The runner now owns that stream and keeps no candle list, so the live engine's memory stays
+constant instead of growing with uptime (item 42).
 
 ## Objective
 
@@ -393,10 +394,12 @@ PR #77).
     `MongoIndexInitializer` drops it once, in the style of the `botId` migration, and a test pins
     the drop (PR #78)
 
-42. ⬜ Bound the retained live series: the runner keeps every candle since the anchor for the
-    decision path, so the heap still grows with uptime even though each decision is now a constant
-    number of steps. Moving the stream into the runner and dropping the list would fix it, at the
-    cost of reworking the runner tests' captured series (flagged in the item 18 PR)
+42. ✅ Bound the retained live series: the runner now owns the strategy's `StrategyStream` — it
+    builds one from the definition at start, feeds it the seed and every closed or backfilled
+    candle, and passes it to `decide`, which only reads the signal — so the retained state is the
+    indicator recursions and two bars instead of every candle since the anchor. The service-side
+    cache, its stream feeding and the runner's `List<Candle>` are gone; the anchored start and the
+    replay gate are unchanged, and the seed log still reports the candles fed.
 
 Done items carry ✅, open items carry ⬜; the list is numbered so items can be referenced by number
 (e.g. "item 7"). Task-list checkboxes cannot be combined with ordered lists on GitHub: the checkbox
