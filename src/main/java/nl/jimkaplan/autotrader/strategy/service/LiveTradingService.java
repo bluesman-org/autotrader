@@ -14,7 +14,6 @@ import nl.jimkaplan.autotrader.repository.LiveStrategyRepository;
 import nl.jimkaplan.autotrader.service.BitvavoCredentialsService;
 import nl.jimkaplan.autotrader.strategy.backtest.BacktestDefaults;
 import nl.jimkaplan.autotrader.strategy.live.LiveDecision;
-import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveOrder;
 import nl.jimkaplan.autotrader.strategy.model.document.LivePosition;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
@@ -34,7 +33,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -85,7 +83,6 @@ public class LiveTradingService {
      * unsettled order.
      */
     private final Set<String> standDownWarned = ConcurrentHashMap.newKeySet();
-    private final Map<String, CachedEvaluation> evaluations = new ConcurrentHashMap<>();
 
     /**
      * One lock per strategy, held by the trading path and by an operator close. A strategy can be
@@ -96,22 +93,27 @@ public class LiveTradingService {
     private final ConcurrentMap<String, ReentrantLock> tradeLocks = new ConcurrentHashMap<>();
 
     /**
-     * Decide what the last closed candle of the series asks for.
+     * Decide what the last candle fed into the stream asks for.
+     *
+     * <p>The runner owns the stream: it feeds the seed and every closed candle, and takes the
+     * immutable {@link StrategyStream.Signal} snapshot on that same delivery thread right after the
+     * feed. This method reads the snapshot only, so it can never observe a half-fed stream, and the
+     * definition it reports is the one the signals were evaluated with. A running strategy cannot
+     * be edited ({@link LiveStrategyService#update} refuses while its runner exists), and a restart
+     * creates a new runner and stream.</p>
      *
      * @param strategy The live strategy
-     * @param series   The strategy's candle window, oldest first, ending in the closed candle
+     * @param signal   The stream's signals for the closed candle being decided
      * @return The decision to fill at the next candle's open, or null when no signal fired or a
      *         real order is still awaiting reconciliation
      */
-    public LiveDecision decide(LiveStrategy strategy, List<Candle> series) {
-        if (series.isEmpty()) {
+    public LiveDecision decide(LiveStrategy strategy, StrategyStream.Signal signal) {
+        if (signal.bars() == 0) {
             return null;
         }
-        StrategyDefinition definition = definition(strategy);
-        int index = series.size() - 1;
-        if (index < strategy.getWarmUpCandles()) {
+        if (signal.bars() - 1 < strategy.getWarmUpCandles()) {
             log.debug("{} has {} bars; still inside the {}-candle warm-up",
-                    strategy.getId(), series.size(), strategy.getWarmUpCandles());
+                    strategy.getId(), signal.bars(), strategy.getWarmUpCandles());
             return null;
         }
         if (liveOrderRepository.existsByStrategyIdAndAwaitingReconciliationTrue(strategy.getId())) {
@@ -122,73 +124,15 @@ public class LiveTradingService {
             return null;
         }
         standDownWarned.remove(strategy.getId());
-        Candle candle = series.get(index);
-        // The signals are read inside the same lock that feeds the stream: the stream itself is
-        // mutable, and returning it would let two decisions interleave between feeding the next
-        // bar and reading the one this decision is based on.
-        StreamSignal signal = signalsFor(strategy.getId(), definition, series);
         boolean open = livePositionRepository.findByStrategyIdAndStatus(strategy.getId(), "OPEN").isPresent();
         if (open) {
             return signal.exit()
-                    ? new LiveDecision("SELL", reason("exit", definition.exitRules()), candle.getOpenTime())
+                    ? new LiveDecision("SELL", reason("exit", signal.definition().exitRules()), signal.openTime())
                     : null;
         }
         return signal.entry()
-                ? new LiveDecision("BUY", reason("entry", definition.entryRules()), candle.getOpenTime())
+                ? new LiveDecision("BUY", reason("entry", signal.definition().entryRules()), signal.openTime())
                 : null;
-    }
-
-    /**
-     * The strategy's streaming evaluation, fed only the candles it has not seen. The runner's
-     * series is append-only, so a call with the same prefix and one more candle costs one step;
-     * a rebuilt or reordered series starts the stream again. The definition is part of the cache
-     * entry, so editing a strategy's parameters or rules cannot keep stale signals.
-     */
-    private StreamSignal signalsFor(String strategyId, StrategyDefinition definition,
-                                    List<Candle> series) {
-        // The stream is mutated in place, so the cache read-modify-write must not interleave two
-        // decisions for the same strategy; the lock is reentrant for a caller that already holds it.
-        ReentrantLock lock = lockFor(strategyId);
-        lock.lock();
-        try {
-            CachedEvaluation cached = evaluations.get(strategyId);
-            if (cached != null && cached.definition().equals(definition)
-                    && cached.consumed() <= series.size()
-                    && (cached.consumed() == 0
-                    || series.get(cached.consumed() - 1).getOpenTime() == cached.lastOpenTime())) {
-                try {
-                    for (int i = cached.consumed(); i < series.size(); i++) {
-                        cached.stream().accept(series.get(i));
-                    }
-                } catch (RuntimeException e) {
-                    // The stream has already consumed part of the window: drop the entry so the
-                    // next decision rebuilds instead of feeding those bars a second time.
-                    evaluations.remove(strategyId);
-                    throw e;
-                }
-                Candle appended = series.get(series.size() - 1);
-                evaluations.put(strategyId, new CachedEvaluation(definition, cached.stream(),
-                        series.size(), appended.getOpenTime()));
-                return new StreamSignal(cached.stream().entryFired(), cached.stream().exitFired());
-            }
-            StrategyStream stream = new StrategyStream(definition);
-            for (Candle candle : series) {
-                stream.accept(candle);
-            }
-            Candle last = series.get(series.size() - 1);
-            evaluations.put(strategyId, new CachedEvaluation(definition, stream, series.size(),
-                    last.getOpenTime()));
-            return new StreamSignal(stream.entryFired(), stream.exitFired());
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private record CachedEvaluation(StrategyDefinition definition, StrategyStream stream,
-                                    int consumed, long lastOpenTime) {
-    }
-
-    private record StreamSignal(boolean entry, boolean exit) {
     }
 
     private ReentrantLock lockFor(String strategyId) {
@@ -607,7 +551,13 @@ public class LiveTradingService {
         return order;
     }
 
-    private static StrategyDefinition definition(LiveStrategy strategy) {
+    /**
+     * The strategy's parameters and rules, as the stream and the backtester read them.
+     *
+     * @param strategy The live strategy
+     * @return Its definition
+     */
+    public static StrategyDefinition definition(LiveStrategy strategy) {
         return new StrategyDefinition(
                 new MacdParameters(strategy.getMacdFastPeriod(), strategy.getMacdSlowPeriod(),
                         strategy.getMacdSignalPeriod()),

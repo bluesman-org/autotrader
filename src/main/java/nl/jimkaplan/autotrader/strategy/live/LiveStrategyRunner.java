@@ -7,31 +7,34 @@ import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.service.CandleHistoryService;
 import nl.jimkaplan.autotrader.strategy.service.LiveTradingService;
+import nl.jimkaplan.autotrader.strategy.rule.StrategyStream;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * The runtime of one live strategy.
  *
- * <p>At start it seeds the candle series from a fixed anchor — the strategy's first start minus the
- * seed window (warm-up plus the MACD periods plus a convergence margin), persisted as
- * {@code seriesStartTime} and never moved — and then listens to the stream's closed-candle
- * boundaries, appending every closed candle to the same series. The series is append-only and
- * identical across restarts. It is deliberately not truncated to a rolling window: the Parabolic
- * SAR's flip timing is start-sensitive, so a window that slides (or is re-seeded at a different
- * point) produces exits on slightly different candles for near-identical runs. A backtest started
- * at the same anchor with the warm-up set to the window length therefore reproduces the live
- * decisions on every bar the engine evaluated — for MACD and PSAR alike. It does not reproduce a
- * gap: the engine never replays the seed or downtime, so after one the backtest can hold a position
- * the engine never opened.</p>
+ * <p>At start it seeds a {@link StrategyStream} from a fixed anchor — the strategy's first start
+ * minus the seed window (warm-up plus the MACD periods plus a convergence margin), persisted as
+ * {@code seriesStartTime} and never moved — feeding every candle from that anchor into the stream,
+ * and then listens to the candle stream's closed-candle boundaries, feeding each closed candle as
+ * it arrives. The candles since the anchor are never retained: the stream keeps only the indicator
+ * recursions and the two bars the rules look at, so the runner's memory stays constant however long
+ * it runs. The decision path is still identical across restarts, because the streamed state is a
+ * function of the same anchored history. It is deliberately not re-seeded or truncated to a rolling
+ * window: the Parabolic SAR's flip timing is start-sensitive, so a window that slides (or is
+ * re-seeded at a different point) produces exits on slightly different candles for near-identical
+ * runs. A backtest started at the same anchor with the warm-up set to the window length therefore
+ * reproduces the live decisions on every bar the engine evaluated — for MACD and PSAR alike. It
+ * does not reproduce a gap: the engine never replays the seed or downtime, so after one the
+ * backtest can hold a position the engine never opened.</p>
  *
  * <p>Each closed candle is resolved from the store (the REST-filled candles are authoritative) and
- * appended; a boundary whose candle is missing (also after a long outage) is backfilled on the next
- * append so the in-memory series keeps matching the stored history. If the store cannot reach back
- * to the anchor (old data unavailable, e.g. after a restore), the series simply starts later and a
- * warning says so.</p>
+ * fed into the stream; a boundary whose candle is missing (also after a long outage) is backfilled
+ * on the next append so the in-memory stream keeps matching the stored history. If the store cannot
+ * reach back to the anchor (old data unavailable, e.g. after a restore), the stream simply starts
+ * later and a warning says so.</p>
  *
  * <p>Decisions are filled immediately at the arriving candle's open — the stream passes the open
  * price of the candle that just started, so a live order goes out at the moment its recorded price
@@ -56,7 +59,14 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
     private final LiveTradingService liveTradingService;
     private final LiveStrategyRepository liveStrategyRepository;
     private final BitvavoCandleStream stream;
-    private final List<Candle> series = new ArrayList<>();
+    /**
+     * The strategy's evaluation state, fed every candle since the anchor and never rebuilt while
+     * the runner runs. It keeps constant state — the indicator recursions and the last two bars —
+     * instead of the candles themselves. The definition is fixed when the runner is created: a
+     * running strategy cannot be edited ({@code LiveStrategyService.update} refuses while its
+     * runner exists), so only stopping and starting again builds a stream from new parameters.
+     */
+    private final StrategyStream decisionStream;
     private long lastAppendedOpenTime = Long.MIN_VALUE;
     private long resolveRetryMillis = 1_000;
     private int convergenceMarginCandles = CONVERGENCE_MARGIN_CANDLES;
@@ -79,12 +89,13 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
         this.candleHistoryService = candleHistoryService;
         this.liveTradingService = liveTradingService;
         this.liveStrategyRepository = liveStrategyRepository;
+        this.decisionStream = new StrategyStream(LiveTradingService.definition(strategy));
         this.stream = streamFactory.create(strategy.getMarket(), interval.getCode(),
                 interval.getMillis(), this::onCandleClosed);
     }
 
     /**
-     * Seed the series and connect the stream.
+     * Seed the stream and connect to the candle feed.
      */
     public void start() {
         seed();
@@ -137,17 +148,22 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
         }
         Instant from = Instant.ofEpochMilli(seriesStart);
         candleHistoryService.ensureRange(strategy.getMarket(), interval, from, now);
-        series.addAll(candleHistoryService.getCandles(strategy.getMarket(), interval, from, now));
-        if (!series.isEmpty()) {
-            lastAppendedOpenTime = series.get(series.size() - 1).getOpenTime();
+        List<Candle> seeded = candleHistoryService.getCandles(strategy.getMarket(), interval, from, now);
+        int seededCandles = 0;
+        for (Candle candle : seeded) {
+            decisionStream.accept(candle);
+            seededCandles++;
+        }
+        if (!seeded.isEmpty()) {
+            lastAppendedOpenTime = seeded.get(seeded.size() - 1).getOpenTime();
         }
         long expected = (now.toEpochMilli() - seriesStart) / interval.getMillis();
-        if (series.size() < expected) {
+        if (seededCandles < expected) {
             log.warn("Live strategy {} is anchored at {} but the store has only {} of about {} {} {} candles; "
-                            + "the series starts later", strategy.getId(), from, series.size(), expected,
+                            + "the stream starts later", strategy.getId(), from, seededCandles, expected,
                     strategy.getMarket(), strategy.getInterval());
         }
-        log.info("Live strategy {} seeded with {} {} {} candles (anchor {})", strategy.getId(), series.size(),
+        log.info("Live strategy {} seeded with {} {} {} candles (anchor {})", strategy.getId(), seededCandles,
                 strategy.getMarket(), strategy.getInterval(), from);
     }
 
@@ -168,7 +184,7 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
         strategy.setLastEvaluatedOpenTime(openTime);
         liveStrategyRepository.updateLastEvaluatedOpenTime(strategy.getId(), openTime);
 
-        LiveDecision decision = liveTradingService.decide(strategy, series);
+        LiveDecision decision = liveTradingService.decide(strategy, decisionStream.signal());
         if (decision != null) {
             liveTradingService.fill(strategy, decision, fillPrice(openTime, nextOpen, candle));
         }
@@ -227,15 +243,15 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
                 && candle.getOpenTime() - lastAppendedOpenTime > interval.getMillis()) {
             backfill(lastAppendedOpenTime + interval.getMillis(), candle.getOpenTime() - interval.getMillis());
         }
-        // The series is append-only: its anchored start must never move, or the Parabolic SAR's
+        // The stream is fed in anchored order: its start must never move, or the Parabolic SAR's
         // flips — and with them the exits — shift for the very same candle history.
-        series.add(candle);
+        decisionStream.accept(candle);
         lastAppendedOpenTime = candle.getOpenTime();
     }
 
     /**
      * Re-read a skipped range from the store, fetching it first when it is not there yet, so the
-     * in-memory series keeps matching the exchange's history instead of silently losing bars.
+     * stream keeps matching the exchange's history instead of silently losing bars.
      */
     private void backfill(long fromOpenTime, long toOpenTime) {
         Instant from = Instant.ofEpochMilli(fromOpenTime);
@@ -245,13 +261,13 @@ public class LiveStrategyRunner implements BitvavoCandleStream.CandleListener {
         int appended = 0;
         for (Candle missedCandle : missed) {
             if (missedCandle.getOpenTime() > lastAppendedOpenTime) {
-                series.add(missedCandle);
+                decisionStream.accept(missedCandle);
                 lastAppendedOpenTime = missedCandle.getOpenTime();
                 appended++;
             }
         }
         if (appended > 0) {
-            log.info("Backfilled {} skipped {} {} candles into the live series", appended, strategy.getMarket(),
+            log.info("Backfilled {} skipped {} {} candles into the live stream", appended, strategy.getMarket(),
                     strategy.getInterval());
         } else {
             log.warn("The store has no {} {} candles between {} and {} to backfill", strategy.getMarket(),

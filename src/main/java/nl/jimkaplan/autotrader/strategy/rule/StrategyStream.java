@@ -11,8 +11,9 @@ import nl.jimkaplan.autotrader.strategy.model.document.Candle;
  * <p>The indicator state streams (see {@link MacdState} and {@link SarState}), and the rules are
  * the same ones the backtester uses: each readiness check builds the two-bar window the conditions
  * look at — the bar being decided and its predecessor — and runs the existing evaluator on it. The
- * live engine still decides on the anchored series, but at a constant cost per candle instead of a
- * walk over the whole history.</p>
+ * live runner holds one instance per strategy and feeds it every candle since the anchor, so a
+ * decision costs one step and the retained state stays constant instead of a series that grows
+ * with uptime.</p>
  */
 public final class StrategyStream {
 
@@ -90,6 +91,32 @@ public final class StrategyStream {
      */
     public int bars() {
         return bars;
+    }
+
+    /**
+     * An immutable view of the last fed candle: the signals the rules fired on it, the definition
+     * they were evaluated with, and the bar they belong to. A decision reads this instead of the
+     * mutable stream, so it cannot observe a half-fed state, and the reason it records always names
+     * the definition the signals came from.
+     *
+     * @param definition The definition the signals were evaluated with
+     * @param bars       The number of candles fed when the snapshot was taken
+     * @param openTime   The open time of the candle the signals belong to
+     * @param entry      Whether the entry rules fired on that candle
+     * @param exit       Whether the exit rules fired on that candle
+     */
+    public record Signal(StrategyDefinition definition, int bars, long openTime,
+                         boolean entry, boolean exit) {
+    }
+
+    /**
+     * Take the signals of the last fed candle. Call it on the thread that feeds the stream, right
+     * after the candle was accepted, so the snapshot belongs to that bar.
+     *
+     * @return The immutable signal snapshot
+     */
+    public Signal signal() {
+        return new Signal(definition, bars, time, entryFired(), exitFired());
     }
 
     /**

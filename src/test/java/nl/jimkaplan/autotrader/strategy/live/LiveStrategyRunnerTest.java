@@ -6,6 +6,7 @@ import nl.jimkaplan.autotrader.strategy.model.document.Candle;
 import nl.jimkaplan.autotrader.strategy.model.document.LiveStrategy;
 import nl.jimkaplan.autotrader.strategy.service.CandleHistoryService;
 import nl.jimkaplan.autotrader.strategy.service.LiveTradingService;
+import nl.jimkaplan.autotrader.strategy.rule.StrategyStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +29,7 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -59,6 +61,7 @@ class LiveStrategyRunnerTest {
     private BitvavoCandleStream stream;
 
     private ArgumentCaptor<BitvavoCandleStream.CandleListener> listenerCaptor;
+    private final List<StrategyStream.Signal> decisions = new ArrayList<>();
     private LiveStrategy strategy;
     private LiveStrategyRunner runner;
 
@@ -70,12 +73,17 @@ class LiveStrategyRunnerTest {
                 .thenReturn(stream);
         lenient().when(liveStrategyRepository.updateSeriesStartTime(any(), anyLong()))
                 .thenReturn(1L);
+        // Record the immutable snapshot taken at the decision: a later stream state cannot change it.
+        lenient().when(liveTradingService.decide(any(), any())).thenAnswer(invocation -> {
+            decisions.add(invocation.getArgument(1));
+            return null;
+        });
         runner = new LiveStrategyRunner(strategy, CandleInterval.ONE_HOUR, candleHistoryService,
                 liveTradingService, liveStrategyRepository, streamFactory);
     }
 
     @Test
-    void start_seedsTheSeriesAndStartsTheStream() {
+    void start_seedsTheStreamAndStartsTheCandleFeed() {
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
                 .thenReturn(candles(300, 0));
 
@@ -126,31 +134,41 @@ class LiveStrategyRunnerTest {
         strategy.setSeriesStartTime(START);
         LiveStrategy restarted = strategy(0);
         restarted.setSeriesStartTime(START);
-        seedWith(candles(6, 0));
+        // A ramp, a dip at bar 6 and a recovery at bar 7 put the MACD bullish crossover exactly on
+        // the boundary the two runs share, so its entry flag is true and the streams' recursions
+        // are actually compared instead of two vacuous falses.
+        List<Candle> fixture = crossingCandles();
+        seedWith(fixture.subList(0, 6));
         runner.start();
         BitvavoCandleStream.CandleListener keptRunning = listenerCaptor.getValue();
         for (int i = 6; i <= 7; i++) {
-            stubResolved(START + i * HOUR, candle(i));
-            keptRunning.onCandleClosed(START + i * HOUR, 0);
+            stubResolved(fixture.get(i).getOpenTime(), fixture.get(i));
+            keptRunning.onCandleClosed(fixture.get(i).getOpenTime(), 0);
         }
 
-        // The same strategy starts later: the store already holds what the first runner appended
-        // candle by candle, and the boundary must be evaluated on the identical series.
+        // The same strategy starts later: the store already holds what the first runner fed
+        // candle by candle, and the boundary must be evaluated on the identical streamed state.
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
-                .thenReturn(candles(8, 0));
+                .thenReturn(fixture);
         LiveStrategyRunner restartedRunner = new LiveStrategyRunner(restarted, CandleInterval.ONE_HOUR,
                 candleHistoryService, liveTradingService, liveStrategyRepository, streamFactory);
         restartedRunner.start();
-        long boundary = START + 7 * HOUR;
-        stubResolved(boundary, candle(7));
+        Candle boundaryCandle = fixture.get(7);
+        long boundary = boundaryCandle.getOpenTime();
+        stubResolved(boundary, boundaryCandle);
         listenerCaptor.getValue().onCandleClosed(boundary, 0);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(liveTradingService, times(3)).decide(any(), seriesCaptor.capture());
-        List<List<Candle>> decidedOn = seriesCaptor.getAllValues();
-        assertEquals(decidedOn.get(1), decidedOn.get(2));
-        assertEquals(8, decidedOn.get(2).size());
+        assertEquals(3, decisions.size());
+        StrategyStream.Signal keptRunningDecision = decisions.get(1);
+        StrategyStream.Signal restartedDecision = decisions.get(2);
+        assertEquals(8, keptRunningDecision.bars());
+        assertEquals(8, restartedDecision.bars());
+        assertEquals(boundary, restartedDecision.openTime());
+        // The same boundary on the same anchored history must produce the same signals.
+        assertEquals(keptRunningDecision.definition(), restartedDecision.definition());
+        assertTrue(keptRunningDecision.entry());
+        assertTrue(restartedDecision.entry());
+        assertEquals(keptRunningDecision.exit(), restartedDecision.exit());
     }
 
     @Test
@@ -165,19 +183,15 @@ class LiveStrategyRunnerTest {
         verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
                 eq(at(anchor)), any());
 
-        // The store reaches back only 300 candles, so the series starts later than the anchor; it
-        // still runs and keeps appending from what it has.
+        // The store reaches back only 300 candles, so the stream starts later than the anchor; it
+        // still runs and keeps feeding from what it has.
         long closed = START + 300 * HOUR;
         stubResolved(closed, candle(300));
         listenerCaptor.getValue().onCandleClosed(closed, 0);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(liveTradingService).decide(eq(strategy), seriesCaptor.capture());
-        List<Candle> series = seriesCaptor.getValue();
-        assertEquals(301, series.size());
-        assertEquals(START, series.get(0).getOpenTime());
-        assertEquals(closed, series.get(300).getOpenTime());
+        assertEquals(1, decisions.size());
+        assertEquals(301, decisions.get(0).bars());
+        assertEquals(closed, decisions.get(0).openTime());
     }
 
     @Test
@@ -192,11 +206,9 @@ class LiveStrategyRunnerTest {
                 eq(at(closed)), eq(at(closed + HOUR)));
         verify(liveStrategyRepository).updateLastEvaluatedOpenTime(STRATEGY_ID, closed);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(liveTradingService).decide(eq(strategy), seriesCaptor.capture());
-        assertEquals(301, seriesCaptor.getValue().size());
-        assertEquals(closed, seriesCaptor.getValue().get(300).getOpenTime());
+        assertEquals(1, decisions.size());
+        assertEquals(301, decisions.get(0).bars());
+        assertEquals(closed, decisions.get(0).openTime());
         verify(liveTradingService, never()).fill(any(), any(), anyDouble());
 
         // The evaluated point is persisted before any action, so a crash costs a trade, not a duplicate.
@@ -212,7 +224,7 @@ class LiveStrategyRunnerTest {
         stubResolved(first, candle(300));
         stubNoCandleAt(first + HOUR);
         LiveDecision decision = new LiveDecision("BUY", "entry ALL [TEST]", first);
-        when(liveTradingService.decide(any(), any())).thenReturn(decision);
+        doReturn(decision).when(liveTradingService).decide(any(), any());
         runner.start();
 
         listenerCaptor.getValue().onCandleClosed(first, 62.5);
@@ -237,7 +249,7 @@ class LiveStrategyRunnerTest {
         stubNoCandleAt(newest + HOUR);
         LiveDecision first = new LiveDecision("BUY", "entry ALL [TEST]", older);
         LiveDecision second = new LiveDecision("BUY", "entry ALL [TEST]", newest);
-        when(liveTradingService.decide(any(), any())).thenReturn(first, second);
+        doReturn(first, second).when(liveTradingService).decide(any(), any());
         runner.start();
 
         listenerCaptor.getValue().onCandleClosed(older, 62.5);
@@ -258,7 +270,7 @@ class LiveStrategyRunnerTest {
         stubResolved(closed, candle(300));
         stubNoCandleAt(closed + HOUR);
         LiveDecision decision = new LiveDecision("BUY", "entry ALL [TEST]", closed);
-        when(liveTradingService.decide(any(), any())).thenReturn(decision);
+        doReturn(decision).when(liveTradingService).decide(any(), any());
         runner.start();
 
         listenerCaptor.getValue().onCandleClosed(closed, 0);
@@ -298,22 +310,20 @@ class LiveStrategyRunnerTest {
         listenerCaptor.getValue().onCandleClosed(second, 62.5);
 
         // The backfill fetches the missing range before reading it, so a candle that only appears
-        // in the store after the failed resolve is still repaired into the series.
+        // in the store after the failed resolve is still repaired into the stream.
         verify(candleHistoryService).ensureRange(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR),
                 eq(at(missed)), eq(at(second)));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(liveTradingService, times(2)).decide(eq(strategy), seriesCaptor.capture());
-        List<Candle> series = seriesCaptor.getValue();
-        assertEquals(303, series.size());
-        assertEquals(first, series.get(300).getOpenTime());
-        assertEquals(missed, series.get(301).getOpenTime());
-        assertEquals(second, series.get(302).getOpenTime());
+        verify(liveTradingService, times(2)).decide(eq(strategy), any());
+        assertEquals(2, decisions.size());
+        assertEquals(301, decisions.get(0).bars());
+        assertEquals(first, decisions.get(0).openTime());
+        assertEquals(303, decisions.get(1).bars());
+        assertEquals(second, decisions.get(1).openTime());
     }
 
     @Test
-    void theSeriesIsNeverTrimmed() {
+    void theAnchoredStreamIsFedEveryCandleAndNeverRebuilt() {
         ReflectionTestUtils.setField(runner, "convergenceMarginCandles", 2);
         seedWith(List.of());
         for (int i = 0; i < 11; i++) {
@@ -325,15 +335,13 @@ class LiveStrategyRunnerTest {
             listenerCaptor.getValue().onCandleClosed(START + i * HOUR, 0);
         }
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<Candle>> seriesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(liveTradingService, times(11)).decide(eq(strategy), seriesCaptor.capture());
-        List<Candle> series = seriesCaptor.getValue();
-        // warm-up 0 + slow 5 + signal 2 + margin 2 = 9; unlike the old sliding window, nothing is
-        // dropped — the anchored start must never move
-        assertEquals(11, series.size());
-        assertEquals(START, series.get(0).getOpenTime());
-        assertEquals(START + 10 * HOUR, series.get(10).getOpenTime());
+        // warm-up 0 + slow 5 + signal 2 + margin 2 = 9; unlike the old sliding window, the stream
+        // is fed every bar from the anchor and none is dropped or re-fed into a rebuilt instance
+        assertEquals(11, decisions.size());
+        for (int i = 0; i < 11; i++) {
+            assertEquals(i + 1, decisions.get(i).bars());
+            assertEquals(START + i * HOUR, decisions.get(i).openTime());
+        }
     }
 
     @Test
@@ -413,20 +421,36 @@ class LiveStrategyRunnerTest {
         return candles;
     }
 
-    private static Candle candle(int index) {
-        return openCandle(index, 100 + index);
+    /**
+     * Eight candles that ramp, dip and recover: with the test strategy's MACD 3/5/2 the dip pushes
+     * the MACD line below its signal and the recovery crosses it back above on bar 7, the boundary
+     * the restart test compares.
+     */
+    private static List<Candle> crossingCandles() {
+        List<Candle> candles = candles(8, 0);
+        candles.set(6, ohlcCandle(6, 100.0, 100.6, 98.0, 100.0));
+        candles.set(7, ohlcCandle(7, 100.0, 107.0, 99.5, 106.0));
+        return candles;
     }
 
-    private static Candle openCandle(int index, double open) {
+    private static Candle candle(int index) {
+        return ohlcCandle(index, 100 + index, 101 + index, 99 + index, 100.5 + index);
+    }
+
+    private static Candle ohlcCandle(int index, double open, double high, double low, double close) {
         return Candle.builder()
                 .market("BTC-EUR")
                 .interval("1h")
                 .openTime(START + index * HOUR)
                 .open(BigDecimal.valueOf(open))
-                .high(BigDecimal.valueOf(open + 1))
-                .low(BigDecimal.valueOf(open - 1))
-                .close(BigDecimal.valueOf(open + 0.5))
+                .high(BigDecimal.valueOf(high))
+                .low(BigDecimal.valueOf(low))
+                .close(BigDecimal.valueOf(close))
                 .volume(BigDecimal.ONE)
                 .build();
+    }
+
+    private static Candle openCandle(int index, double open) {
+        return ohlcCandle(index, open, open + 1, open - 1, open + 0.5);
     }
 }
