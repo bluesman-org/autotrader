@@ -391,7 +391,7 @@ PR #77).
 41. ✅ Drop the superseded `(strategy_id, status)` index on `live_positions`: the live page's two
     reads share `(strategy_id, status, exit_time)`, so the older two-key index only cost writes.
     `MongoIndexInitializer` drops it once, in the style of the `botId` migration, and a test pins
-    the drop (this PR)
+    the drop (PR #78)
 
 42. ⬜ Bound the retained live series: the runner keeps every candle since the anchor for the
     decision path, so the heap still grows with uptime even though each decision is now a constant
