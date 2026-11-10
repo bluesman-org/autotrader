@@ -134,23 +134,28 @@ class LiveStrategyRunnerTest {
         strategy.setSeriesStartTime(START);
         LiveStrategy restarted = strategy(0);
         restarted.setSeriesStartTime(START);
-        seedWith(candles(6, 0));
+        // A ramp, a dip at bar 6 and a recovery at bar 7 put the MACD bullish crossover exactly on
+        // the boundary the two runs share, so its entry flag is true and the streams' recursions
+        // are actually compared instead of two vacuous falses.
+        List<Candle> fixture = crossingCandles();
+        seedWith(fixture.subList(0, 6));
         runner.start();
         BitvavoCandleStream.CandleListener keptRunning = listenerCaptor.getValue();
         for (int i = 6; i <= 7; i++) {
-            stubResolved(START + i * HOUR, candle(i));
-            keptRunning.onCandleClosed(START + i * HOUR, 0);
+            stubResolved(fixture.get(i).getOpenTime(), fixture.get(i));
+            keptRunning.onCandleClosed(fixture.get(i).getOpenTime(), 0);
         }
 
         // The same strategy starts later: the store already holds what the first runner fed
         // candle by candle, and the boundary must be evaluated on the identical streamed state.
         when(candleHistoryService.getCandles(eq("BTC-EUR"), eq(CandleInterval.ONE_HOUR), any(), any()))
-                .thenReturn(candles(8, 0));
+                .thenReturn(fixture);
         LiveStrategyRunner restartedRunner = new LiveStrategyRunner(restarted, CandleInterval.ONE_HOUR,
                 candleHistoryService, liveTradingService, liveStrategyRepository, streamFactory);
         restartedRunner.start();
-        long boundary = START + 7 * HOUR;
-        stubResolved(boundary, candle(7));
+        Candle boundaryCandle = fixture.get(7);
+        long boundary = boundaryCandle.getOpenTime();
+        stubResolved(boundary, boundaryCandle);
         listenerCaptor.getValue().onCandleClosed(boundary, 0);
 
         assertEquals(3, decisions.size());
@@ -161,7 +166,8 @@ class LiveStrategyRunnerTest {
         assertEquals(boundary, restartedDecision.openTime());
         // The same boundary on the same anchored history must produce the same signals.
         assertEquals(keptRunningDecision.definition(), restartedDecision.definition());
-        assertEquals(keptRunningDecision.entry(), restartedDecision.entry());
+        assertTrue(keptRunningDecision.entry());
+        assertTrue(restartedDecision.entry());
         assertEquals(keptRunningDecision.exit(), restartedDecision.exit());
     }
 
@@ -415,20 +421,36 @@ class LiveStrategyRunnerTest {
         return candles;
     }
 
-    private static Candle candle(int index) {
-        return openCandle(index, 100 + index);
+    /**
+     * Eight candles that ramp, dip and recover: with the test strategy's MACD 3/5/2 the dip pushes
+     * the MACD line below its signal and the recovery crosses it back above on bar 7, the boundary
+     * the restart test compares.
+     */
+    private static List<Candle> crossingCandles() {
+        List<Candle> candles = candles(8, 0);
+        candles.set(6, ohlcCandle(6, 100.0, 100.6, 98.0, 100.0));
+        candles.set(7, ohlcCandle(7, 100.0, 107.0, 99.5, 106.0));
+        return candles;
     }
 
-    private static Candle openCandle(int index, double open) {
+    private static Candle candle(int index) {
+        return ohlcCandle(index, 100 + index, 101 + index, 99 + index, 100.5 + index);
+    }
+
+    private static Candle ohlcCandle(int index, double open, double high, double low, double close) {
         return Candle.builder()
                 .market("BTC-EUR")
                 .interval("1h")
                 .openTime(START + index * HOUR)
                 .open(BigDecimal.valueOf(open))
-                .high(BigDecimal.valueOf(open + 1))
-                .low(BigDecimal.valueOf(open - 1))
-                .close(BigDecimal.valueOf(open + 0.5))
+                .high(BigDecimal.valueOf(high))
+                .low(BigDecimal.valueOf(low))
+                .close(BigDecimal.valueOf(close))
                 .volume(BigDecimal.ONE)
                 .build();
+    }
+
+    private static Candle openCandle(int index, double open) {
+        return ohlcCandle(index, open, open + 1, open - 1, open + 0.5);
     }
 }
