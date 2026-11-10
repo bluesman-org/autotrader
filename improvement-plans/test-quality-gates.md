@@ -38,17 +38,24 @@ numbers stay reproducible.
 | Tests with no assertion at all | 3 | Real defects, see step 3 |
 | `assertNotNull` as the only assertion | 5 | 4 structural, 1 behavioural (step 3) |
 | `verify(...)` with only `any()` | 2 | Real but mild — `LiveUiControllerRenderTest:301,357` |
-| `assertThrows(Exception\|RuntimeException.class)` | 11 | **Not defects** — see below |
+| `assertThrows(Exception\|RuntimeException.class)` | 11 | Not the wrong type — but under-specified, see below |
 | `Thread.sleep` | 1 | Not a signal: inside a bounded `await(...)` helper with a `fail()` deadline |
 | Commits with net assertion loss, last year | 2 | Both genuine refactors (`dbaa05c`, `00152bc`) |
 
-An earlier draft of this plan claimed the 11 `assertThrows` cases were over-broad. They are not.
+An earlier draft of this plan claimed the 11 `assertThrows` cases were over-broad. They are not:
 `TradingService` wraps everything in `RuntimeException` (`TradingService.java:277`),
 `EncryptionService` in `RuntimeException` (`:63`, `:101`), `BitvavoAuthenticationService` at `:89`,
-and `LiveAlertService.sendTest` propagates its dependency's `RuntimeException`. The tests assert the
-actual contract. The defect there is the contract, not the assertion — see step 3, item 3.
+and `LiveAlertService.sendTest` propagates its dependency's `RuntimeException`. The type each test
+expects is the type the code actually throws.
 
-The genuine actionable set is **~9 tests**, not the ~22 an earlier draft claimed.
+But the assertion is still under-specified, which is a separate problem. A null-pointer bug inside
+the method satisfies `assertThrows(RuntimeException.class)` exactly as well as the intended
+rejection, so the test cannot tell a working path from a crash. That is not a wrong type; it is a
+missing cause. See step 3, batch 2.
+
+The actionable set is **20 tests in two batches**: nine whose assertion is hollow, and eleven whose
+assertion a wrong exception would satisfy. An earlier draft said ~22 and then ~9; both were wrong,
+for opposite reasons.
 
 ## Steps
 
@@ -56,12 +63,12 @@ The genuine actionable set is **~9 tests**, not the ~22 an earlier draft claimed
       red-test policy.
 - [ ] **2. Add a shape-check script to CI** — deterministic detection of the banned shapes, with a
       reviewed allowlist.
-- [ ] **3. Fix the nine verified defects** — no dependency on PIT.
+- [ ] **3. Fix the verified defects** — two batches, no dependency on PIT.
 - [ ] **4. Add the scoped PIT profile** — two-stage pilot; needs `JAVA_HOME=25`.
-- [ ] **5. Record the baseline in `docs/test-quality.md`** — after PR #79 merges; the pilot package
-      is inside that PR.
-- [ ] **6. Add the ratchet job** — weekly and on PRs touching the packages, compared against a
-      pinned scope.
+- [ ] **5. Record the measurements in `docs/test-quality.md`** — after PR #79 merges; the measured
+      package is inside that PR.
+- [ ] **6. Add the ratchet job** — weekly, on `strategy.rule` only, compared against a pinned
+      scope.
 - [ ] **7. Add the red-test rule to the reviewer** — it already reviews this repo; make it explicit.
 
 Steps 1–3 are independent and can ship first. Steps 4–6 form a chain and can stall as a unit.
@@ -108,9 +115,12 @@ Narrow, deterministic rules only — the ones with no judgement call:
 
 - an `@Test` method containing no `assert*`, `assertThat`, `verify`, `verifyNoInteractions`,
   `andExpect`, `andDo`, or `fail(`;
-- `assertThrows(Exception.class)` / `(RuntimeException.class)` unless the production method
-  demonstrably throws only that type;
-- `assertNotNull` as the only assertion where the enclosing test name contains `_with` or `_when`.
+- `assertThrows(Exception.class)` / `(RuntimeException.class)` with no assertion on the cause, so an
+  unrelated crash of the same type would satisfy it.
+
+Two rules, deliberately. An earlier draft had a third keyed on test names containing `_with` or
+`_when`; it is dropped as the fragile one — it would fire on honest names and be disabled within a
+month. Keep the rules few: a check that produces false positives does not survive.
 
 Allowlist with reasons, same convention as `config/spotbugs-exclude.xml`. Keep the rules few: a
 check that produces false positives gets disabled within a month. This is deliberately *not* a
@@ -119,14 +129,17 @@ custom Maven plugin or an `any()` ban — those are the brittle parts.
 Why this and not prose alone: the audit was itself a set of greps, so the same greps can run in CI.
 `AGENTS.md` explains the rule; this enforces the subset that is mechanically decidable.
 
-### 3. Fix the nine verified defects
+### 3. Fix the verified defects
 
-Each gets one of three outcomes, in this order of preference: strengthen the assertion; change the
-production contract and the test together; delete the test if it is provably redundant.
+Twenty tests, in two batches. Every fix has one of three outcomes, in this order of preference:
+strengthen the assertion; change the production contract and the test together; delete the test if
+it is provably redundant.
 
 **A comment is not an outcome.** An earlier draft allowed "a comment stating why the weak assertion
 is the contract". That is an escape hatch that blesses defects — it would let a test that passes on
 a `NullPointerException` be marked correct.
+
+**Batch 1 — the hollow assertions.**
 
 | # | Test | Problem | Fix |
 | --- | --- | --- | --- |
@@ -139,16 +152,22 @@ a `NullPointerException` be marked correct.
 | 7–8 | `CandleStreamFactoryTest` (×2) | `assertNotNull` only; the name claims a policy | Assert the policy value, not the stream's existence |
 | 9–10 | `LiveUiControllerRenderTest:301,357` | `create(any())`, `update(eq("..."), any())` | Capture and assert the form fields the controller received |
 
-**The `assertThrows` cases are not on this list.** They assert the real contract. Two follow-ups
-belong to whoever owns `EncryptionService`, not to this plan:
+**Batch 2 — the exception tests.** The type each one expects is correct; the cause is missing. An
+assertion on the cause is what distinguishes the intended rejection from a crash inside the method.
 
-- `encrypt(null)` throws NPE, which `catch (Exception e)` converts to
-  `RuntimeException("Encryption failed", e)`. The test passes on an NPE. Adding
-  `Objects.requireNonNull` / `IllegalArgumentException` validation is a production change with its
-  own test.
-- The same masking applies to `decrypt("")` and invalid ciphertext.
+| # | Test | Fix |
+| --- | --- | --- |
+| 11–13 | `TradingServiceTest` (×3) | Assert the injected API failure is the exception's cause |
+| 14–15 | `BitvavoAuthenticationServiceTest` (×2) | `assertInstanceOf(InvalidKeyException.class, ex.getCause())` — the method catches `NoSuchAlgorithmException \| InvalidKeyException` at `:88` |
+| 16 | `EncryptionServiceTest.decrypt_withInvalidCiphertext` | Assert the cause is a decoding or decryption failure, not an NPE |
+| 17–18 | `LiveAlertServiceTest` (×2) | Assert the cause, or narrow to `IllegalStateException` where the Javadoc at `:163-164` documents it |
 
-File it, do not fix it here.
+**Three of the eleven are not test fixes.** `encrypt(null)`, `decrypt(null)` and `decrypt("")` all
+throw a `NullPointerException` or an argument error that `catch (Exception e)` at
+`EncryptionService:62-63` and `:100-101` converts to `RuntimeException("Encryption failed")`. No
+assertion can distinguish that from a real encryption failure, because the service erased the
+difference. These need `Objects.requireNonNull` / blank-input validation, and then a narrowed test —
+a production change with its own PR, listed in out-of-scope below.
 
 Acceptance: `./mvnw -B verify -Ddocker.skip=true` passes. Run `verify`, not `test` — the JaCoCo
 `check` and the SpotBugs gate only run at `verify`.
@@ -177,9 +196,9 @@ bytecode (ASM 9.11).
 **Two stages, in this order:**
 
 1. `nl.jimkaplan.autotrader.strategy.rule` — 11 classes, 615 LOC, 31 tests. Validates the setup in
-   minutes and is where mutation testing gives the cleanest signal.
-2. `nl.jimkaplan.autotrader.strategy.service` — 21 classes, 6,760 LOC, 319 tests. The real target,
-   and the slow one.
+   minutes, and its result is the one that gets a recurring gate.
+2. `nl.jimkaplan.autotrader.strategy.service` — 21 classes, 6,760 LOC, 319 tests. The slow one, and
+   a measurement rather than a gate: its output is a list of tests worth reading.
 
 **The actual compatibility risk is JUnit 6, not Java 25.** The suite is JUnit Jupiter 6.0.3;
 `pitest-junit5-plugin` (latest 1.2.3) was built against `junit-platform-launcher` 1.9.x and predates
@@ -187,7 +206,7 @@ JUnit 6. If PIT cannot discover tests, that is the cause — add `junit-platform
 resolved version, or process only the `strategy.rule` package as a proof of concept.
 
 **Time-box: one day.** If it fights, stop: ship steps 1–3, keep the PIT work as a documented
-blocker, and drop steps 5–6. Do not half-install a ratchet with no valid baseline.
+blocker, and drop steps 5–6. Do not half-install a ratchet with no valid measurement.
 
 Operational note: `./mvnw -v` on the development box reports **Java 21**, while `pom.xml:31` targets
 25. Any run needs `JAVA_HOME` pointing at a JDK 25, or it fails to compile before PIT starts. Record
@@ -197,17 +216,25 @@ that in the docs.
 that package. `JdkPushSenderTest` does open a loopback `HttpServer` and one case waits on a
 one-second timeout; it will run per mutant and inflate runtime.
 
-### 5. Record the baseline in `docs/test-quality.md`
+### 5. Record the measurements in `docs/test-quality.md`
 
-New file, alongside `docs/security.md`. **Take the baseline after PR #79 merges.** #79 changes
-`LiveTradingService` (97 lines) and `LiveTradingServiceTest` (81 lines), both inside the pilot
-package; a baseline taken before it lands is invalid.
+New file, alongside `docs/security.md`. **Take the measurements after PR #79 merges.** #79 changes
+`LiveTradingService` (97 lines) and `LiveTradingServiceTest` (81 lines), both inside
+`strategy.service`; a measurement taken before it lands is stale on arrival.
+
+Two runs, recorded separately:
+
+- **`strategy.rule`** — the fast one, and the only one that gets a recurring gate. Its numbers are
+  the floor the step 6 job enforces.
+- **`strategy.service`** — measured once, on demand. Its numbers are a triage backlog, not a gate:
+  the package changes in most PRs, so a weekly alarm there would fire on honest refactoring and be
+  ignored within a month.
 
 Contents:
 
 - What mutation testing measures that coverage does not, in three sentences.
 - The exact reproducible command, including `JAVA_HOME`.
-- The baseline table: date, **commit SHA**, packages, mutation score, test strength, mutants
+- The measurements table: date, **commit SHA**, packages, mutation score, test strength, mutants
   killed / survived / no-coverage.
 - The pinned scope: the exact `targetClasses` / `targetTests` / excluded methods, in a
   machine-readable form the step 6 job reads. Prose is not enough — narrowing the scope is the
@@ -225,19 +252,19 @@ lower it.
 
 ### 6. Add the ratchet job
 
-New: `.github/workflows/mutation.yml`.
+New: `.github/workflows/mutation.yml`, scoped to `strategy.rule`.
 
-- `schedule` weekly plus `workflow_dispatch`. Also run on PRs that touch `strategy/rule/**` or
-  `strategy/service/**` — otherwise a regression is detected up to a week late, and the path of
-  least resistance is to lower the number.
-- Compares against the pinned scope and baseline from step 5, not against a rounded percentage.
+- `schedule` weekly plus `workflow_dispatch`. Not on PRs: the package is small and stable, so a
+  weekly check is enough, and a PR job would cost more than it catches.
+- Compares against the pinned scope and measurement from step 5, not against a rounded percentage.
   PIT's `mutationThreshold` is an integer by default; a drop of several mutants can hide inside the
   same integer. Either set `thresholdPrecision` or compare the XML report in a small script.
 - Fails if any pinned class disappears from the report — scope reduction is a silent ratchet bypass.
 - Uploads the HTML and XML as artifacts, so a survivor is triageable instead of abstract.
 - Latest action majors: `actions/checkout@v7`, `actions/setup-java@v6`.
 
-Not a whole-module gate. It would be red on day one and nobody would triage it.
+`strategy.service` gets no gate. Measure it when the code there settles, and revisit if the runtime
+turns out to be under about twenty minutes.
 
 ### 7. Add the red-test rule to the reviewer
 
@@ -268,24 +295,31 @@ definitions are cached.
 - Changing or removing the coverage gate. The floor is useful; the problem is treating it as the
   goal.
 - Rewriting the existing suite. Nothing in the audit justifies it.
-- `EncryptionService` input validation. Real, but a production change; file it separately.
+- `EncryptionService` input validation: `encrypt(null)`, `decrypt(null)` and `decrypt("")` should
+  fail as bad input, not as "Encryption failed". A production change, and the precondition for the
+  three deferred exception tests. File it separately.
 - A custom Maven plugin or an `any()` ban. The shape script covers the decidable subset.
 
-## Open questions
+## Decisions
 
-1. **`METHOD COVEREDRATIO 1.00`** (`pom.xml:263`) requires every method to be invoked — 1129/1129
-   today, zero headroom. That structurally rewards one trivial test per method, which is the shape
-   this plan discourages. Step 1's rule and this gate contradict each other. Either lower it to
-   ~0.98 or add an explicit exception list for constructors and accessors. Lowering it is a policy
-   change, so it needs a decision rather than a default.
-2. **Pilot scope:** `strategy.rule` only as a proof of concept, or commit to `strategy.service` as
-   well? The second is the half that matters and the half that costs a day.
+1. **`METHOD COVEREDRATIO` stays at 1.00.** It is the only counter that catches code nobody calls —
+   an unused order path or reconciliation branch — and it is currently met with no padding pressure
+   visible: 937 tests, three without an assertion, all three named in step 3. Lowering it would
+   trade a real reachability check for a hypothetical one. Revisit only if the shape-check allowlist
+   grows past about ten entries, which would mean the rule is pushing tests into existence.
+2. **The recurring gate covers `strategy.rule` only.** `strategy.service` is measured once and
+   treated as a backlog, because the last four PRs all touched it; a weekly alarm on a package under
+   active refactoring is noise, not a ratchet. Revisit if its measurement run turns out to be quick.
+3. **The shape check enforces two rules, not three.** The naming-based rule is dropped as fragile.
+4. **`EncryptionService` input validation is a separate change**, since it alters production
+   behaviour. It is the precondition for three of the eleven exception tests.
 
 ## Status
 
 Written on branch `feature/test-quality-gates`, cut from `main` at `ce5d2e9`, in a separate local
-worktree so the open PR's checkout is untouched.
+worktree so the open PR's checkout is untouched. The branch name lacks an issue number, which the
+repository convention asks for; open an issue and rename before the first non-plan commit.
 
-PR #79 (`feature/42-bound-live-series`) is open and under review, and it changes files inside the
-pilot package. Nothing here is pushed until it merges and the operator gives a green light, and the
-step 5 baseline is taken after it lands.
+PR #79 (`feature/42-bound-live-series`) is open and under review, and it changes files inside
+`strategy.service`. Nothing here is pushed until it merges and the operator gives a green light, and
+the step 5 measurements are taken after it lands.
