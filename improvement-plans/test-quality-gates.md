@@ -65,8 +65,8 @@ for opposite reasons.
       reviewed allowlist.
 - [ ] **3. Fix the verified defects** — two batches, no dependency on PIT.
 - [ ] **4. Add the scoped PIT profile** — two-stage pilot; needs `JAVA_HOME=25`.
-- [ ] **5. Record the measurements in `docs/test-quality.md`** — after PR #79 merges; the measured
-      package is inside that PR.
+- [ ] **5. Record the measurements in `docs/test-quality.md`** — PR #79 has landed, so the measured
+      package is now stable enough to measure.
 - [ ] **6. Add the ratchet job** — weekly, on `strategy.rule` only, compared against a pinned
       scope.
 - [ ] **7. Add the red-test rule to the reviewer** — it already reviews this repo; make it explicit.
@@ -218,9 +218,10 @@ one-second timeout; it will run per mutant and inflate runtime.
 
 ### 5. Record the measurements in `docs/test-quality.md`
 
-New file, alongside `docs/security.md`. **Take the measurements after PR #79 merges.** #79 changes
+New file, alongside `docs/security.md`. **Measure on top of `c75a333` or later.** PR #79 changed
 `LiveTradingService` (97 lines) and `LiveTradingServiceTest` (81 lines), both inside
-`strategy.service`; a measurement taken before it lands is stale on arrival.
+`strategy.service`, and a measurement from before that landed would describe code that no longer
+exists.
 
 Two runs, recorded separately:
 
@@ -316,10 +317,9 @@ definitions are cached.
 
 ## Status
 
-Written on branch `feature/test-quality-gates`, cut from `main` at `ce5d2e9`, in a separate local
-worktree so the open PR's checkout is untouched. The branch name lacks an issue number, which the
-repository convention asks for; open an issue and rename before the first non-plan commit.
+Branch `feature/test-quality-gates`, cut from `main` and rebased onto `b465519` after PR #79
+(`c75a333`) merged. The branch name lacks an issue number, which the repository convention asks
+for; open an issue and rename before the first non-plan commit.
 
-PR #79 (`feature/42-bound-live-series`) is open and under review, and it changes files inside
-`strategy.service`. Nothing here is pushed until it merges and the operator gives a green light, and
-the step 5 measurements are taken after it lands.
+Nothing here is pushed. The step 5 measurements are taken on top of `c75a333`, so they describe the
+code that #79 left behind.
