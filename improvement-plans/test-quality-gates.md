@@ -317,9 +317,8 @@ definitions are cached.
 
 ## Status
 
-Branch `feature/test-quality-gates`, cut from `main` and rebased onto `b465519` after PR #79
-(`c75a333`) merged. The branch name lacks an issue number, which the repository convention asks
-for; open an issue and rename before the first non-plan commit.
+Branch `feature/80-test-quality-gates` (issue #80), rebased onto `b465519` after PR #79
+(`c75a333`) merged. Pushed to origin; no pull request yet.
 
-Nothing here is pushed. The step 5 measurements are taken on top of `c75a333`, so they describe the
-code that #79 left behind.
+The step 5 measurements are taken on top of `c75a333`, so they describe the code that #79 left
+behind.
